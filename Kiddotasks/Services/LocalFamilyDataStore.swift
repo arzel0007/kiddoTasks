@@ -141,7 +141,7 @@ final class LocalFamilyDataStore {
         icon: String,
         category: TaskCategory,
         pointValue: Int,
-        requiresApproval: Bool,
+        approvalBehavior: TaskApprovalBehavior,
         assignedChildIds: [String],
         recurrence: TaskRecurrence
     ) throws -> KiddoTask {
@@ -153,7 +153,7 @@ final class LocalFamilyDataStore {
             icon: icon,
             category: category,
             pointValue: pointValue,
-            requiresApproval: requiresApproval,
+            approvalBehavior: approvalBehavior,
             assignedChildIds: assignedChildIds,
             recurrence: recurrence,
             createdBy: parent.id
@@ -193,23 +193,15 @@ final class LocalFamilyDataStore {
         guard children.contains(where: { $0.id == childId }) else {
             throw FirebaseError.invalidChild
         }
-        if completions.contains(where: {
-            $0.taskId == taskId
-            && $0.childId == childId
-            && Calendar.current.isDateInToday($0.completedAt)
-            && $0.status != .rejected
-        }) {
-            throw FirebaseError.alreadyExists
-        }
-
-        let status: CompletionStatus = task.requiresApproval ? .awaitingApproval : .approved
+        let requiresApproval = task.requiresParentApproval(using: family.settings)
+        let status: CompletionStatus = requiresApproval ? .awaitingApproval : .approved
         var completion = TaskCompletion(
             familyId: family.id,
             taskId: taskId,
             childId: childId,
             status: status
         )
-        if !task.requiresApproval {
+        if !requiresApproval {
             completion = awardPoints(for: completion, task: task, parentId: "system")
         }
         completions.append(completion)
@@ -251,8 +243,7 @@ final class LocalFamilyDataStore {
         description: String,
         icon: String,
         pointCost: Int,
-        eligibleChildIds: [String],
-        requiresApproval: Bool
+        eligibleChildIds: [String]
     ) throws -> Reward {
         guard let family, let parent else { throw FirebaseError.notAuthenticated }
         let reward = Reward(
@@ -262,7 +253,7 @@ final class LocalFamilyDataStore {
             icon: icon,
             pointCost: pointCost,
             eligibleChildIds: eligibleChildIds,
-            requiresApproval: requiresApproval,
+            requiresApproval: true,
             createdBy: parent.id
         )
         rewards.append(reward)
@@ -292,10 +283,7 @@ final class LocalFamilyDataStore {
         guard reward.isEligibleFor(childId) else { throw FirebaseError.permissionDenied }
         guard reward.canAfford(with: child.activePoints) else { throw FirebaseError.insufficientPoints }
 
-        var claim = RewardClaim(familyId: family.id, rewardId: rewardId, childId: childId)
-        if !reward.requiresApproval {
-            claim = deductPoints(for: claim, reward: reward, child: child, parentId: "system")
-        }
+        let claim = RewardClaim(familyId: family.id, rewardId: rewardId, childId: childId)
         claims.append(claim)
         persistKeepingPassword()
         return claim
@@ -352,6 +340,13 @@ final class LocalFamilyDataStore {
         persistKeepingPassword()
     }
 
+    func updateRequireApprovalByDefault(_ isRequired: Bool) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.requireApprovalByDefault = isRequired
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
     // MARK: - Queries
 
     func tasksForChild(_ childId: String, on date: Date = Date()) -> [KiddoTask] {
@@ -359,11 +354,10 @@ final class LocalFamilyDataStore {
     }
 
     func todaysCompletion(taskId: String, childId: String) -> TaskCompletion? {
-        completions.first {
+        completions.last {
             $0.taskId == taskId
             && $0.childId == childId
             && Calendar.current.isDateInToday($0.completedAt)
-            && $0.status != .rejected
         }
     }
 

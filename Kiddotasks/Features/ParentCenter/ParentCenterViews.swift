@@ -162,7 +162,7 @@ struct TaskEditorView: View {
     @State private var points = 10
     @State private var category = TaskCategory.household
     @State private var recurrence = RecurrenceType.daily
-    @State private var requiresApproval = true
+    @State private var approvalBehavior = TaskApprovalBehavior.useFamilyDefault
     @State private var assigned: Set<String> = []
     @State private var icon = "checkmark.circle.fill"
 
@@ -187,7 +187,11 @@ struct TaskEditorView: View {
                         Text(item.displayName).tag(item)
                     }
                 }
-                Toggle("Needs parent approval", isOn: $requiresApproval)
+                Picker("Approval", selection: $approvalBehavior) {
+                    ForEach(TaskApprovalBehavior.allCases) { behavior in
+                        Text(behavior.displayName).tag(behavior)
+                    }
+                }
                 Picker("Icon", selection: $icon) {
                     ForEach(icons, id: \.self) { item in
                         Label(item, systemImage: item).tag(item)
@@ -216,7 +220,7 @@ struct TaskEditorView: View {
                                 icon: icon,
                                 category: category,
                                 pointValue: points,
-                                requiresApproval: requiresApproval,
+                                approvalBehavior: approvalBehavior,
                                 assignedChildIds: Array(assigned),
                                 recurrence: TaskRecurrence(type: recurrence)
                             )
@@ -263,7 +267,6 @@ struct RewardEditorView: View {
     @State private var description = ""
     @State private var cost = 25
     @State private var icon = "gift.fill"
-    @State private var requiresApproval = true
 
     var body: some View {
         NavigationStack {
@@ -271,7 +274,9 @@ struct RewardEditorView: View {
                 TextField("Name", text: $name)
                 TextField("Description", text: $description, axis: .vertical)
                 Stepper("Cost: \(cost) ⭐", value: $cost, in: 5...500, step: 5)
-                Toggle("Needs parent approval", isOn: $requiresApproval)
+                Text("Reward claims are always sent to a parent for approval before points are spent.")
+                    .font(KiddotasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
             }
             .navigationTitle("New reward")
             .toolbar {
@@ -284,8 +289,7 @@ struct RewardEditorView: View {
                                 description: description,
                                 icon: icon,
                                 pointCost: cost,
-                                eligibleChildIds: [],
-                                requiresApproval: requiresApproval
+                                eligibleChildIds: []
                             )
                             dismiss()
                         } catch {
@@ -325,6 +329,21 @@ struct FamilyView: View {
                         }
                     }
                     Button("Add child") { showChildEditor = true }
+                }
+                Section("Chore approvals") {
+                    Toggle("Require parent approval by default", isOn: Binding(
+                        get: { appState.currentFamily?.settings.requireApprovalByDefault ?? true },
+                        set: { isRequired in
+                            do {
+                                try appState.store.updateRequireApprovalByDefault(isRequired)
+                            } catch {
+                                appState.presentError(error)
+                            }
+                        }
+                    ))
+                    Text("Individual chores can override this default.")
+                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
                 }
                 Section("This device") {
                     Picker("Interface", selection: Binding(

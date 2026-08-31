@@ -162,18 +162,15 @@ struct TaskDetailView: View {
                     .foregroundStyle(KiddotasksDesignTokens.Colors.success)
 
                 if let existing {
-                    Text(existing.status.displayName)
+                    Text("Latest submission: \(existing.status.displayName)")
                         .font(KiddotasksDesignTokens.Typography.bodyLarge)
                         .padding(.top, 8)
-                    PrimaryButton(title: "Done") { onFinish(false) }
+                    PrimaryButton(title: "Submit again") {
+                        submitCompletion()
+                    }
                 } else {
                     PrimaryButton(title: "I did it!") {
-                        do {
-                            _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
-                            onFinish(true)
-                        } catch {
-                            appState.presentError(error)
-                        }
+                        submitCompletion()
                     }
                 }
                 Spacer()
@@ -186,6 +183,15 @@ struct TaskDetailView: View {
                     Button("Close") { onFinish(false) }
                 }
             }
+        }
+    }
+
+    private func submitCompletion() {
+        do {
+            _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
+            onFinish(true)
+        } catch {
+            appState.presentError(error)
         }
     }
 }

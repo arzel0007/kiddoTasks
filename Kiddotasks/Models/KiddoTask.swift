@@ -11,7 +11,9 @@ final class KiddoTask: Identifiable, Codable, Hashable {
     var icon: String
     var category: TaskCategory
     var pointValue: Int
+    /// Kept for decoding tasks created before approval overrides were added.
     var requiresApproval: Bool
+    var approvalBehavior: TaskApprovalBehavior
     var assignedChildIds: [String]
     var recurrence: TaskRecurrence
     var isActive: Bool
@@ -22,7 +24,7 @@ final class KiddoTask: Identifiable, Codable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, familyId, name, description, icon, category, pointValue
-        case requiresApproval, assignedChildIds, recurrence, isActive
+        case requiresApproval, approvalBehavior, assignedChildIds, recurrence, isActive
         case createdBy, createdAt, updatedAt, version
     }
 
@@ -35,6 +37,7 @@ final class KiddoTask: Identifiable, Codable, Hashable {
         category: TaskCategory = .household,
         pointValue: Int = 10,
         requiresApproval: Bool = true,
+        approvalBehavior: TaskApprovalBehavior = .useFamilyDefault,
         assignedChildIds: [String] = [],
         recurrence: TaskRecurrence = .oneTime,
         isActive: Bool = true,
@@ -51,6 +54,7 @@ final class KiddoTask: Identifiable, Codable, Hashable {
         self.category = category
         self.pointValue = pointValue
         self.requiresApproval = requiresApproval
+        self.approvalBehavior = approvalBehavior
         self.assignedChildIds = assignedChildIds
         self.recurrence = recurrence
         self.isActive = isActive
@@ -62,6 +66,17 @@ final class KiddoTask: Identifiable, Codable, Hashable {
 
     func isAssignedTo(_ childId: String) -> Bool {
         assignedChildIds.isEmpty || assignedChildIds.contains(childId)
+    }
+
+    func requiresParentApproval(using settings: FamilySettings) -> Bool {
+        switch approvalBehavior {
+        case .useFamilyDefault:
+            return settings.requireApprovalByDefault
+        case .alwaysRequireApproval:
+            return true
+        case .autoApprove:
+            return false
+        }
     }
 
     /// Whether this chore should appear on a given calendar day.
@@ -88,6 +103,22 @@ final class KiddoTask: Identifiable, Codable, Hashable {
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+    }
+}
+
+enum TaskApprovalBehavior: String, Codable, CaseIterable, Identifiable {
+    case useFamilyDefault
+    case alwaysRequireApproval
+    case autoApprove
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .useFamilyDefault: return "Use family setting"
+        case .alwaysRequireApproval: return "Always require approval"
+        case .autoApprove: return "Auto-approve and award points"
+        }
     }
 }
 
