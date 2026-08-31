@@ -1,0 +1,192 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is parent (has parent document)
+    function isParent(uid) {
+      return exists(/databases/$(database)/documents/parents/$(uid));
+    }
+    
+    // Get parent's family ID
+    function getParentFamilyId(uid) {
+      return get(/databases/$(database)/documents/parents/$(uid)).data.familyId;
+    }
+    
+    // Check if child exists and belongs to family
+    function isChildInFamily(childId, familyId) {
+      return get(/databases/$(database)/documents/children/$(childId)).data.familyId == familyId;
+    }
+    
+    // Check if user (parent) belongs to family
+    function parentBelongsToFamily(uid, familyId) {
+      return get(/databases/$(database)/documents/parents/$(uid)).data.familyId == familyId;
+    }
+    
+    // MARK: - Parent Collection (Authentication)
+    
+    match /parents/{uid} {
+      // Parent can read their own document
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      
+      // Parent can update their own document (limited fields)
+      allow update: if isAuthenticated() && request.auth.uid == uid
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'lastSignInAt']));
+      
+      // Only system can create parents (via auth setup)
+      allow create: if false;
+      allow delete: if false;
+    }
+    
+    // MARK: - Family Collection
+    
+    match /families/{familyId} {
+      // Parent can read if they belong to family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Parent can update if they own the family
+      allow update: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId)
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'settings', 'updatedAt']));
+      
+      allow create, delete: if false;
+    }
+    
+    // MARK: - Children Collection
+    
+    match /children/{childId} {
+      let familyId = resource.data.familyId;
+      
+      // Parent can read children in their family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Parent can update child (but not points - that's via Cloud Functions)
+      allow update: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId)
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['name', 'avatar', 'dateOfBirth', 'updatedAt']));
+      
+      // Child cannot directly read or write their own data
+      allow read, write: if false;
+      
+      allow create: if isAuthenticated() && isParent(request.auth.uid)
+        && parentBelongsToFamily(request.auth.uid, request.resource.data.familyId)
+        && request.resource.data.activePoints == 0
+        && request.resource.data.totalPointsEarned == 0;
+      allow delete: if false;
+    }
+    
+    // MARK: - Tasks Collection
+    
+    match /tasks/{taskId} {
+      let familyId = resource.data.familyId;
+      
+      // Parent can read tasks in their family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Parent can create tasks in their family
+      allow create: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid;
+      
+      // Parent can update tasks in their family
+      allow update: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      allow delete: if false;  // Tasks should be archived, not deleted
+    }
+    
+    // MARK: - Task Completions
+    
+    match /taskCompletions/{completionId} {
+      let familyId = resource.data.familyId;
+      let childId = resource.data.childId;
+      
+      // Parent can read completions in their family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Child cannot directly create completions (should be via Cloud Function)
+      // Parent can update completions (approval/rejection)
+      allow update: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId)
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['status', 'approvedAt', 'approvedBy', 'pointsAwarded', 'pointTransactionId', 'notes']));
+      
+      allow create, delete: if false;  // Should be managed by Cloud Functions
+    }
+    
+    // MARK: - Rewards Collection
+    
+    match /rewards/{rewardId} {
+      let familyId = resource.data.familyId;
+      
+      // Parent can read and create rewards in their family
+      allow read, create, update: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId)
+        && (request.operation == 'create' || request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['name', 'description', 'icon', 'pointCost', 'eligibleChildIds', 'requiresApproval', 'isActive', 'updatedAt', 'version']));
+      
+      allow delete: if false;
+    }
+    
+    // MARK: - Reward Claims
+    
+    match /rewardClaims/{claimId} {
+      let familyId = resource.data.familyId;
+      
+      // Parent can read reward claims in their family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Parent can update reward claims (approve/reject)
+      allow update: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId)
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+          ['status', 'approvedAt', 'approvedBy', 'pointDeductionTransactionId', 'notes']));
+      
+      allow create, delete: if false;  // Should be managed by Cloud Functions or dedicated endpoint
+    }
+    
+    // MARK: - Point Transactions (Audit Trail)
+    
+    match /pointTransactions/{transactionId} {
+      let familyId = resource.data.familyId;
+      
+      // Parent can read transaction history for their family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Only Cloud Functions can create/update transactions
+      allow create, update, delete: if false;
+    }
+    
+    // MARK: - Achievements
+    
+    match /achievements/{achievementId} {
+      let familyId = resource.data.familyId;
+      
+      // Parent can read achievements in their family
+      allow read: if isAuthenticated() && isParent(request.auth.uid) 
+        && parentBelongsToFamily(request.auth.uid, familyId);
+      
+      // Only system can create/update
+      allow create, update, delete: if false;
+    }
+    
+    // MARK: - Default: Deny all
+    
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
