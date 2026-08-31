@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		A1B2C3D4E5F60718293A0071 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1B2C3D4E5F60718293A0080 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1B2C3D4E5F60718293A0040;
+			remoteInfo = Kiddotasks;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		A1B2C3D4E5F60718293A0001 /* Kiddotasks.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kiddotasks.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718293A0002 /* KiddotasksTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KiddotasksTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -184,16 +194,6 @@
 			targetProxy = A1B2C3D4E5F60718293A0071 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
-
-/* Begin PBXContainerItemProxy section */
-		A1B2C3D4E5F60718293A0071 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A1B2C3D4E5F60718293A0080 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = A1B2C3D4E5F60718293A0040;
-			remoteInfo = Kiddotasks;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		A1B2C3D4E5F60718293A0090 /* Debug */ = {

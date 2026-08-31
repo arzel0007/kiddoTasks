@@ -209,17 +209,21 @@ struct TaskEditorView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        try? appState.store.addTask(
-                            name: name,
-                            description: description,
-                            icon: icon,
-                            category: category,
-                            pointValue: points,
-                            requiresApproval: requiresApproval,
-                            assignedChildIds: Array(assigned),
-                            recurrence: TaskRecurrence(type: recurrence)
-                        )
-                        dismiss()
+                        do {
+                            try appState.store.addTask(
+                                name: name,
+                                description: description,
+                                icon: icon,
+                                category: category,
+                                pointValue: points,
+                                requiresApproval: requiresApproval,
+                                assignedChildIds: Array(assigned),
+                                recurrence: TaskRecurrence(type: recurrence)
+                            )
+                            dismiss()
+                        } catch {
+                            appState.presentError(error)
+                        }
                     }
                     .disabled(name.isEmpty)
                 }
@@ -274,15 +278,19 @@ struct RewardEditorView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        try? appState.store.addReward(
-                            name: name,
-                            description: description,
-                            icon: icon,
-                            pointCost: cost,
-                            eligibleChildIds: [],
-                            requiresApproval: requiresApproval
-                        )
-                        dismiss()
+                        do {
+                            try appState.store.addReward(
+                                name: name,
+                                description: description,
+                                icon: icon,
+                                pointCost: cost,
+                                eligibleChildIds: [],
+                                requiresApproval: requiresApproval
+                            )
+                            dismiss()
+                        } catch {
+                            appState.presentError(error)
+                        }
                     }
                     .disabled(name.isEmpty)
                 }
@@ -373,8 +381,12 @@ struct ChildEditorView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        try? appState.store.addChild(name: name, avatar: avatar, dateOfBirth: nil)
-                        dismiss()
+                        do {
+                            try appState.store.addChild(name: name, avatar: avatar, dateOfBirth: nil)
+                            dismiss()
+                        } catch {
+                            appState.presentError(error)
+                        }
                     }
                     .disabled(name.isEmpty)
                 }

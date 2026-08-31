@@ -90,3 +90,61 @@ final class KiddoTask: Identifiable, Codable, Hashable {
         hasher.combine(id)
     }
 }
+
+/// The high-level kind of a mission. Raw values are persisted locally and are
+/// shared with the Firestore schema.
+enum TaskCategory: String, Codable, CaseIterable {
+    case household
+    case learning
+    case health
+    case personal
+    case pets
+    case other
+
+    var displayName: String {
+        switch self {
+        case .household: return "Household"
+        case .learning: return "Learning"
+        case .health: return "Health"
+        case .personal: return "Personal care"
+        case .pets: return "Pet care"
+        case .other: return "Other"
+        }
+    }
+}
+
+/// Frequency options shown when a parent creates a mission.
+enum RecurrenceType: String, Codable, CaseIterable {
+    case oneTime
+    case daily
+    case weekdays
+    case weekly
+    case custom
+
+    var displayName: String {
+        switch self {
+        case .oneTime: return "One time"
+        case .daily: return "Every day"
+        case .weekdays: return "Weekdays"
+        case .weekly: return "Weekly"
+        case .custom: return "Custom"
+        }
+    }
+}
+
+/// Persisted recurrence configuration for a task.
+struct TaskRecurrence: Codable, Equatable {
+    var type: RecurrenceType
+    var weekdays: [Int]?
+
+    init(type: RecurrenceType = .oneTime, weekdays: [Int]? = nil) {
+        self.type = type
+        self.weekdays = weekdays
+    }
+
+    static let oneTime = TaskRecurrence(type: .oneTime)
+    static let daily = TaskRecurrence(type: .daily)
+    static let weekdays = TaskRecurrence(type: .weekdays)
+    static let weekly = TaskRecurrence(type: .weekly)
+    static let custom = TaskRecurrence(type: .custom)
+}

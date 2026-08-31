@@ -1,5 +1,6 @@
-#if canImport(FirebaseCore)
 import Foundation
+
+#if canImport(FirebaseCore)
 import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore

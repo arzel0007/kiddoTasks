@@ -105,9 +105,9 @@ struct KiddotasksDesignTokens {
         static let standard = SwiftUI.Animation.easeInOut(duration: 0.3)
         static let slow = SwiftUI.Animation.easeInOut(duration: 0.5)
         static let bounce = SwiftUI.Animation.interpolatingSpring(
+            mass: 1,
             stiffness: 120,
-            damping: 12,
-            mass: 1
+            damping: 12
         )
     }
     
