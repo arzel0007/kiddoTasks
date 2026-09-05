@@ -11,9 +11,14 @@ struct ChildSelectionView: View {
                     appState.interfaceOverride = .parent
                 }
                 .font(KiddotasksDesignTokens.Typography.captionLarge)
+                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
                 Spacer()
-                Text("Who's playing?")
-                    .font(KiddotasksDesignTokens.Typography.headingLarge)
+                HStack(spacing: 8) {
+                    KiddotasksLogoMark(size: 26)
+                    Text("Who's playing?")
+                        .font(KiddotasksDesignTokens.Typography.headingLarge)
+                        .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                }
                 Spacer()
                 Color.clear.frame(width: 48, height: 1)
             }
@@ -38,13 +43,17 @@ struct ChildSelectionView: View {
                                     .foregroundStyle(KiddotasksDesignTokens.Colors.text)
                                 PointsBadge(points: child.activePoints, compact: true)
                             }
-                            .padding()
+                            .padding(20)
                             .frame(maxWidth: .infinity)
                             .background(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                            .kiddotasksShadow(.medium)
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .kiddotasksShadow(.large)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    .strokeBorder(Color(hex: child.avatar.colorHex).opacity(0.25), lineWidth: 2)
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(KiddoPressStyle())
                     }
                 }
                 .padding()
@@ -52,7 +61,7 @@ struct ChildSelectionView: View {
             Spacer()
         }
         .padding(.top, 24)
-        .background(KiddotasksDesignTokens.Colors.kidsBackground2.ignoresSafeArea())
+        .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsPlayground)
     }
 }
 
@@ -109,7 +118,7 @@ struct MissionsView: View {
                     }
                 }
             }
-            .background(KiddotasksDesignTokens.Colors.kidsBackground3.ignoresSafeArea())
+            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsMissionSky)
             .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -150,32 +159,49 @@ struct TaskDetailView: View {
         NavigationStack {
             VStack(spacing: 20) {
                 Image(systemName: task.icon)
-                    .font(.system(size: 56))
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 110, height: 110)
+                    .background {
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .fill(task.category.palette.gradient)
+                    }
+                    .shadow(color: task.category.palette.accent.opacity(0.4), radius: 14, x: 0, y: 8)
                 Text(task.name)
                     .font(KiddotasksDesignTokens.Typography.headingLarge)
+                    .multilineTextAlignment(.center)
                 Text(task.description.isEmpty ? "You've got this!" : task.description)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
-                Text("Earn \(task.pointValue) stars")
+                Text("Earn \(task.pointValue) ⭐")
                     .font(KiddotasksDesignTokens.Typography.titleMedium)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.success)
+                    .foregroundStyle(Color(hex: "#B45309"))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(Color(hex: "#FEF3C7")))
 
                 if let existing {
                     Text("Latest submission: \(existing.status.displayName)")
                         .font(KiddotasksDesignTokens.Typography.bodyLarge)
                         .padding(.top, 8)
-                    PrimaryButton(title: "Submit again") {
+                    PrimaryButton(
+                        title: existing.status == .rejected ? "Try again" : "Submit again",
+                        gradient: KiddotasksDesignTokens.Gradients.hero
+                    ) {
                         submitCompletion()
                     }
                 } else {
-                    PrimaryButton(title: "I did it!") {
+                    PrimaryButton(
+                        title: "I did it!",
+                        gradient: KiddotasksDesignTokens.Gradients.lush
+                    ) {
                         submitCompletion()
                     }
                 }
                 Spacer()
             }
             .padding(24)
+            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsMissionSky)
             .navigationTitle("Mission")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -203,8 +229,19 @@ struct CelebrationView: View {
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("🎉")
-                .font(.system(size: 96))
+            ZStack {
+                ForEach(0..<8, id: \.self) { index in
+                    Text(["🎉", "⭐", "✨", "🎊"][index % 4])
+                        .font(.system(size: 22))
+                        .offset(
+                            x: cos(Double(index) / 8 * .pi * 2) * 112,
+                            y: sin(Double(index) / 8 * .pi * 2) * 112
+                        )
+                        .opacity(0.9)
+                }
+                Text("🎉")
+                    .font(.system(size: 104))
+            }
             Text("Awesome!")
                 .font(KiddotasksDesignTokens.Typography.displayLarge)
             Text("You finished \(task.name)")
@@ -212,12 +249,12 @@ struct CelebrationView: View {
                 .multilineTextAlignment(.center)
             Text("+\(task.pointValue) ⭐")
                 .font(KiddotasksDesignTokens.Typography.pointsDisplay)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.success)
+                .foregroundStyle(Color(hex: "#B45309"))
             Spacer()
-            PrimaryButton(title: "Next mission") { onDone() }
+            PrimaryButton(title: "Next mission", gradient: KiddotasksDesignTokens.Gradients.lush) { onDone() }
         }
         .padding(24)
-        .background(KiddotasksDesignTokens.Colors.kidsBackground1.ignoresSafeArea())
+        .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsRewardPop)
     }
 }
 
@@ -255,7 +292,7 @@ struct RewardShopView: View {
                     }
                 }
             }
-            .background(KiddotasksDesignTokens.Colors.kidsBackground4.ignoresSafeArea())
+            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsRewardPop)
             .navigationTitle("Reward shop")
             .alert("Shop", isPresented: Binding(
                 get: { message != nil },
@@ -290,22 +327,42 @@ struct AchievementsView: View {
             let earned = appState.store.achievements.filter { $0.childId == appState.currentChildProfile?.id }
             Group {
                 if earned.isEmpty {
-                    EmptyStateView(emoji: "🏅", title: "No badges yet", message: "Finish missions to earn badges.")
+                    EmptyStateView(
+                        emoji: "🏅",
+                        title: "No badges yet",
+                        message: "Finish missions to earn badges."
+                    )
                 } else {
-                    List(earned) { achievement in
-                        HStack(spacing: 12) {
-                            Text(achievement.type.emoji).font(.largeTitle)
-                            VStack(alignment: .leading) {
-                                Text(achievement.type.displayName)
-                                    .font(KiddotasksDesignTokens.Typography.titleSmall)
-                                Text(achievement.type.description)
-                                    .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+                            ForEach(earned) { achievement in
+                                VStack(spacing: 10) {
+                                    Text(achievement.type.emoji)
+                                        .font(.system(size: 44))
+                                        .frame(width: 76, height: 76)
+                                        .background(Circle().fill(KiddotasksDesignTokens.Gradients.sunburst))
+                                        .shadow(color: Color(hex: "#F97316").opacity(0.35), radius: 8, x: 0, y: 4)
+                                    Text(achievement.type.displayName)
+                                        .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                        .multilineTextAlignment(.center)
+                                        .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                                    Text(achievement.type.description)
+                                        .font(KiddotasksDesignTokens.Typography.captionSmall)
+                                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .padding(16)
+                                .frame(maxWidth: .infinity)
+                                .background(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                                .kiddotasksShadow(.medium)
                             }
                         }
+                        .padding()
                     }
                 }
             }
+            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsPlayground)
             .navigationTitle("Badges")
         }
     }

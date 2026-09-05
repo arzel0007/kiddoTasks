@@ -6,33 +6,45 @@ struct WelcomeView: View {
     @State private var showSignIn = false
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: KiddotasksDesignTokens.Spacing.medium) {
             Spacer()
-            Text("⭐")
-                .font(.system(size: 72))
+
+            KiddotasksLogoMark(size: 108)
+                .padding(.bottom, KiddotasksDesignTokens.Spacing.small)
+
             Text("Kiddotasks")
                 .font(KiddotasksDesignTokens.Typography.displayLarge)
             Text("Missions for kids. Control for parents.")
                 .font(KiddotasksDesignTokens.Typography.bodyLarge)
                 .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)
+
             Spacer()
+
             if appState.store.hasExistingAccount {
-                PrimaryButton(title: "Sign in") { showSignIn = true }
+                PrimaryButton(
+                    title: "Sign in",
+                    gradient: KiddotasksDesignTokens.Gradients.hero
+                ) { showSignIn = true }
+                SecondaryButton(title: "Create a new family") { showSignUp = true }
+            } else {
+                PrimaryButton(
+                    title: "Create family",
+                    gradient: KiddotasksDesignTokens.Gradients.hero
+                ) { showSignUp = true }
+                SecondaryButton(title: "I already have a family — sign in") { showSignIn = true }
             }
-            PrimaryButton(
-                title: appState.store.hasExistingAccount ? "Replace with a new family" : "Create family",
-                color: KiddotasksDesignTokens.Colors.accent
-            ) {
-                showSignUp = true
-            }
-            Text("Data stays on this device until you connect Firebase.")
+
+            Text(appState.store.hasExistingAccount
+                 ? "Sign in opens the family saved on this device. Cloud sync is coming soon."
+                 : "Data stays on this device until you connect Firebase.")
                 .font(KiddotasksDesignTokens.Typography.captionSmall)
                 .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
                 .multilineTextAlignment(.center)
+                .padding(.top, KiddotasksDesignTokens.Spacing.xxSmall)
         }
-        .padding(24)
-        .background(KiddotasksDesignTokens.Colors.kidsBackground1.ignoresSafeArea())
+        .padding(KiddotasksDesignTokens.Spacing.xLarge)
+        .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsPlayground)
         .sheet(isPresented: $showSignUp) { SignUpView() }
         .sheet(isPresented: $showSignIn) { SignInView() }
     }
@@ -49,6 +61,20 @@ struct SignUpView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    HStack(spacing: 12) {
+                        KiddotasksLogoMark(size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("New family")
+                                .font(KiddotasksDesignTokens.Typography.titleSmall)
+                            Text("Set up chores and rewards in about two minutes.")
+                                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        }
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
                 Section("Family") {
                     TextField("Family name", text: $familyName)
                     TextField("Your name", text: $parentName)
@@ -100,12 +126,33 @@ struct SignInView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Email", text: $email)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.emailAddress)
-                SecureField("Password", text: $password)
+                Section {
+                    HStack(spacing: 12) {
+                        KiddotasksLogoMark(size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Welcome back")
+                                .font(KiddotasksDesignTokens.Typography.titleSmall)
+                            Text("Sign in with the account saved on this device.")
+                                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        }
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+                Section("Account") {
+                    TextField("Email", text: $email)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                    SecureField("Password", text: $password)
+                }
                 if let error = appState.authenticationError {
                     Text(error).foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                }
+                Section {
+                    Text("Using a new device? Connect Firebase in a future update to sync your family across phones and iPads.")
+                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
                 }
             }
             .navigationTitle("Sign in")

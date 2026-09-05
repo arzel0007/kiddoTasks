@@ -5,7 +5,7 @@ struct ParentControlCenter: View {
 
     var body: some View {
         TabView {
-            ApprovalHomeView()
+            TodayDashboardView()
                 .tabItem { Label("Today", systemImage: "checkmark.seal.fill") }
             TaskListView()
                 .tabItem { Label("Tasks", systemImage: "list.bullet.clipboard") }
@@ -20,124 +20,61 @@ struct ParentControlCenter: View {
     }
 }
 
-struct ApprovalHomeView: View {
+struct TaskListView: View {
     @Environment(AppState.self) private var appState
-    @State private var rejectReason = ""
-    @State private var rejectingCompletion: TaskCompletion?
+    @State private var showEditor = false
+    @State private var taskPendingDeletion: KiddoTask?
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Button {
-                        appState.interfaceOverride = .kids
-                        appState.clearChildProfile()
-                    } label: {
-                        Label("Open Kids Station", systemImage: "ipad")
-                    }
-                }
-
-                Section("Waiting for approval") {
-                    let pending = appState.store.pendingCompletions()
-                    if pending.isEmpty {
-                        Text("No missions waiting.")
+                Section("Active") {
+                    let active = appState.store.tasks.filter(\.isActive)
+                    if active.isEmpty {
+                        Text("No chores yet. Tap + to add one.")
                             .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
-                    } else {
-                        ForEach(pending) { completion in
-                            completionRow(completion)
+                    }
+                    ForEach(active) { task in
+                        NavigationLink {
+                            TaskEditorView(task: task)
+                        } label: {
+                            TaskRow(task: task)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                taskPendingDeletion = task
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            Button {
+                                try? appState.store.archiveTask(task.id)
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                            .tint(KiddotasksDesignTokens.Colors.warning)
                         }
                     }
                 }
 
-                Section("Reward requests") {
-                    let claims = appState.store.pendingClaims()
-                    if claims.isEmpty {
-                        Text("No reward requests.")
-                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
-                    } else {
-                        ForEach(claims) { claim in
-                            claimRow(claim)
+                let archived = appState.store.tasks.filter { !$0.isActive }
+                if !archived.isEmpty {
+                    Section("Archived") {
+                        ForEach(archived) { task in
+                            TaskRow(task: task, isArchived: true)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        taskPendingDeletion = task
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    Button {
+                                        try? appState.store.restoreTask(task.id)
+                                    } label: {
+                                        Label("Restore", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .tint(KiddotasksDesignTokens.Colors.success)
+                                }
                         }
-                    }
-                }
-            }
-            .navigationTitle(appState.currentFamily?.name ?? "Today")
-            .alert("Reject mission", isPresented: Binding(
-                get: { rejectingCompletion != nil },
-                set: { if !$0 { rejectingCompletion = nil } }
-            )) {
-                TextField("Reason", text: $rejectReason)
-                Button("Reject", role: .destructive) {
-                    if let completion = rejectingCompletion {
-                        try? appState.store.rejectCompletion(completion.id, reason: rejectReason)
-                    }
-                    rejectReason = ""
-                    rejectingCompletion = nil
-                }
-                Button("Cancel", role: .cancel) { rejectingCompletion = nil }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func completionRow(_ completion: TaskCompletion) -> some View {
-        let childName = appState.child(id: completion.childId)?.name ?? "Child"
-        let taskName = appState.task(id: completion.taskId)?.name ?? "Task"
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(childName) · \(taskName)")
-                .font(KiddotasksDesignTokens.Typography.titleSmall)
-            HStack {
-                Button("Approve") {
-                    try? appState.store.approveCompletion(completion.id)
-                }
-                .buttonStyle(.borderedProminent)
-                Button("Reject", role: .destructive) {
-                    rejectingCompletion = completion
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
-    private func claimRow(_ claim: RewardClaim) -> some View {
-        let childName = appState.child(id: claim.childId)?.name ?? "Child"
-        let rewardName = appState.reward(id: claim.rewardId)?.name ?? "Reward"
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(childName) wants \(rewardName)")
-                .font(KiddotasksDesignTokens.Typography.titleSmall)
-            HStack {
-                Button("Approve") {
-                    try? appState.store.approveClaim(claim.id)
-                }
-                .buttonStyle(.borderedProminent)
-                Button("Reject", role: .destructive) {
-                    try? appState.store.rejectClaim(claim.id, reason: "Not now")
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-struct TaskListView: View {
-    @Environment(AppState.self) private var appState
-    @State private var showEditor = false
-
-    var body: some View {
-        NavigationStack {
-            List(appState.store.tasks.filter(\.isActive)) { task in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.name).font(KiddotasksDesignTokens.Typography.titleSmall)
-                    Text("\(task.pointValue) ⭐ · \(task.recurrence.type.displayName)")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
-                }
-                .swipeActions {
-                    Button("Archive", role: .destructive) {
-                        try? appState.store.archiveTask(task.id)
                     }
                 }
             }
@@ -150,6 +87,86 @@ struct TaskListView: View {
             .sheet(isPresented: $showEditor) {
                 TaskEditorView()
             }
+            .confirmationDialog(
+                "Delete “\(taskPendingDeletion?.name ?? "")”?",
+                isPresented: Binding(
+                    get: { taskPendingDeletion != nil },
+                    set: { if !$0 { taskPendingDeletion = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete task", role: .destructive) {
+                    if let task = taskPendingDeletion {
+                        try? appState.store.deleteTask(task.id)
+                    }
+                    taskPendingDeletion = nil
+                }
+                Button("Cancel", role: .cancel) { taskPendingDeletion = nil }
+            } message: {
+                Text("Past completions and stars stay in History. This cannot be undone.")
+            }
+        }
+    }
+}
+
+/// Row shown in the Tasks list, active or archived.
+struct TaskRow: View {
+    let task: KiddoTask
+    var isArchived = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: task.icon)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(task.category.palette.gradient)
+                }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(task.name)
+                    .font(KiddotasksDesignTokens.Typography.titleSmall)
+                Text("\(task.pointValue) ⭐ · \(task.recurrence.type.displayName)")
+                    .font(KiddotasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+            }
+            Spacer()
+            if isArchived {
+                Text("Archived")
+                    .font(KiddotasksDesignTokens.Typography.captionSmall)
+                    .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
+            } else {
+                Image(systemName: approvalIcon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(approvalTint)
+                    .accessibilityLabel(approvalLabel)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var approvalIcon: String {
+        switch task.approvalBehavior {
+        case .useFamilyDefault: return "house.fill"
+        case .alwaysRequireApproval: return "checkmark.seal.fill"
+        case .autoApprove: return "bolt.fill"
+        }
+    }
+
+    private var approvalLabel: String {
+        switch task.approvalBehavior {
+        case .useFamilyDefault: return "Uses family default approval"
+        case .alwaysRequireApproval: return "Always requires approval"
+        case .autoApprove: return "Auto-approved"
+        }
+    }
+
+    private var approvalTint: Color {
+        switch task.approvalBehavior {
+        case .useFamilyDefault: return KiddotasksDesignTokens.Colors.primary
+        case .alwaysRequireApproval: return KiddotasksDesignTokens.Colors.warning
+        case .autoApprove: return KiddotasksDesignTokens.Colors.success
         }
     }
 }
@@ -157,7 +174,11 @@ struct TaskListView: View {
 struct TaskEditorView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    /// Pass a task to edit it; pass nil (or nothing) to create a new one.
+    var task: KiddoTask? = nil
+
     @State private var name = ""
+    @State private var didLoad = false
     @State private var description = ""
     @State private var points = 10
     @State private var category = TaskCategory.household
@@ -208,30 +229,58 @@ struct TaskEditorView: View {
                     }
                 }
             }
-            .navigationTitle("New task")
+            .navigationTitle(task == nil ? "New task" : "Edit task")
+            .onAppear(perform: loadTaskIfEditing)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        do {
-                            try appState.store.addTask(
-                                name: name,
-                                description: description,
-                                icon: icon,
-                                category: category,
-                                pointValue: points,
-                                approvalBehavior: approvalBehavior,
-                                assignedChildIds: Array(assigned),
-                                recurrence: TaskRecurrence(type: recurrence)
-                            )
-                            dismiss()
-                        } catch {
-                            appState.presentError(error)
-                        }
-                    }
-                    .disabled(name.isEmpty)
+                    Button("Save", action: save)
+                        .disabled(name.isEmpty)
                 }
             }
+        }
+    }
+
+    private func loadTaskIfEditing() {
+        guard !didLoad, let task else { return }
+        didLoad = true
+        name = task.name
+        description = task.description
+        points = task.pointValue
+        category = task.category
+        recurrence = task.recurrence.type
+        approvalBehavior = task.approvalBehavior
+        assigned = Set(task.assignedChildIds)
+        icon = task.icon
+    }
+
+    private func save() {
+        do {
+            if let existing = task {
+                existing.name = name
+                existing.description = description
+                existing.icon = icon
+                existing.category = category
+                existing.pointValue = points
+                existing.approvalBehavior = approvalBehavior
+                existing.assignedChildIds = Array(assigned)
+                existing.recurrence = TaskRecurrence(type: recurrence, weekdays: existing.recurrence.weekdays)
+                try appState.store.updateTask(existing)
+            } else {
+                try appState.store.addTask(
+                    name: name,
+                    description: description,
+                    icon: icon,
+                    category: category,
+                    pointValue: points,
+                    approvalBehavior: approvalBehavior,
+                    assignedChildIds: Array(assigned),
+                    recurrence: TaskRecurrence(type: recurrence)
+                )
+            }
+            dismiss()
+        } catch {
+            appState.presentError(error)
         }
     }
 }
@@ -242,11 +291,71 @@ struct RewardListView: View {
 
     var body: some View {
         NavigationStack {
-            List(appState.store.rewards.filter(\.isActive)) { reward in
-                VStack(alignment: .leading) {
-                    Text(reward.name).font(KiddotasksDesignTokens.Typography.titleSmall)
-                    Text("\(reward.pointCost) ⭐")
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+            List {
+                Section("Active") {
+                    let active = appState.store.rewards.filter(\.isActive)
+                    if active.isEmpty {
+                        Text("No rewards yet. Tap + to add one.")
+                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    }
+                    ForEach(active) { reward in
+                        NavigationLink {
+                            RewardEditorView(reward: reward)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: reward.icon)
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .fill(KiddotasksDesignTokens.Gradients.berry)
+                                    }
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(reward.name)
+                                        .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                    Text("\(reward.pointCost) ⭐")
+                                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                reward.isActive = false
+                                try? appState.store.updateReward(reward)
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                            .tint(KiddotasksDesignTokens.Colors.warning)
+                        }
+                    }
+                }
+
+                let archived = appState.store.rewards.filter { !$0.isActive }
+                if !archived.isEmpty {
+                    Section("Archived") {
+                        ForEach(archived) { reward in
+                            HStack {
+                                Text(reward.name)
+                                    .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                Spacer()
+                                Text("Archived")
+                                    .font(KiddotasksDesignTokens.Typography.captionSmall)
+                                    .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button {
+                                    reward.isActive = true
+                                    try? appState.store.updateReward(reward)
+                                } label: {
+                                    Label("Restore", systemImage: "arrow.uturn.backward")
+                                }
+                                .tint(KiddotasksDesignTokens.Colors.success)
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Rewards")
@@ -263,10 +372,14 @@ struct RewardListView: View {
 struct RewardEditorView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    /// Pass a reward to edit it; pass nil (or nothing) to create a new one.
+    var reward: Reward? = nil
+
     @State private var name = ""
     @State private var description = ""
     @State private var cost = 25
     @State private var icon = "gift.fill"
+    @State private var didLoad = false
 
     var body: some View {
         NavigationStack {
@@ -278,27 +391,47 @@ struct RewardEditorView: View {
                     .font(KiddotasksDesignTokens.Typography.captionLarge)
                     .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
             }
-            .navigationTitle("New reward")
+            .navigationTitle(reward == nil ? "New reward" : "Edit reward")
+            .onAppear(perform: loadRewardIfEditing)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        do {
-                            try appState.store.addReward(
-                                name: name,
-                                description: description,
-                                icon: icon,
-                                pointCost: cost,
-                                eligibleChildIds: []
-                            )
-                            dismiss()
-                        } catch {
-                            appState.presentError(error)
-                        }
-                    }
-                    .disabled(name.isEmpty)
+                    Button("Save", action: save)
+                        .disabled(name.isEmpty)
                 }
             }
+        }
+    }
+
+    private func loadRewardIfEditing() {
+        guard !didLoad, let reward else { return }
+        didLoad = true
+        name = reward.name
+        description = reward.description
+        cost = reward.pointCost
+        icon = reward.icon
+    }
+
+    private func save() {
+        do {
+            if let existing = reward {
+                existing.name = name
+                existing.description = description
+                existing.pointCost = cost
+                existing.icon = icon
+                try appState.store.updateReward(existing)
+            } else {
+                try appState.store.addReward(
+                    name: name,
+                    description: description,
+                    icon: icon,
+                    pointCost: cost,
+                    eligibleChildIds: []
+                )
+            }
+            dismiss()
+        } catch {
+            appState.presentError(error)
         }
     }
 }
@@ -306,29 +439,66 @@ struct RewardEditorView: View {
 struct FamilyView: View {
     @Environment(AppState.self) private var appState
     @State private var showChildEditor = false
-    @State private var familyName: String = ""
+    @State private var childPendingRemoval: Child?
+    @State private var showFamilyNameEditor = false
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Family") {
-                    TextField("Family name", text: $familyName)
-                        .onAppear { familyName = appState.currentFamily?.name ?? "" }
-                        .onSubmit { try? appState.store.updateFamilyName(familyName) }
-                }
-                Section("Kids") {
-                    ForEach(appState.familyChildren) { child in
-                        HStack {
-                            ChildAvatarView(avatar: child.avatar, size: 40)
-                            VStack(alignment: .leading) {
-                                Text(child.name)
-                                Text("\(child.activePoints) ⭐")
+                Section {
+                    Button {
+                        showFamilyNameEditor = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            KiddotasksLogoMark(size: 48)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(appState.currentFamily?.name ?? "Our family")
+                                    .font(KiddotasksDesignTokens.Typography.titleMedium)
+                                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                                Text("Kiddotasks family · tap to rename")
                                     .font(KiddotasksDesignTokens.Typography.captionLarge)
                                     .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
                             }
+                            Spacer()
+                            Image(systemName: "pencil")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
                         }
                     }
-                    Button("Add child") { showChildEditor = true }
+                }
+
+                Section("Kids") {
+                    ForEach(appState.familyChildren) { child in
+                        NavigationLink {
+                            ChildEditorView(child: child)
+                        } label: {
+                            HStack(spacing: 12) {
+                                ChildAvatarView(avatar: child.avatar, size: 40)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(child.name)
+                                        .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                    Text("\(child.activePoints) ⭐ balance")
+                                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                }
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                childPendingRemoval = child
+                            } label: {
+                                Label("Remove", systemImage: "person.badge.minus")
+                            }
+                        }
+                    }
+                    Button {
+                        showChildEditor = true
+                    } label: {
+                        Label("Add child", systemImage: "plus.circle.fill")
+                    }
+                }
+                Section("Kids PIN") {
+                    PINEditorRow()
                 }
                 Section("Chore approvals") {
                     Toggle("Require parent approval by default", isOn: Binding(
@@ -344,6 +514,28 @@ struct FamilyView: View {
                     Text("Individual chores can override this default.")
                         .font(KiddotasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                }
+                Section("Notifications & fun") {
+                    Toggle("Family notifications", isOn: Binding(
+                        get: { appState.currentFamily?.settings.enableNotifications ?? true },
+                        set: { isEnabled in
+                            do {
+                                try appState.store.updateNotificationsEnabled(isEnabled)
+                            } catch {
+                                appState.presentError(error)
+                            }
+                        }
+                    ))
+                    Toggle("Celebration animations", isOn: Binding(
+                        get: { appState.currentFamily?.settings.celebrationAnimationsEnabled ?? true },
+                        set: { isEnabled in
+                            do {
+                                try appState.store.updateCelebrationsEnabled(isEnabled)
+                            } catch {
+                                appState.presentError(error)
+                            }
+                        }
+                    ))
                 }
                 Section("This device") {
                     Picker("Interface", selection: Binding(
@@ -363,6 +555,89 @@ struct FamilyView: View {
             }
             .navigationTitle("Family")
             .sheet(isPresented: $showChildEditor) { ChildEditorView() }
+            .sheet(isPresented: $showFamilyNameEditor) {
+                FamilyNameEditor(initialName: appState.currentFamily?.name ?? "")
+            }
+            .confirmationDialog(
+                "Remove \(childPendingRemoval?.name ?? "this child")?",
+                isPresented: Binding(
+                    get: { childPendingRemoval != nil },
+                    set: { if !$0 { childPendingRemoval = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Remove child", role: .destructive) {
+                    if let child = childPendingRemoval {
+                        try? appState.store.removeChild(child.id)
+                    }
+                    childPendingRemoval = nil
+                }
+                Button("Cancel", role: .cancel) { childPendingRemoval = nil }
+            } message: {
+                Text("Their history and earned stars stay in the family record.")
+            }
+        }
+    }
+}
+
+/// Sheet for renaming the family, with an explicit save.
+struct FamilyNameEditor: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let initialName: String
+    @State private var name = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Family name", text: $name)
+            }
+            .navigationTitle("Family name")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        try? appState.store.updateFamilyName(name)
+                        dismiss()
+                    }
+                    .disabled(name.isEmpty)
+                }
+            }
+        }
+        .onAppear { name = initialName }
+    }
+}
+
+/// Inline Kids PIN editor: digits only, validated by the store on save.
+struct PINEditorRow: View {
+    @Environment(AppState.self) private var appState
+    @State private var pin = ""
+    @State private var statusMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SecureField("4–6 digits", text: $pin)
+                    .keyboardType(.numberPad)
+                Button("Save") {
+                    do {
+                        try appState.store.updateKidsPIN(pin)
+                        pin = ""
+                        statusMessage = "PIN updated ✓"
+                    } catch {
+                        statusMessage = error.localizedDescription
+                    }
+                }
+                .disabled(pin.count < 4)
+            }
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(KiddotasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+            }
+        }
+        .onChange(of: pin) { _, newValue in
+            pin = String(newValue.prefix(6).filter(\.isNumber))
         }
     }
 }
@@ -370,8 +645,14 @@ struct FamilyView: View {
 struct ChildEditorView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    /// Pass a child to edit; pass nil (or nothing) to add a new one.
+    var child: Child? = nil
+
     @State private var name = ""
     @State private var avatar = ChildAvatar.default
+    @State private var hasBirthday = false
+    @State private var birthday = Date()
+    @State private var didLoad = false
 
     var body: some View {
         NavigationStack {
@@ -394,22 +675,53 @@ struct ChildEditorView: View {
                         }
                     }
                 }
+                Section("Birthday (optional)") {
+                    Toggle("Add birthday", isOn: $hasBirthday.animation())
+                    if hasBirthday {
+                        DatePicker("Birthday", selection: $birthday, displayedComponents: .date)
+                    }
+                }
             }
-            .navigationTitle("New child")
+            .navigationTitle(child == nil ? "New child" : "Edit child")
+            .onAppear(perform: loadChildIfEditing)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        do {
-                            try appState.store.addChild(name: name, avatar: avatar, dateOfBirth: nil)
-                            dismiss()
-                        } catch {
-                            appState.presentError(error)
-                        }
-                    }
-                    .disabled(name.isEmpty)
+                    Button("Save", action: save)
+                        .disabled(name.isEmpty)
                 }
             }
+        }
+    }
+
+    private func loadChildIfEditing() {
+        guard !didLoad, let child else { return }
+        didLoad = true
+        name = child.name
+        avatar = child.avatar
+        if let dateOfBirth = child.dateOfBirth {
+            hasBirthday = true
+            birthday = dateOfBirth
+        }
+    }
+
+    private func save() {
+        do {
+            if let existing = child {
+                existing.name = name
+                existing.avatar = avatar
+                existing.dateOfBirth = hasBirthday ? birthday : nil
+                try appState.store.updateChild(existing)
+            } else {
+                try appState.store.addChild(
+                    name: name,
+                    avatar: avatar,
+                    dateOfBirth: hasBirthday ? birthday : nil
+                )
+            }
+            dismiss()
+        } catch {
+            appState.presentError(error)
         }
     }
 }
@@ -419,18 +731,43 @@ struct ActivityView: View {
 
     var body: some View {
         NavigationStack {
-            List(appState.store.transactions) { tx in
-                HStack {
-                    Image(systemName: tx.type.icon)
-                    VStack(alignment: .leading) {
-                        Text(tx.description)
-                        Text(tx.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(KiddotasksDesignTokens.Typography.captionLarge)
-                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+            List {
+                let transactions = appState.store.transactions
+                if transactions.isEmpty {
+                    Text("No activity yet. Completions and rewards will appear here.")
+                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                }
+                ForEach(transactions.reversed()) { tx in
+                    HStack(spacing: 12) {
+                        Image(systemName: tx.type.icon)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background {
+                                Circle().fill(
+                                    tx.amount >= 0
+                                        ? KiddotasksDesignTokens.Gradients.mint
+                                        : KiddotasksDesignTokens.Gradients.berry
+                                )
+                            }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(tx.description)
+                                .font(KiddotasksDesignTokens.Typography.bodyMedium)
+                            Text(tx.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        }
+                        Spacer()
+                        Text(tx.amount > 0 ? "+\(tx.amount)" : "\(tx.amount)")
+                            .font(KiddotasksDesignTokens.Typography.titleSmall)
+                            .monospacedDigit()
+                            .foregroundStyle(
+                                tx.amount > 0
+                                    ? KiddotasksDesignTokens.Colors.success
+                                    : KiddotasksDesignTokens.Colors.error
+                            )
                     }
-                    Spacer()
-                    Text(tx.amount > 0 ? "+\(tx.amount)" : "\(tx.amount)")
-                        .foregroundStyle(tx.amount > 0 ? KiddotasksDesignTokens.Colors.success : KiddotasksDesignTokens.Colors.error)
+                    .padding(.vertical, 2)
                 }
             }
             .navigationTitle("History")

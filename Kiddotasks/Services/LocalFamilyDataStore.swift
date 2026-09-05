@@ -132,6 +132,19 @@ final class LocalFamilyDataStore {
         persistKeepingPassword()
     }
 
+    /// Removes a child profile. History (transactions, completions, claims) is
+    /// preserved so the family audit trail stays intact.
+    func removeChild(_ childId: String) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        guard let index = children.firstIndex(where: { $0.id == childId }) else {
+            throw FirebaseError.invalidChild
+        }
+        children.remove(at: index)
+        family.memberIds.removeAll { $0 == childId }
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
     // MARK: - Tasks
 
     @discardableResult
@@ -179,6 +192,26 @@ final class LocalFamilyDataStore {
         }
         task.isActive = false
         task.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    /// Brings an archived task back to the active list.
+    func restoreTask(_ taskId: String) throws {
+        guard let task = tasks.first(where: { $0.id == taskId }) else {
+            throw FirebaseError.invalidTask
+        }
+        task.isActive = true
+        task.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    /// Permanently deletes a task. Past completions and point transactions are
+    /// intentionally kept so the family history remains complete.
+    func deleteTask(_ taskId: String) throws {
+        guard let index = tasks.firstIndex(where: { $0.id == taskId }) else {
+            throw FirebaseError.invalidTask
+        }
+        tasks.remove(at: index)
         persistKeepingPassword()
     }
 
@@ -335,6 +368,10 @@ final class LocalFamilyDataStore {
 
     func updateKidsPIN(_ pin: String) throws {
         guard let family else { throw FirebaseError.notAuthenticated }
+        let digits = pin.allSatisfy(\.isNumber)
+        guard digits, pin.count >= 4, pin.count <= 6 else {
+            throw FirebaseError.operationFailed("Kids PIN must be 4–6 digits")
+        }
         family.settings.kidsStationPIN = pin
         family.updatedAt = Date()
         persistKeepingPassword()
@@ -345,6 +382,99 @@ final class LocalFamilyDataStore {
         family.settings.requireApprovalByDefault = isRequired
         family.updatedAt = Date()
         persistKeepingPassword()
+    }
+
+    func updateNotificationsEnabled(_ isEnabled: Bool) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.enableNotifications = isEnabled
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    func updateCelebrationsEnabled(_ isEnabled: Bool) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.celebrationAnimationsEnabled = isEnabled
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    // MARK: - Dashboard aggregations
+
+    struct TodayTotals {
+        var starsEarned: Int
+        var missionsApproved: Int
+        var pendingApprovals: Int
+        var pendingRewardRequests: Int
+        var tasksDueToday: Int
+    }
+
+    /// One cell of the weekly chart: stars earned by one child on one day.
+    struct DailyPoints: Identifiable {
+        var date: Date
+        var childId: String
+        var childName: String
+        var stars: Int
+
+        var id: String { "\(date.timeIntervalSince1970)-\(childId)" }
+    }
+
+    /// Total positive (non-reversed) stars awarded across the family on a day.
+    func starsEarned(on date: Date = Date()) -> Int {
+        transactions
+            .filter { !$0.isReversed && $0.amount > 0 && Calendar.current.isDate($0.createdAt, inSameDayAs: date) }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    /// Positive stars earned by a single child on a day.
+    func starsEarned(byChild childId: String, on date: Date = Date()) -> Int {
+        transactions
+            .filter {
+                !$0.isReversed && $0.amount > 0 && $0.childId == childId
+                    && Calendar.current.isDate($0.createdAt, inSameDayAs: date)
+            }
+            .reduce(0) { $0 + $1.amount }
+    }
+
+    /// Approved completions for a child on a day (approval date, falling back
+    /// to submission date for auto-approved missions).
+    func missionsApproved(byChild childId: String, on date: Date = Date()) -> Int {
+        completions.filter { completion in
+            completion.childId == childId
+                && completion.status == .approved
+                && Calendar.current.isDate(completion.approvedAt ?? completion.completedAt, inSameDayAs: date)
+        }.count
+    }
+
+    /// The headline numbers shown on the Today dashboard.
+    func todayTotals(on date: Date = Date()) -> TodayTotals {
+        TodayTotals(
+            starsEarned: starsEarned(on: date),
+            missionsApproved: completions.filter {
+                $0.status == .approved
+                    && Calendar.current.isDate($0.approvedAt ?? $0.completedAt, inSameDayAs: date)
+            }.count,
+            pendingApprovals: pendingCompletions().count,
+            pendingRewardRequests: pendingClaims().count,
+            tasksDueToday: tasks.filter { $0.isActive && $0.isDue(on: date) }.count
+        )
+    }
+
+    /// Stars earned per child per day for the last `days` days, ending on the
+    /// given date. Includes zero-star days so charts stay aligned.
+    func weeklyPointsSeries(endingOn date: Date = Date(), days: Int = 7) -> [DailyPoints] {
+        let calendar = Calendar.current
+        let endOfDay = calendar.startOfDay(for: date)
+        return (0..<days).flatMap { offset -> [DailyPoints] in
+            let day = calendar.date(byAdding: .day, value: -offset, to: endOfDay) ?? endOfDay
+            return children.map { child in
+                DailyPoints(
+                    date: day,
+                    childId: child.id,
+                    childName: child.name,
+                    stars: starsEarned(byChild: child.id, on: day)
+                )
+            }
+        }
     }
 
     // MARK: - Queries
