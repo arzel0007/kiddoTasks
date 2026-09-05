@@ -1,30 +1,49 @@
 import SwiftUI
 
-/// The Kiddotasks logo mark: a gradient rounded square with a star.
+/// The Kiddotasks logo mark: a flat rounded square with a checklist motif.
 struct KiddotasksLogoMark: View {
     var size: CGFloat = 64
-    var gradient: LinearGradient = KiddotasksDesignTokens.Gradients.hero
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(gradient)
-                .shadow(
-                    color: KiddotasksDesignTokens.Colors.primary.opacity(0.35),
-                    radius: size * 0.14,
-                    x: 0,
-                    y: size * 0.09
-                )
-            Circle()
-                .fill(.white.opacity(0.20))
-                .frame(width: size * 0.74, height: size * 0.74)
-                .offset(x: -size * 0.07, y: -size * 0.11)
-            Image(systemName: "star.fill")
-                .font(.system(size: size * 0.48, weight: .bold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.18), radius: size * 0.03, x: 0, y: size * 0.03)
+                .fill(KiddotasksDesignTokens.Colors.primary)
+            // Three small checkmarks — a unique flat motif.
+            VStack(alignment: .leading, spacing: size * 0.12) {
+                HStack(spacing: size * 0.06) {
+                    RoundedRectangle(cornerRadius: size * 0.04)
+                        .fill(.white)
+                        .frame(width: size * 0.10, height: size * 0.10)
+                    RoundedRectangle(cornerRadius: size * 0.04)
+                        .fill(.white.opacity(0.85))
+                        .frame(width: size * 0.40, height: size * 0.10)
+                }
+                HStack(spacing: size * 0.06) {
+                    RoundedRectangle(cornerRadius: size * 0.04)
+                        .fill(.white)
+                        .frame(width: size * 0.10, height: size * 0.10)
+                    RoundedRectangle(cornerRadius: size * 0.04)
+                        .fill(.white.opacity(0.85))
+                        .frame(width: size * 0.30, height: size * 0.10)
+                }
+                HStack(spacing: size * 0.06) {
+                    RoundedRectangle(cornerRadius: size * 0.04)
+                        .fill(.white)
+                        .frame(width: size * 0.10, height: size * 0.10)
+                    RoundedRectangle(cornerRadius: size * 0.04)
+                        .fill(.white.opacity(0.85))
+                        .frame(width: size * 0.36, height: size * 0.10)
+                }
+            }
+            .offset(y: -size * 0.02)
         }
         .frame(width: size, height: size)
+        .shadow(
+            color: KiddotasksDesignTokens.Colors.primary.opacity(0.25),
+            radius: size * 0.10,
+            x: 0,
+            y: size * 0.06
+        )
         .accessibilityLabel("Kiddotasks logo")
     }
 }
@@ -102,5 +121,5 @@ struct FamilyBrandHeader<Trailing: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
     .padding(24)
-    .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsPlayground)
+    .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsPlayground)
 }

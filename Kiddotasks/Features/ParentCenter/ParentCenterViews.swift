@@ -122,7 +122,7 @@ struct TaskRow: View {
                 .frame(width: 40, height: 40)
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(task.category.palette.gradient)
+                        .fill(task.category.palette.accent)
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.name)
@@ -186,11 +186,44 @@ struct TaskEditorView: View {
     @State private var approvalBehavior = TaskApprovalBehavior.useFamilyDefault
     @State private var assigned: Set<String> = []
     @State private var icon = "checkmark.circle.fill"
+    @State private var didPickIconManually = false
 
     private let icons = [
         "checkmark.circle.fill", "bed.double.fill", "fork.knife", "trash.fill",
-        "book.fill", "figure.run", "mouth.fill", "tshirt.fill", "pawprint.fill"
+        "book.fill", "figure.run", "mouth.fill", "tshirt.fill", "pawprint.fill",
+        "leaf.fill", "sparkles", "cart.fill", "pencil.and.outline", "gamecontroller.fill",
+        "music.note", "hammer.fill", "heart.fill"
     ]
+
+    /// Maps common chore keywords to a matching SF Symbol name.
+    private static func suggestedIcon(for name: String) -> String {
+        let lower = name.lowercased()
+        let mapping: [(keywords: [String], icon: String)] = [
+            (["bed", "sleep", "tidy room", "make bed"], "bed.double.fill"),
+            (["dish", "kitchen", "plate", "food", "cook", "meal", "set table", "clear table"], "fork.knife"),
+            (["trash", "garbage", "take out", "bin"], "trash.fill"),
+            (["read", "book", "study", "homework", "school"], "book.fill"),
+            (["run", "exercise", "play outside", "sport", "walk", "bike"], "figure.run"),
+            (["teeth", "brush", "shower", "bath", "wash", "clean body"], "mouth.fill"),
+            (["laundry", "clothes", "fold", "dress"], "tshirt.fill"),
+            (["pet", "dog", "cat", "feed animal", "walk dog"], "pawprint.fill"),
+            (["garden", "plant", "water", "weed", "mow"], "leaf.fill"),
+            (["vacuum", "sweep", "mop", "dust", "clean", "tidy"], "sparkles"),
+            (["shop", "grocery", "buy", "store"], "cart.fill"),
+            (["write", "draw", "art", "craft"], "pencil.and.outline"),
+            (["practice", "piano", "instrument", "music"], "music.note"),
+            (["fix", "repair", "build", "tool"], "hammer.fill"),
+            (["love", "help", "care", "kind", "share"], "heart.fill")
+        ]
+        for (keywords, icon) in mapping {
+            for keyword in keywords {
+                if lower.contains(keyword) {
+                    return icon
+                }
+            }
+        }
+        return "checkmark.circle.fill"
+    }
 
     var body: some View {
         NavigationStack {
@@ -213,10 +246,30 @@ struct TaskEditorView: View {
                         Text(behavior.displayName).tag(behavior)
                     }
                 }
-                Picker("Icon", selection: $icon) {
-                    ForEach(icons, id: \.self) { item in
-                        Label(item, systemImage: item).tag(item)
+                Section("Icon") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 52))], spacing: 12) {
+                        ForEach(icons, id: \.self) { item in
+                            Button {
+                                icon = item
+                                didPickIconManually = true
+                            } label: {
+                                Image(systemName: item)
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundStyle(icon == item ? .white : KiddotasksDesignTokens.Colors.textSecondary)
+                                    .frame(width: 48, height: 48)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .fill(icon == item ? KiddotasksDesignTokens.Colors.primary : KiddotasksDesignTokens.Colors.surface)
+                                    }
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(icon == item ? Color.clear : KiddotasksDesignTokens.Colors.border, lineWidth: 1)
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
                 Section("Assign to") {
                     ForEach(appState.familyChildren) { child in
@@ -231,6 +284,11 @@ struct TaskEditorView: View {
             }
             .navigationTitle(task == nil ? "New task" : "Edit task")
             .onAppear(perform: loadTaskIfEditing)
+            .onChange(of: name) { _, newValue in
+                if !didPickIconManually {
+                    icon = TaskEditorView.suggestedIcon(for: newValue)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -309,7 +367,7 @@ struct RewardListView: View {
                                     .frame(width: 40, height: 40)
                                     .background {
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(KiddotasksDesignTokens.Gradients.berry)
+                                            .fill(KiddotasksDesignTokens.Colors.accent)
                                     }
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(reward.name)
@@ -441,6 +499,8 @@ struct FamilyView: View {
     @State private var showChildEditor = false
     @State private var childPendingRemoval: Child?
     @State private var showFamilyNameEditor = false
+    @State private var pointsEditorChild: Child?
+    @State private var showResetConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -467,21 +527,57 @@ struct FamilyView: View {
                     }
                 }
 
+                Section("Family code") {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Share this code with other parents")
+                                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                            Text(appState.currentFamily?.familyCode ?? "------")
+                                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                        }
+                        Spacer()
+                        Button {
+                            if let code = appState.currentFamily?.familyCode {
+                                UIPasteboard.general.string = code
+                            }
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                        }
+                        .accessibilityLabel("Copy family code")
+                    }
+                }
+
                 Section("Kids") {
                     ForEach(appState.familyChildren) { child in
-                        NavigationLink {
-                            ChildEditorView(child: child)
-                        } label: {
-                            HStack(spacing: 12) {
-                                ChildAvatarView(avatar: child.avatar, size: 40)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(child.name)
-                                        .font(KiddotasksDesignTokens.Typography.titleSmall)
-                                    Text("\(child.activePoints) ⭐ balance")
-                                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        HStack(spacing: 12) {
+                            NavigationLink {
+                                ChildEditorView(child: child)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    ChildAvatarView(avatar: child.avatar, size: 40)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(child.name)
+                                            .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                        Text("\(child.activePoints) ⭐ balance")
+                                            .font(KiddotasksDesignTokens.Typography.captionLarge)
+                                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                    }
                                 }
                             }
+                            Button {
+                                pointsEditorChild = child
+                            } label: {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                                    .frame(width: 36, height: 36)
+                                    .background(Circle().fill(KiddotasksDesignTokens.Colors.primary.opacity(0.10)))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Manage \(child.name)'s points")
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -552,11 +648,20 @@ struct FamilyView: View {
                         appState.signOut()
                     }
                 }
+                Section {
+                    Button("Reset all data", role: .destructive) {
+                        showResetConfirm = true
+                    }
+                    .foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                }
             }
             .navigationTitle("Family")
             .sheet(isPresented: $showChildEditor) { ChildEditorView() }
             .sheet(isPresented: $showFamilyNameEditor) {
                 FamilyNameEditor(initialName: appState.currentFamily?.name ?? "")
+            }
+            .sheet(item: $pointsEditorChild) { child in
+                KidPointsEditor(child: child)
             }
             .confirmationDialog(
                 "Remove \(childPendingRemoval?.name ?? "this child")?",
@@ -575,6 +680,15 @@ struct FamilyView: View {
                 Button("Cancel", role: .cancel) { childPendingRemoval = nil }
             } message: {
                 Text("Their history and earned stars stay in the family record.")
+            }
+            .alert("Reset all data?", isPresented: $showResetConfirm) {
+                Button("Reset", role: .destructive) {
+                    appState.store.resetAllData()
+                    appState.signOut()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will permanently delete your family, kids, tasks, rewards, and all history. This cannot be undone.")
             }
         }
     }
@@ -746,8 +860,8 @@ struct ActivityView: View {
                             .background {
                                 Circle().fill(
                                     tx.amount >= 0
-                                        ? KiddotasksDesignTokens.Gradients.mint
-                                        : KiddotasksDesignTokens.Gradients.berry
+                                        ? KiddotasksDesignTokens.Colors.success
+                                        : KiddotasksDesignTokens.Colors.error
                                 )
                             }
                         VStack(alignment: .leading, spacing: 2) {

@@ -142,3 +142,26 @@ children use a shared iPad, and all family activity stays synchronized.
 - Reward claims always require parent approval and deduct points only after
   approval.
 - Chore approval uses a family default with individual chore overrides.
+## Cloud sync and device story (recorded 2026-09-05)
+
+Goal: the family works on every device the household owns — parent phones and
+the shared kids iPad — with data available online and in sync.
+
+Decisions:
+
+- Authentication is **email + password for parents only**. Children never have
+  accounts.
+- The family (family doc, children, tasks, completions, rewards, claims,
+  transactions, achievements) lives in Cloud Firestore and is the system of
+  record. The app caches locally and syncs.
+- **Sign-in on a new device restores the whole family** from the cloud, solving
+  "I switched phones but already set up my family."
+- Every local change is pushed up (debounced) and cloud changes come back via a
+  family-doc listener + periodic refresh. Conflicts converge to last-writer-wins
+  per snapshot for now; per-document conflict resolution is planned.
+- Kids Station sessions in the cloud era currently run while a parent is signed
+  in on the shared iPad. A kids-PIN-only guest session (no parent sign-in) is on
+  the roadmap, gated by the shared family PIN and anonymous/auth-scoped rules.
+- The point ledger is append-only and server-protected; the app reconciles it
+  through the privileged `pushFamilySnapshot` callable rather than raw client
+  writes.

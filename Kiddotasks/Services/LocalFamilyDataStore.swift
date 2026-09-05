@@ -36,6 +36,14 @@ final class LocalFamilyDataStore {
 
     var isAuthenticated: Bool { parent != nil }
 
+    /// Called after every successful local mutation (after the snapshot is
+    /// persisted). The cloud sync engine uses this to push changes upward.
+    var onLocalChanges: (() -> Void)?
+
+    /// When true, `onLocalChanges` is not fired. Used while applying remote
+    /// snapshots or during cloud bootstrap so we don't echo our own writes back.
+    private var callbacksSuspended = false
+
     init() {
         restoreSession()
     }
@@ -92,6 +100,94 @@ final class LocalFamilyDataStore {
         restoreSnapshotWithoutSession()
     }
 
+    // MARK: - Points management (requirements #6, #7)
+
+    /// Adjust a child's points by a positive or negative amount (bad deeds = negative).
+    /// Creates a manual-adjustment transaction and updates balances.
+    func adjustPoints(for childId: String, amount: Int, reason: String) throws {
+        guard let child = children.first(where: { $0.id == childId }) else {
+            throw FirebaseError.childNotFound
+        }
+        guard amount != 0 else { return }
+        let tx = PointTransaction(
+            familyId: family?.id ?? "",
+            childId: childId,
+            amount: amount,
+            type: .manualAdjustment,
+            relatedId: nil,
+            description: reason.isEmpty ? "Manual adjustment" : reason,
+            createdAt: Date(),
+            createdBy: parent?.id
+        )
+        transactions.append(tx)
+        child.activePoints += amount
+        if amount > 0 {
+            child.totalPointsEarned += amount
+        }
+        child.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    /// Set a child's points to an absolute value (creates an adjustment for the delta).
+    func setPoints(for childId: String, to newTotal: Int, reason: String) throws {
+        guard let child = children.first(where: { $0.id == childId }) else {
+            throw FirebaseError.childNotFound
+        }
+        let delta = newTotal - child.activePoints
+        try adjustPoints(for: childId, amount: delta, reason: reason.isEmpty ? "Set points to \(newTotal)" : reason)
+    }
+
+    /// Reset a child's points to zero.
+    func resetPoints(for childId: String) throws {
+        guard let child = children.first(where: { $0.id == childId }) else {
+            throw FirebaseError.childNotFound
+        }
+        let delta = -child.activePoints
+        try adjustPoints(for: childId, amount: delta, reason: "Points reset to zero")
+    }
+
+    // MARK: - Family code (requirement #9)
+
+    /// Generate a unique, human-friendly family code like "KDO-4F7X".
+    static func generateFamilyCode() -> String {
+        let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no ambiguous 0/O/1/I/L
+        var code = ""
+        for _ in 0..<4 {
+            code += String(alphabet.randomElement()!)
+        }
+        return "KDO-" + code
+    }
+
+    /// Join an existing family by code (looks up the family and sets it as current).
+    func joinFamily(withCode code: String, email: String, password: String) throws {
+        guard let snapshot = loadSnapshot(),
+              snapshot.family.familyCode.uppercased() == code.uppercased(),
+              snapshot.parent.email.lowercased() == email.lowercased(),
+              snapshot.passwordHash == Self.hash(password) else {
+            throw FirebaseError.invalidCredentials
+        }
+        apply(snapshot)
+        parent?.lastSignInAt = Date()
+        persist(passwordHash: snapshot.passwordHash)
+        UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
+    }
+
+    // MARK: - Reset all data (requirement #10)
+
+    /// Wipe everything and start fresh.
+    func resetAllData() {
+        deleteAllLocalData()
+        family = nil
+        parent = nil
+        children = []
+        tasks = []
+        completions = []
+        rewards = []
+        claims = []
+        transactions = []
+        achievements = []
+    }
+
     func deleteAllLocalData() {
         UserDefaults.standard.removeObject(forKey: Self.storageKey)
         UserDefaults.standard.removeObject(forKey: Self.sessionKey)
@@ -104,6 +200,67 @@ final class LocalFamilyDataStore {
         claims = []
         transactions = []
         achievements = []
+    }
+
+    // MARK: - Cloud sync support
+
+    /// Builds a snapshot from the current in-memory state, without any local
+    /// password hash. Used by the cloud sync engine to push and pull.
+    func currentSnapshot(passwordHash: String = "") -> FamilySnapshot? {
+        guard let family, let parent else { return nil }
+        return FamilySnapshot(
+            family: family,
+            parent: parent,
+            passwordHash: passwordHash,
+            children: children,
+            tasks: tasks,
+            completions: completions,
+            rewards: rewards,
+            claims: claims,
+            transactions: transactions,
+            achievements: achievements
+        )
+    }
+
+    /// Replaces local state with a snapshot fetched from the cloud, then persists
+    /// it. Local changes are deliberately NOT echoed back via `onLocalChanges`.
+    func applyRemote(_ snapshot: FamilySnapshot) {
+        callbacksSuspended = true
+        defer { callbacksSuspended = false }
+        apply(snapshot)
+        persist(passwordHash: "")
+        UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
+    }
+
+    /// Seeds a brand-new local family after Firebase account creation and the
+    /// `bootstrapFamily` callable have produced real cloud IDs (the Auth UID is
+    /// the parent ID). The local session then matches the cloud account exactly.
+    func seedLocalFamilyAfterCloudBootstrap(
+        familyId: String,
+        parentId: String,
+        familyName: String,
+        parentName: String,
+        email: String
+    ) throws {
+        callbacksSuspended = true
+        defer { callbacksSuspended = false }
+        if loadSnapshot() != nil {
+            deleteAllLocalData()
+        }
+        let newFamily = Family(id: familyId, name: familyName, memberIds: [parentId])
+        let newParent = Parent(
+            id: parentId,
+            email: email.lowercased(),
+            displayName: parentName,
+            familyId: familyId,
+            role: .owner,
+            lastSignInAt: Date()
+        )
+        family = newFamily
+        parent = newParent
+        seedStarterContent(familyId: familyId, parentId: parentId)
+        persist(passwordHash: "")
+        UserDefaults.standard.set(parentId, forKey: Self.sessionKey)
     }
 
     var hasExistingAccount: Bool {
@@ -242,7 +399,7 @@ final class LocalFamilyDataStore {
         return completion
     }
 
-    func approveCompletion(_ completionId: String) throws {
+    func approveCompletion(_ completionId: String, message: String? = nil) throws {
         guard let parent else { throw FirebaseError.notAuthenticated }
         guard let index = completions.firstIndex(where: { $0.id == completionId }) else {
             throw FirebaseError.documentNotFound
@@ -254,7 +411,7 @@ final class LocalFamilyDataStore {
         guard let task = tasks.first(where: { $0.id == completion.taskId }) else {
             throw FirebaseError.invalidTask
         }
-        completions[index] = awardPoints(for: completion, task: task, parentId: parent.id)
+        completions[index] = awardPoints(for: completion, task: task, parentId: parent.id, message: message)
         persistKeepingPassword()
     }
 
@@ -322,7 +479,7 @@ final class LocalFamilyDataStore {
         return claim
     }
 
-    func approveClaim(_ claimId: String) throws {
+    func approveClaim(_ claimId: String, message: String? = nil) throws {
         guard let parent else { throw FirebaseError.notAuthenticated }
         guard let index = claims.firstIndex(where: { $0.id == claimId }) else {
             throw FirebaseError.documentNotFound
@@ -335,7 +492,7 @@ final class LocalFamilyDataStore {
         guard let child = children.first(where: { $0.id == claim.childId }) else {
             throw FirebaseError.invalidChild
         }
-        claims[index] = deductPoints(for: claim, reward: reward, child: child, parentId: parent.id)
+        claims[index] = deductPoints(for: claim, reward: reward, child: child, parentId: parent.id, message: message)
         persistKeepingPassword()
     }
 
@@ -501,7 +658,7 @@ final class LocalFamilyDataStore {
 
     // MARK: - Private
 
-    private func awardPoints(for completion: TaskCompletion, task: KiddoTask, parentId: String) -> TaskCompletion {
+    private func awardPoints(for completion: TaskCompletion, task: KiddoTask, parentId: String, message: String? = nil) -> TaskCompletion {
         guard let child = children.first(where: { $0.id == completion.childId }) else {
             return completion
         }
@@ -526,13 +683,14 @@ final class LocalFamilyDataStore {
         completion.status = .approved
         completion.approvedAt = Date()
         completion.approvedBy = parentId
+        completion.notes = message
         completion.pointsAwarded = task.pointValue
         completion.pointTransactionId = tx.id
         awardAchievements(for: child)
         return completion
     }
 
-    private func deductPoints(for claim: RewardClaim, reward: Reward, child: Child, parentId: String) -> RewardClaim {
+    private func deductPoints(for claim: RewardClaim, reward: Reward, child: Child, parentId: String, message: String? = nil) -> RewardClaim {
         if child.activePoints < reward.pointCost {
             return claim
         }
@@ -551,6 +709,7 @@ final class LocalFamilyDataStore {
         claim.status = .approved
         claim.approvedAt = Date()
         claim.approvedBy = parentId
+        claim.notes = message
         claim.pointDeductionTransactionId = tx.id
         return claim
     }
@@ -667,6 +826,9 @@ final class LocalFamilyDataStore {
             UserDefaults.standard.set(data, forKey: Self.storageKey)
         }
         dataRevision += 1
+        if !callbacksSuspended {
+            onLocalChanges?()
+        }
     }
 
     private func loadSnapshot() -> FamilySnapshot? {

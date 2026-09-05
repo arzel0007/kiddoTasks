@@ -61,7 +61,7 @@ struct ChildSelectionView: View {
             Spacer()
         }
         .padding(.top, 24)
-        .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsPlayground)
+        .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsPlayground)
     }
 }
 
@@ -118,7 +118,7 @@ struct MissionsView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsMissionSky)
+            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -164,9 +164,8 @@ struct TaskDetailView: View {
                     .frame(width: 110, height: 110)
                     .background {
                         RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .fill(task.category.palette.gradient)
+                            .fill(task.category.palette.accent)
                     }
-                    .shadow(color: task.category.palette.accent.opacity(0.4), radius: 14, x: 0, y: 8)
                 Text(task.name)
                     .font(KiddotasksDesignTokens.Typography.headingLarge)
                     .multilineTextAlignment(.center)
@@ -184,16 +183,26 @@ struct TaskDetailView: View {
                     Text("Latest submission: \(existing.status.displayName)")
                         .font(KiddotasksDesignTokens.Typography.bodyLarge)
                         .padding(.top, 8)
+                    if let message = existing.notes, !message.isEmpty {
+                        Text("Parent said: \(message)")
+                            .font(KiddotasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(KiddotasksDesignTokens.Colors.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
                     PrimaryButton(
                         title: existing.status == .rejected ? "Try again" : "Submit again",
-                        gradient: KiddotasksDesignTokens.Gradients.hero
+                        color: KiddotasksDesignTokens.Colors.primary
                     ) {
                         submitCompletion()
                     }
                 } else {
                     PrimaryButton(
                         title: "I did it!",
-                        gradient: KiddotasksDesignTokens.Gradients.lush
+                        color: KiddotasksDesignTokens.Colors.success
                     ) {
                         submitCompletion()
                     }
@@ -201,7 +210,7 @@ struct TaskDetailView: View {
                 Spacer()
             }
             .padding(24)
-            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsMissionSky)
+            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle("Mission")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -251,10 +260,10 @@ struct CelebrationView: View {
                 .font(KiddotasksDesignTokens.Typography.pointsDisplay)
                 .foregroundStyle(Color(hex: "#B45309"))
             Spacer()
-            PrimaryButton(title: "Next mission", gradient: KiddotasksDesignTokens.Gradients.lush) { onDone() }
+            PrimaryButton(title: "Next mission", color: KiddotasksDesignTokens.Colors.success) { onDone() }
         }
         .padding(24)
-        .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsRewardPop)
+        .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsRewardPop)
     }
 }
 
@@ -292,7 +301,7 @@ struct RewardShopView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsRewardPop)
+            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsRewardPop)
             .navigationTitle("Reward shop")
             .alert("Shop", isPresented: Binding(
                 get: { message != nil },
@@ -340,8 +349,7 @@ struct AchievementsView: View {
                                     Text(achievement.type.emoji)
                                         .font(.system(size: 44))
                                         .frame(width: 76, height: 76)
-                                        .background(Circle().fill(KiddotasksDesignTokens.Gradients.sunburst))
-                                        .shadow(color: Color(hex: "#F97316").opacity(0.35), radius: 8, x: 0, y: 4)
+                                        .background(Circle().fill(Color(hex: "#F59E0B")))
                                     Text(achievement.type.displayName)
                                         .font(KiddotasksDesignTokens.Typography.titleSmall)
                                         .multilineTextAlignment(.center)
@@ -362,7 +370,7 @@ struct AchievementsView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddotasksDesignTokens.Gradients.kidsPlayground)
+            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsPlayground)
             .navigationTitle("Badges")
         }
     }

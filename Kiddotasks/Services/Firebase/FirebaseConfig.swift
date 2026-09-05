@@ -45,6 +45,7 @@ enum FirebaseError: LocalizedError {
     case insufficientPoints
     case invalidCredentials
     case alreadyExists
+    case childNotFound
 
     var errorDescription: String? {
         switch self {
@@ -72,6 +73,8 @@ enum FirebaseError: LocalizedError {
             return "Email or password is incorrect"
         case .alreadyExists:
             return "This account already exists"
+        case .childNotFound:
+            return "Child not found"
         }
     }
 }

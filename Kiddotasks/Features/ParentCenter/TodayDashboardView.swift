@@ -7,6 +7,10 @@ struct TodayDashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var rejectReason = ""
     @State private var rejectingCompletion: TaskCompletion?
+    @State private var approveMessage = ""
+    @State private var approvingCompletion: TaskCompletion?
+    @State private var approveClaimMessage = ""
+    @State private var approvingClaim: RewardClaim?
 
     private var totals: LocalFamilyDataStore.TodayTotals {
         appState.store.todayTotals()
@@ -26,7 +30,7 @@ struct TodayDashboardView: View {
                 .padding(.horizontal, KiddotasksDesignTokens.Spacing.medium)
                 .padding(.bottom, KiddotasksDesignTokens.Spacing.xLarge)
             }
-            .background(KiddotasksDesignTokens.Gradients.parentPage.ignoresSafeArea())
+            .background(KiddotasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .alert("Decline mission", isPresented: Binding(
                 get: { rejectingCompletion != nil },
@@ -41,6 +45,34 @@ struct TodayDashboardView: View {
                     rejectingCompletion = nil
                 }
                 Button("Cancel", role: .cancel) { rejectingCompletion = nil }
+            }
+            .alert("Approve mission", isPresented: Binding(
+                get: { approvingCompletion != nil },
+                set: { if !$0 { approvingCompletion = nil } }
+            )) {
+                TextField("Message for child (optional)", text: $approveMessage)
+                Button("Approve") {
+                    if let completion = approvingCompletion {
+                        try? appState.store.approveCompletion(completion.id, message: approveMessage.isEmpty ? nil : approveMessage)
+                    }
+                    approveMessage = ""
+                    approvingCompletion = nil
+                }
+                Button("Cancel", role: .cancel) { approvingCompletion = nil }
+            }
+            .alert("Approve reward", isPresented: Binding(
+                get: { approvingClaim != nil },
+                set: { if !$0 { approvingClaim = nil } }
+            )) {
+                TextField("Message for child (optional)", text: $approveClaimMessage)
+                Button("Approve") {
+                    if let claim = approvingClaim {
+                        try? appState.store.approveClaim(claim.id, message: approveClaimMessage.isEmpty ? nil : approveClaimMessage)
+                    }
+                    approveClaimMessage = ""
+                    approvingClaim = nil
+                }
+                Button("Cancel", role: .cancel) { approvingClaim = nil }
             }
         }
     }
@@ -76,29 +108,25 @@ struct TodayDashboardView: View {
                 value: totals.pendingApprovals,
                 label: "Missions to review",
                 icon: "checkmark.seal.fill",
-                gradient: KiddotasksDesignTokens.Gradients.sunrise,
-                shadowColor: Color(hex: "#F97316").opacity(0.35)
+                color: Color(hex: "#F97316")
             )
             StatTile(
                 value: totals.pendingRewardRequests,
                 label: "Reward requests",
                 icon: "gift.fill",
-                gradient: KiddotasksDesignTokens.Gradients.berry,
-                shadowColor: Color(hex: "#EC4899").opacity(0.35)
+                color: Color(hex: "#EC4899")
             )
             StatTile(
                 value: totals.starsEarned,
                 label: "Stars earned today",
                 icon: "star.fill",
-                gradient: KiddotasksDesignTokens.Gradients.sunburst,
-                shadowColor: Color(hex: "#F97316").opacity(0.30)
+                color: Color(hex: "#F59E0B")
             )
             StatTile(
                 value: totals.missionsApproved,
                 label: "Missions done today",
                 icon: "party.popper.fill",
-                gradient: KiddotasksDesignTokens.Gradients.mint,
-                shadowColor: Color(hex: "#10B981").opacity(0.30)
+                color: KiddotasksDesignTokens.Colors.success
             )
         }
     }
@@ -143,7 +171,7 @@ struct TodayDashboardView: View {
                             completion: completion,
                             childName: appState.child(id: completion.childId)?.name ?? "Child",
                             task: appState.task(id: completion.taskId),
-                            onApprove: { try? appState.store.approveCompletion(completion.id) },
+                            onApprove: { approvingCompletion = completion },
                             onDecline: { rejectingCompletion = completion }
                         )
                     }
@@ -174,7 +202,7 @@ struct TodayDashboardView: View {
                             claim: claim,
                             childName: appState.child(id: claim.childId)?.name ?? "Child",
                             rewardName: appState.reward(id: claim.rewardId)?.name ?? "Reward",
-                            onApprove: { try? appState.store.approveClaim(claim.id) },
+                            onApprove: { approvingClaim = claim },
                             onDecline: { try? appState.store.rejectClaim(claim.id, reason: "Not now") }
                         )
                     }
@@ -287,7 +315,7 @@ struct PendingCompletionRow: View {
                 .frame(width: 40, height: 40)
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(task?.category.palette.gradient ?? KiddotasksDesignTokens.Gradients.hero)
+                        .fill(task?.category.palette.accent ?? KiddotasksDesignTokens.Colors.primary)
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(childName) · \(task?.name ?? "Mission")")
@@ -314,7 +342,7 @@ struct PendingCompletionRow: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(KiddotasksDesignTokens.Gradients.mint))
+                .background(Capsule().fill(KiddotasksDesignTokens.Colors.success))
         }
         .buttonStyle(KiddoPressStyle())
     }
@@ -351,7 +379,7 @@ struct PendingClaimRow: View {
                 .frame(width: 40, height: 40)
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(KiddotasksDesignTokens.Gradients.berry)
+                        .fill(KiddotasksDesignTokens.Colors.accent)
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(childName) wants \(rewardName)")
@@ -370,7 +398,7 @@ struct PendingClaimRow: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
-                        .background(Capsule().fill(KiddotasksDesignTokens.Gradients.mint))
+                        .background(Capsule().fill(KiddotasksDesignTokens.Colors.success))
                 }
                 .buttonStyle(KiddoPressStyle())
                 Button(action: onDecline) {

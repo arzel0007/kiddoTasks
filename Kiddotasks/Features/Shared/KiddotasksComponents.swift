@@ -16,7 +16,6 @@ struct KiddoPressStyle: ButtonStyle {
 struct PrimaryButton: View {
     let title: String
     var color: Color = KiddotasksDesignTokens.Colors.primary
-    var gradient: LinearGradient? = nil
     var isDisabled: Bool = false
     let action: () -> Void
 
@@ -29,19 +28,11 @@ struct PrimaryButton: View {
                 .frame(minHeight: KiddotasksDesignTokens.TouchTargets.recommended)
                 .background {
                     let shape = RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.medium, style: .continuous)
-                    Group {
-                        if isDisabled {
-                            shape.fill(color.opacity(0.35))
-                        } else if let gradient {
-                            shape.fill(gradient)
-                        } else {
-                            shape.fill(color)
-                        }
+                    if isDisabled {
+                        shape.fill(color.opacity(0.35))
+                    } else {
+                        shape.fill(color)
                     }
-                    .shadow(
-                        color: color.opacity(isDisabled ? 0 : 0.35),
-                        radius: 8, x: 0, y: 4
-                    )
                 }
         }
         .disabled(isDisabled)
@@ -109,8 +100,7 @@ struct PointsBadge: View {
         .foregroundStyle(.white)
         .padding(.horizontal, compact ? 8 : 12)
         .padding(.vertical, compact ? 4 : 6)
-        .background(Capsule().fill(KiddotasksDesignTokens.Gradients.sunburst))
-        .shadow(color: Color(hex: "#F97316").opacity(0.35), radius: 6, x: 0, y: 3)
+        .background(Capsule().fill(Color(hex: "#F59E0B")))
     }
 }
 
@@ -173,8 +163,8 @@ struct StatTile: View {
     let value: Int
     let label: String
     let icon: String
-    let gradient: LinearGradient
-    var shadowColor: Color = Color(hex: "#6366F1").opacity(0.35)
+    let color: Color
+    var shadowColor: Color? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -196,9 +186,8 @@ struct StatTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.large, style: .continuous)
-                .fill(gradient)
+                .fill(color)
         }
-        .shadow(color: shadowColor, radius: 7, x: 0, y: 4)
     }
 }
 
@@ -218,9 +207,8 @@ struct MissionCard: View {
                 .frame(width: 52, height: 52)
                 .background {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(palette.gradient)
+                        .fill(palette.accent)
                 }
-                .shadow(color: palette.accent.opacity(0.35), radius: 6, x: 0, y: 3)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.name)
@@ -292,9 +280,8 @@ struct RewardShopCard: View {
                 .frame(width: 48, height: 48)
                 .background {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(KiddotasksDesignTokens.Gradients.berry)
+                        .fill(KiddotasksDesignTokens.Colors.accent)
                 }
-                .shadow(color: KiddotasksDesignTokens.Colors.accent.opacity(0.35), radius: 6, x: 0, y: 3)
             Text(reward.name)
                 .font(KiddotasksDesignTokens.Typography.titleSmall)
                 .foregroundStyle(KiddotasksDesignTokens.Colors.text)
@@ -323,7 +310,7 @@ struct RewardShopCard: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(KiddotasksDesignTokens.Gradients.mint))
+                        .background(Capsule().fill(KiddotasksDesignTokens.Colors.success))
                 } else {
                     Text("Need \(reward.pointsNeeded(givenCurrentPoints: points))")
                         .font(KiddotasksDesignTokens.Typography.captionSmall)

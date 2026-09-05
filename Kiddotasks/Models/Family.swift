@@ -7,6 +7,7 @@ final class Family: Identifiable, Codable {
     let id: String
     var name: String
     var memberIds: [String] // [parentId, childId1, childId2, ...]
+    var familyCode: String // Unique code for sharing with other parents
     var settings: FamilySettings
     let createdAt: Date
     var updatedAt: Date
@@ -15,6 +16,7 @@ final class Family: Identifiable, Codable {
         case id
         case name
         case memberIds = "members"
+        case familyCode
         case settings
         case createdAt
         case updatedAt
@@ -24,6 +26,7 @@ final class Family: Identifiable, Codable {
         id: String = UUID().uuidString,
         name: String,
         memberIds: [String] = [],
+        familyCode: String = LocalFamilyDataStore.generateFamilyCode(),
         settings: FamilySettings = .default,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -31,6 +34,7 @@ final class Family: Identifiable, Codable {
         self.id = id
         self.name = name
         self.memberIds = memberIds
+        self.familyCode = familyCode
         self.settings = settings
         self.createdAt = createdAt
         self.updatedAt = updatedAt

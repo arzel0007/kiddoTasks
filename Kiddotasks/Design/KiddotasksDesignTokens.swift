@@ -198,83 +198,25 @@ enum CornerRadiusStyle {
 
 extension KiddotasksDesignTokens {
 
-    /// Reusable gradients. Use these instead of flat fills for hero moments,
-    /// icon tiles, and page backgrounds.
-    struct Gradients {
-
-        /// Brand hero — indigo to pink. Buttons, logo, primary CTAs.
-        static let hero = LinearGradient(
-            colors: [Color(hex: "#6366F1"), Color(hex: "#EC4899")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Warm sunrise — orange to pink. Energy, celebrations.
-        static let sunrise = LinearGradient(
-            colors: [Color(hex: "#F97316"), Color(hex: "#EC4899")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Fresh mint — teal to green. Health, success, progress.
-        static let mint = LinearGradient(
-            colors: [Color(hex: "#14B8A6"), Color(hex: "#10B981")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Deep ocean — cyan to blue. Learning, calm, focus.
-        static let ocean = LinearGradient(
-            colors: [Color(hex: "#06B6D4"), Color(hex: "#3B82F6")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Berry — purple to pink. Rewards, treats.
-        static let berry = LinearGradient(
-            colors: [Color(hex: "#A855F7"), Color(hex: "#EC4899")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Sunburst — yellow to orange. Stars, points.
-        static let sunburst = LinearGradient(
-            colors: [Color(hex: "#FACC15"), Color(hex: "#F97316")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Soft violet — indigo to cyan. Parent Center accents.
-        static let violet = LinearGradient(
-            colors: [Color(hex: "#6366F1"), Color(hex: "#06B6D4")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-        /// Lush green — green to teal. Approvals, go actions.
-        static let lush = LinearGradient(
-            colors: [Color(hex: "#10B981"), Color(hex: "#84CC16")],
-            startPoint: .topLeading, endPoint: .bottomTrailing
-        )
-
-        /// Page backgrounds. Kids screens are vivid; the parent side stays calm.
-        static let kidsPlayground = LinearGradient(
-            colors: [Color(hex: "#FEF3C7"), Color(hex: "#FCE7F3"), Color(hex: "#DBEAFE")],
-            startPoint: .top, endPoint: .bottom
-        )
-        static let kidsMissionSky = LinearGradient(
-            colors: [Color(hex: "#7DD3FC"), Color(hex: "#BAE6FD"), Color(hex: "#FEF9C3")],
-            startPoint: .top, endPoint: .bottom
-        )
-        static let kidsRewardPop = LinearGradient(
-            colors: [Color(hex: "#FBCFE8"), Color(hex: "#F5D0FE"), Color(hex: "#FDE68A")],
-            startPoint: .top, endPoint: .bottom
-        )
-        /// Parent Center page background — barely-there cool tint.
-        static let parentPage = LinearGradient(
-            colors: [Color(hex: "#F5F6FF"), Color(hex: "#FDF2F8"), Color(hex: "#FFFFFF")],
-            startPoint: .top, endPoint: .bottom
-        )
+    /// Flat page background colors. Kids screens are vivid; the parent side stays calm.
+    struct PageBackgrounds {
+        static let kidsPlayground = Color(hex: "#FEF3C7")
+        static let kidsMissionSky = Color(hex: "#DBEAFE")
+        static let kidsRewardPop = Color(hex: "#FCE7F3")
+        static let parentPage = Color(hex: "#F9FAFB")
+        static let welcome = Color(hex: "#FFFFFF")
     }
 }
 
 // MARK: - Category theming
 
-/// A color trio used to theme cards and icon tiles.
+/// A color pair used to theme cards and icon tiles — flat, no gradients.
 struct KiddoThemePalette {
     let accent: Color
-    let gradient: LinearGradient
     let soft: Color
 
-    init(accent: Color, gradient: LinearGradient) {
+    init(accent: Color) {
         self.accent = accent
-        self.gradient = gradient
         self.soft = accent.opacity(0.14)
     }
 }
@@ -283,38 +225,38 @@ extension TaskCategory {
     var palette: KiddoThemePalette {
         switch self {
         case .household:
-            return KiddoThemePalette(accent: Color(hex: "#6366F1"), gradient: KiddotasksDesignTokens.Gradients.hero)
+            return KiddoThemePalette(accent: Color(hex: "#6366F1"))
         case .learning:
-            return KiddoThemePalette(accent: Color(hex: "#3B82F6"), gradient: KiddotasksDesignTokens.Gradients.ocean)
+            return KiddoThemePalette(accent: Color(hex: "#3B82F6"))
         case .health:
-            return KiddoThemePalette(accent: Color(hex: "#10B981"), gradient: KiddotasksDesignTokens.Gradients.mint)
+            return KiddoThemePalette(accent: Color(hex: "#10B981"))
         case .personal:
-            return KiddoThemePalette(accent: Color(hex: "#F97316"), gradient: KiddotasksDesignTokens.Gradients.sunrise)
+            return KiddoThemePalette(accent: Color(hex: "#F97316"))
         case .pets:
-            return KiddoThemePalette(accent: Color(hex: "#A855F7"), gradient: KiddotasksDesignTokens.Gradients.berry)
+            return KiddoThemePalette(accent: Color(hex: "#A855F7"))
         case .other:
-            return KiddoThemePalette(accent: Color(hex: "#06B6D4"), gradient: KiddotasksDesignTokens.Gradients.violet)
+            return KiddoThemePalette(accent: Color(hex: "#06B6D4"))
         }
     }
 }
 
 // MARK: - Page background modifier
 
-/// Paints a gradient behind the safe areas so lists and cards float on it.
+/// Paints a flat color behind the safe areas so lists and cards float on it.
 struct KiddoPageBackgroundModifier: ViewModifier {
-    let gradient: LinearGradient
+    let color: Color
 
     func body(content: Content) -> some View {
         ZStack {
-            gradient.ignoresSafeArea()
+            color.ignoresSafeArea()
             content
         }
     }
 }
 
 extension View {
-    func kiddoPageBackground(_ gradient: LinearGradient) -> some View {
-        modifier(KiddoPageBackgroundModifier(gradient: gradient))
+    func kiddoPageBackground(_ color: Color) -> some View {
+        modifier(KiddoPageBackgroundModifier(color: color))
     }
 }
 

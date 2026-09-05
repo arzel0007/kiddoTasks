@@ -23,6 +23,7 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
 
   const familyRef = db.collection("families").doc();
   const now = admin.firestore.FieldValue.serverTimestamp();
+  const kidsStationPIN = generateKidsPIN();
 
   await db.runTransaction(async (tx) => {
     tx.set(familyRef, {
@@ -34,7 +35,7 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
         celebrationAnimationsEnabled: true,
         requireApprovalByDefault: true,
         weekStartsOn: 1,
-        kidsStationPIN: "1234",
+        kidsStationPIN,
       },
       createdAt: now,
       updatedAt: now,
@@ -49,7 +50,7 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
     });
   });
 
-  return { familyId: familyRef.id, parentId: uid };
+  return { familyId: familyRef.id, parentId: uid, kidsStationPIN };
 });
 
 export const createChildProfile = functions.https.onCall(async (data, context) => {
@@ -379,6 +380,90 @@ export const approveRewardClaim = functions.https.onCall(
   }
 );
 
+// MARK: - Snapshot sync (cross-device)
+
+/**
+ * Merges the full family snapshot sent by the parent app.
+ *
+ * The iOS app pushes its local state after every mutation so families stay in
+ * sync across all devices (parent phones + the shared kids iPad). This runs
+ * with admin privileges, which is how the app can reconcile the point ledger
+ * even though Firestore rules keep raw client ledger writes blocked.
+ */
+export const pushFamilySnapshot = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+  }
+  const uid = context.auth.uid;
+  const familyId = String(data?.familyId || "");
+
+  if (!familyId) {
+    throw new functions.https.HttpsError("invalid-argument", "familyId is required");
+  }
+
+  const parentDoc = await db.collection("parents").doc(uid).get();
+  if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
+    throw new functions.https.HttpsError("permission-denied", "Not authorized for this family");
+  }
+
+  const batch = db.batch();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  const upsert = (collection: string, items: any[]) => {
+    for (const item of items || []) {
+      if (!item || typeof item.id !== "string") continue;
+      batch.set(db.collection(collection).doc(item.id), toFirestoreValue(item), { merge: true });
+    }
+  };
+
+  // The iOS model encodes `memberIds` as `members`, matching the schema that
+  // `bootstrapFamily` uses. Merge so we never wipe server-managed fields.
+  if (data?.family && typeof data.family.id === "string") {
+    batch.set(
+      db.collection("families").doc(familyId),
+      { ...toFirestoreValue(data.family), updatedAt: now },
+      { merge: true }
+    );
+  }
+
+  upsert("children", data?.children);
+  upsert("tasks", data?.tasks);
+  upsert("taskCompletions", data?.completions);
+  upsert("rewards", data?.rewards);
+  upsert("rewardClaims", data?.claims);
+  upsert("pointTransactions", data?.transactions);
+  upsert("achievements", data?.achievements);
+
+  await batch.commit();
+  return { ok: true, familyId };
+});
+
+/**
+ * Recursively converts a JSON callable payload into Firestore-safe values,
+ * turning ISO-8601 date strings into real dates so Firestore stores timestamps.
+ */
+function toFirestoreValue(value: unknown): any {
+  if (Array.isArray(value)) {
+    return value.map(toFirestoreValue);
+  }
+  if (value && typeof value === "object") {
+    const result: Record<string, any> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = toFirestoreValue(val);
+    }
+    return result;
+  }
+  if (typeof value === "string" && isIsoDate(value)) {
+    const date = new Date(value);
+    return isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(value);
+}
+
 // MARK: - Scheduled Tasks
 
 /**
@@ -450,6 +535,13 @@ export const generateRecurringTasks = functions.pubsub
   });
 
 // MARK: - Utilities
+
+/**
+ * Generate a random 6-digit Kids Station PIN.
+ */
+function generateKidsPIN(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
 /**
  * Validate that a user is a parent in a specific family
