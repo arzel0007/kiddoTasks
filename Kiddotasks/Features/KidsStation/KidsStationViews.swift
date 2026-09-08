@@ -10,14 +10,14 @@ struct ChildSelectionView: View {
                     appState.clearChildProfile()
                     appState.interfaceOverride = .parent
                 }
-                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 Spacer()
                 HStack(spacing: 8) {
-                    KiddotasksLogoMark(size: 26)
+                    KiddoTasksLogoMark(size: 26)
                     Text("Who's playing?")
-                        .font(KiddotasksDesignTokens.Typography.headingLarge)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                        .font(KiddoTasksDesignTokens.Typography.headingLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 }
                 Spacer()
                 Color.clear.frame(width: 48, height: 1)
@@ -37,10 +37,10 @@ struct ChildSelectionView: View {
                             appState.selectChildProfile(child)
                         } label: {
                             VStack(spacing: 12) {
-                                ChildAvatarView(avatar: child.avatar, size: 88)
+                                ChildAvatarView(avatar: child.avatar, size: 88, photoData: child.photoData)
                                 Text(child.name)
-                                    .font(KiddotasksDesignTokens.Typography.titleMedium)
-                                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                                 PointsBadge(points: child.activePoints, compact: true)
                             }
                             .padding(20)
@@ -61,7 +61,7 @@ struct ChildSelectionView: View {
             Spacer()
         }
         .padding(.top, 24)
-        .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsPlayground)
+        .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
     }
 }
 
@@ -77,7 +77,7 @@ struct KidsStationView: View {
             AchievementsView()
                 .tabItem { Label("Badges", systemImage: "medal.fill") }
         }
-        .tint(KiddotasksDesignTokens.Colors.primary)
+        .tint(KiddoTasksDesignTokens.Colors.primary)
     }
 }
 
@@ -118,7 +118,7 @@ struct MissionsView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsMissionSky)
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -167,13 +167,13 @@ struct TaskDetailView: View {
                             .fill(task.category.palette.accent)
                     }
                 Text(task.name)
-                    .font(KiddotasksDesignTokens.Typography.headingLarge)
+                    .font(KiddoTasksDesignTokens.Typography.headingLarge)
                     .multilineTextAlignment(.center)
                 Text(task.description.isEmpty ? "You've got this!" : task.description)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 Text("Earn \(task.pointValue) ⭐")
-                    .font(KiddotasksDesignTokens.Typography.titleMedium)
+                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
                     .foregroundStyle(Color(hex: "#B45309"))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
@@ -181,28 +181,28 @@ struct TaskDetailView: View {
 
                 if let existing {
                     Text("Latest submission: \(existing.status.displayName)")
-                        .font(KiddotasksDesignTokens.Typography.bodyLarge)
+                        .font(KiddoTasksDesignTokens.Typography.bodyLarge)
                         .padding(.top, 8)
                     if let message = existing.notes, !message.isEmpty {
                         Text("Parent said: \(message)")
-                            .font(KiddotasksDesignTokens.Typography.bodyMedium)
-                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(KiddotasksDesignTokens.Colors.surface)
+                            .background(KiddoTasksDesignTokens.Colors.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     PrimaryButton(
                         title: existing.status == .rejected ? "Try again" : "Submit again",
-                        color: KiddotasksDesignTokens.Colors.primary
+                        color: KiddoTasksDesignTokens.Colors.primary
                     ) {
                         submitCompletion()
                     }
                 } else {
                     PrimaryButton(
                         title: "I did it!",
-                        color: KiddotasksDesignTokens.Colors.success
+                        color: KiddoTasksDesignTokens.Colors.success
                     ) {
                         submitCompletion()
                     }
@@ -210,7 +210,7 @@ struct TaskDetailView: View {
                 Spacer()
             }
             .padding(24)
-            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsMissionSky)
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle("Mission")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -252,18 +252,18 @@ struct CelebrationView: View {
                     .font(.system(size: 104))
             }
             Text("Awesome!")
-                .font(KiddotasksDesignTokens.Typography.displayLarge)
+                .font(KiddoTasksDesignTokens.Typography.displayLarge)
             Text("You finished \(task.name)")
-                .font(KiddotasksDesignTokens.Typography.headingSmall)
+                .font(KiddoTasksDesignTokens.Typography.headingSmall)
                 .multilineTextAlignment(.center)
             Text("+\(task.pointValue) ⭐")
-                .font(KiddotasksDesignTokens.Typography.pointsDisplay)
+                .font(KiddoTasksDesignTokens.Typography.pointsDisplay)
                 .foregroundStyle(Color(hex: "#B45309"))
             Spacer()
-            PrimaryButton(title: "Next mission", color: KiddotasksDesignTokens.Colors.success) { onDone() }
+            PrimaryButton(title: "Next mission", color: KiddoTasksDesignTokens.Colors.success) { onDone() }
         }
         .padding(24)
-        .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsRewardPop)
+        .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
     }
 }
 
@@ -301,7 +301,7 @@ struct RewardShopView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsRewardPop)
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
             .navigationTitle("Reward shop")
             .alert("Shop", isPresented: Binding(
                 get: { message != nil },
@@ -351,12 +351,12 @@ struct AchievementsView: View {
                                         .frame(width: 76, height: 76)
                                         .background(Circle().fill(Color(hex: "#F59E0B")))
                                     Text(achievement.type.displayName)
-                                        .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
                                         .multilineTextAlignment(.center)
-                                        .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                                     Text(achievement.type.description)
-                                        .font(KiddotasksDesignTokens.Typography.captionSmall)
-                                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                                         .multilineTextAlignment(.center)
                                 }
                                 .padding(16)
@@ -370,7 +370,7 @@ struct AchievementsView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsPlayground)
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
             .navigationTitle("Badges")
         }
     }

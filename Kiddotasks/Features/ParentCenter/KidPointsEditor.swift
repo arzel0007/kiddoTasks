@@ -29,13 +29,13 @@ struct KidPointsEditor: View {
             Form {
                 Section {
                     HStack(spacing: 12) {
-                        ChildAvatarView(avatar: child.avatar, size: 48)
+                        ChildAvatarView(avatar: child.avatar, size: 48, photoData: child.photoData)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(child.name)
-                                .font(KiddotasksDesignTokens.Typography.titleMedium)
+                                .font(KiddoTasksDesignTokens.Typography.titleMedium)
                             Text("\(child.activePoints) ⭐ balance")
-                                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
                 }
@@ -61,8 +61,8 @@ struct KidPointsEditor: View {
                 if mode == .deduct {
                     Section {
                         Text("Deductions appear in the child's history and reduce their balance immediately.")
-                            .font(KiddotasksDesignTokens.Typography.captionLarge)
-                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                     }
                 }
 

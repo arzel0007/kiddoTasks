@@ -1,6 +1,7 @@
 {
   "name": "kiddotasks-functions",
-  "description": "Kiddotasks Firebase Cloud Functions",
+  "description": "KiddoTasks Firebase Cloud Functions",
+  "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
     "start": "npm run build && firebase emulators:start --only functions",
@@ -9,7 +10,7 @@
     "test": "jest"
   },
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "dependencies": {
     "firebase-admin": "^11.8.0",

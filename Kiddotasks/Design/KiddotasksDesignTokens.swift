@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Centralized Kiddotasks design tokens
-struct KiddotasksDesignTokens {
+/// Centralized KiddoTasks design tokens
+struct KiddoTasksDesignTokens {
     // MARK: - Colors
     
     struct Colors {
@@ -140,7 +140,7 @@ struct Shadow: Equatable {
 // MARK: - View Modifiers
 
 extension View {
-    /// Apply Kiddotasks card shadow
+    /// Apply KiddoTasks card shadow
     func kiddotasksShadow(_ style: ShadowStyle = .medium) -> some View {
         let shadow = style.shadow
         return self.shadow(
@@ -151,7 +151,7 @@ extension View {
         )
     }
     
-    /// Apply Kiddotasks corner radius
+    /// Apply KiddoTasks corner radius
     func kiddotasksCornerRadius(_ style: CornerRadiusStyle = .medium) -> some View {
         self.cornerRadius(style.radius, antialiased: true)
     }
@@ -165,11 +165,11 @@ enum ShadowStyle {
     var shadow: Shadow {
         switch self {
         case .small:
-            return KiddotasksDesignTokens.Shadows.small
+            return KiddoTasksDesignTokens.Shadows.small
         case .medium:
-            return KiddotasksDesignTokens.Shadows.medium
+            return KiddoTasksDesignTokens.Shadows.medium
         case .large:
-            return KiddotasksDesignTokens.Shadows.large
+            return KiddoTasksDesignTokens.Shadows.large
         }
     }
 }
@@ -183,20 +183,20 @@ enum CornerRadiusStyle {
     var radius: CGFloat {
         switch self {
         case .small:
-            return KiddotasksDesignTokens.CornerRadius.small
+            return KiddoTasksDesignTokens.CornerRadius.small
         case .medium:
-            return KiddotasksDesignTokens.CornerRadius.medium
+            return KiddoTasksDesignTokens.CornerRadius.medium
         case .large:
-            return KiddotasksDesignTokens.CornerRadius.large
+            return KiddoTasksDesignTokens.CornerRadius.large
         case .extraLarge:
-            return KiddotasksDesignTokens.CornerRadius.extraLarge
+            return KiddoTasksDesignTokens.CornerRadius.extraLarge
         }
     }
 }
 
 // MARK: - Gradients
 
-extension KiddotasksDesignTokens {
+extension KiddoTasksDesignTokens {
 
     /// Flat page background colors. Kids screens are vivid; the parent side stays calm.
     struct PageBackgrounds {

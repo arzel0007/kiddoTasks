@@ -7,17 +7,17 @@ struct WelcomeView: View {
     @State private var showJoinWithCode = false
 
     var body: some View {
-        VStack(spacing: KiddotasksDesignTokens.Spacing.medium) {
+        VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
             Spacer()
 
-            KiddotasksLogoMark(size: 108)
-                .padding(.bottom, KiddotasksDesignTokens.Spacing.small)
+            KiddoTasksLogoMark(size: 108)
+                .padding(.bottom, KiddoTasksDesignTokens.Spacing.small)
 
-            Text("Kiddotasks")
-                .font(KiddotasksDesignTokens.Typography.displayLarge)
+            Text("KiddoTasks")
+                .font(KiddoTasksDesignTokens.Typography.displayLarge)
             Text("Missions for kids. Control for parents.")
-                .font(KiddotasksDesignTokens.Typography.bodyLarge)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                .font(KiddoTasksDesignTokens.Typography.bodyLarge)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)
 
             Spacer()
@@ -25,14 +25,14 @@ struct WelcomeView: View {
             if appState.store.hasExistingAccount {
                 PrimaryButton(
                     title: "Sign in",
-                    color: KiddotasksDesignTokens.Colors.primary
+                    color: KiddoTasksDesignTokens.Colors.primary
                 ) { showSignIn = true }
                 SecondaryButton(title: "Join existing family") { showJoinWithCode = true }
                 SecondaryButton(title: "Create a new family") { showSignUp = true }
             } else {
                 PrimaryButton(
                     title: "Create family",
-                    color: KiddotasksDesignTokens.Colors.primary
+                    color: KiddoTasksDesignTokens.Colors.primary
                 ) { showSignUp = true }
                 SecondaryButton(title: "Join existing family") { showJoinWithCode = true }
                 SecondaryButton(title: "I already have a family — sign in") { showSignIn = true }
@@ -43,13 +43,13 @@ struct WelcomeView: View {
                  : (appState.store.hasExistingAccount
                     ? "Sign in opens the family saved on this device. Connect Firebase for cross-device sync."
                     : "Data stays on this device until you connect Firebase."))
-                .font(KiddotasksDesignTokens.Typography.captionSmall)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
+                .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                 .multilineTextAlignment(.center)
-                .padding(.top, KiddotasksDesignTokens.Spacing.xxSmall)
+                .padding(.top, KiddoTasksDesignTokens.Spacing.xxSmall)
         }
-        .padding(KiddotasksDesignTokens.Spacing.xLarge)
-        .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.welcome)
+        .padding(KiddoTasksDesignTokens.Spacing.xLarge)
+        .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.welcome)
         .sheet(isPresented: $showSignUp) { SignUpView() }
         .sheet(isPresented: $showSignIn) { SignInView() }
         .sheet(isPresented: $showJoinWithCode) { JoinWithCodeView() }
@@ -70,13 +70,13 @@ struct SignUpView: View {
             Form {
                 Section {
                     HStack(spacing: 12) {
-                        KiddotasksLogoMark(size: 44)
+                        KiddoTasksLogoMark(size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("New family")
-                                .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                .font(KiddoTasksDesignTokens.Typography.titleSmall)
                             Text("Set up chores and rewards in about two minutes.")
-                                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
                     .listRowBackground(Color.clear)
@@ -93,7 +93,7 @@ struct SignUpView: View {
                     SecureField("Password (6+ characters)", text: $password)
                 }
                 if let error = appState.authenticationError {
-                    Text(error).foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                    Text(error).foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                 }
             }
             .navigationTitle("New family")
@@ -148,15 +148,15 @@ struct SignInView: View {
             Form {
                 Section {
                     HStack(spacing: 12) {
-                        KiddotasksLogoMark(size: 44)
+                        KiddoTasksLogoMark(size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Welcome back")
-                                .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                .font(KiddoTasksDesignTokens.Typography.titleSmall)
                             Text(appState.isCloudEnabled
                                  ? "Sign in to open your family from the cloud."
                                  : "Sign in with the account saved on this device.")
-                                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
                     .listRowBackground(Color.clear)
@@ -167,16 +167,25 @@ struct SignInView: View {
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
                     SecureField("Password", text: $password)
+                    Button("Forgot password?") {
+                        appState.sendPasswordReset(email: email)
+                    }
+                    .font(.system(size: 13))
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                    .disabled(email.isEmpty)
                 }
                 if let error = appState.authenticationError {
-                    Text(error).foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                    Text(error).foregroundStyle(KiddoTasksDesignTokens.Colors.error)
+                }
+                if let successMessage = appState.successMessage {
+                    Text(successMessage).foregroundStyle(KiddoTasksDesignTokens.Colors.success)
                 }
                 Section {
                     Text(appState.isCloudEnabled
                          ? "Your account and family live in the cloud, so this family can be opened on any of your devices."
                          : "Right now this family is saved on this device. Connect Firebase to sync it everywhere.")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
             }
             .navigationTitle("Sign in")
@@ -215,13 +224,13 @@ struct JoinWithCodeView: View {
             Form {
                 Section {
                     HStack(spacing: 12) {
-                        KiddotasksLogoMark(size: 44)
+                        KiddoTasksLogoMark(size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Join a family")
-                                .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                .font(KiddoTasksDesignTokens.Typography.titleSmall)
                             Text("Enter the family code shared by the other parent.")
-                                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
                     .listRowBackground(Color.clear)
@@ -238,12 +247,12 @@ struct JoinWithCodeView: View {
                     SecureField("Password", text: $password)
                 }
                 if let error = appState.authenticationError {
-                    Text(error).foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                    Text(error).foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                 }
                 Section {
                     Text("The family code was shown in the other parent's Family tab.")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
             }
             .navigationTitle("Join family")

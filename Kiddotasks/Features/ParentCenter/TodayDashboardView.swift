@@ -19,7 +19,7 @@ struct TodayDashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: KiddotasksDesignTokens.Spacing.medium) {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                     header
                     statTiles
                     WeeklyStarsCard(series: appState.store.weeklyPointsSeries())
@@ -27,10 +27,10 @@ struct TodayDashboardView: View {
                     pendingApprovalsCard
                     rewardRequestsCard
                 }
-                .padding(.horizontal, KiddotasksDesignTokens.Spacing.medium)
-                .padding(.bottom, KiddotasksDesignTokens.Spacing.xLarge)
+                .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
+                .padding(.bottom, KiddoTasksDesignTokens.Spacing.xLarge)
             }
-            .background(KiddotasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
+            .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .alert("Decline mission", isPresented: Binding(
                 get: { rejectingCompletion != nil },
@@ -82,7 +82,8 @@ struct TodayDashboardView: View {
     private var header: some View {
         FamilyBrandHeader(
             familyName: appState.currentFamily?.name ?? "Our family",
-            subtitle: Date.now.formatted(date: .abbreviated, time: .omitted)
+            subtitle: Date.now.formatted(date: .abbreviated, time: .omitted),
+            familyPhotoData: appState.currentFamily?.photoData
         ) {
             Button {
                 appState.clearChildProfile()
@@ -90,14 +91,14 @@ struct TodayDashboardView: View {
             } label: {
                 Image(systemName: "ipad.landscape")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(KiddotasksDesignTokens.Colors.primary.opacity(0.10)))
+                    .background(Circle().fill(KiddoTasksDesignTokens.Colors.primary.opacity(0.10)))
             }
             .buttonStyle(KiddoPressStyle())
             .accessibilityLabel("Open Kids Station")
         }
-        .padding(.top, KiddotasksDesignTokens.Spacing.medium)
+        .padding(.top, KiddoTasksDesignTokens.Spacing.medium)
     }
 
     // MARK: Stat tiles
@@ -126,7 +127,7 @@ struct TodayDashboardView: View {
                 value: totals.missionsApproved,
                 label: "Missions done today",
                 icon: "party.popper.fill",
-                color: KiddotasksDesignTokens.Colors.success
+                color: KiddoTasksDesignTokens.Colors.success
             )
         }
     }
@@ -134,13 +135,13 @@ struct TodayDashboardView: View {
     // MARK: Children progress
 
     private var childProgress: some View {
-        SectionCard(title: "Kids today", icon: "figure.run", tint: KiddotasksDesignTokens.Colors.primary) {
+        SectionCard(title: "Kids today", icon: "figure.run", tint: KiddoTasksDesignTokens.Colors.primary) {
             if appState.familyChildren.isEmpty {
                 Text("Add a child in the Family tab to get started.")
-                    .font(KiddotasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             } else {
-                VStack(spacing: KiddotasksDesignTokens.Spacing.small) {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                     ForEach(appState.familyChildren) { child in
                         ChildProgressRow(child: child, store: appState.store)
                     }
@@ -162,10 +163,10 @@ struct TodayDashboardView: View {
             let pending = appState.store.pendingCompletions()
             if pending.isEmpty {
                 Text("No missions waiting. Nice! 🎉")
-                    .font(KiddotasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             } else {
-                VStack(spacing: KiddotasksDesignTokens.Spacing.small) {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                     ForEach(pending) { completion in
                         PendingCompletionRow(
                             completion: completion,
@@ -188,15 +189,15 @@ struct TodayDashboardView: View {
                 ? "Reward requests (\(totals.pendingRewardRequests))"
                 : "Reward requests",
             icon: "gift.fill",
-            tint: KiddotasksDesignTokens.Colors.accent
+            tint: KiddoTasksDesignTokens.Colors.accent
         ) {
             let claims = appState.store.pendingClaims()
             if claims.isEmpty {
                 Text("No reward requests right now.")
-                    .font(KiddotasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             } else {
-                VStack(spacing: KiddotasksDesignTokens.Spacing.small) {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                     ForEach(claims) { claim in
                         PendingClaimRow(
                             claim: claim,
@@ -231,13 +232,13 @@ struct WeeklyStarsCard: View {
 
     private func color(for name: String) -> Color {
         guard let index = names.firstIndex(of: name) else {
-            return KiddotasksDesignTokens.Colors.primary
+            return KiddoTasksDesignTokens.Colors.primary
         }
         return Self.palette[index % Self.palette.count]
     }
 
     var body: some View {
-        SectionCard(title: "Stars this week", icon: "chart.bar.fill", tint: KiddotasksDesignTokens.Colors.primary) {
+        SectionCard(title: "Stars this week", icon: "chart.bar.fill", tint: KiddoTasksDesignTokens.Colors.primary) {
             Chart(series) { point in
                 BarMark(
                     x: .value("Day", point.date, unit: .day),
@@ -248,6 +249,18 @@ struct WeeklyStarsCard: View {
             }
             .chartForegroundStyleScale(domain: names, range: names.map(color(for:)))
             .chartLegend(.hidden)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                }
+            }
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
             .frame(height: 150)
 
             if names.count > 1 {
@@ -256,9 +269,9 @@ struct WeeklyStarsCard: View {
                         HStack(spacing: 4) {
                             Circle().fill(color(for: name)).frame(width: 8, height: 8)
                             Text(name)
-                                .font(KiddotasksDesignTokens.Typography.captionSmall)
+                                .font(KiddoTasksDesignTokens.Typography.captionSmall)
                         }
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                     }
                 }
             }
@@ -281,14 +294,14 @@ struct ChildProgressRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ChildAvatarView(avatar: child.avatar, size: 44)
+            ChildAvatarView(avatar: child.avatar, size: 44, photoData: child.photoData)
             VStack(alignment: .leading, spacing: 4) {
                 Text(child.name)
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 Text("\(child.activePoints) ⭐ balance · \(missionsToday)/\(dueToday) missions today")
-                    .font(KiddotasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 ProgressView(value: progress)
                     .tint(Color(hex: child.avatar.colorHex))
             }
@@ -315,15 +328,15 @@ struct PendingCompletionRow: View {
                 .frame(width: 40, height: 40)
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(task?.category.palette.accent ?? KiddotasksDesignTokens.Colors.primary)
+                        .fill(task?.category.palette.accent ?? KiddoTasksDesignTokens.Colors.primary)
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(childName) · \(task?.name ?? "Mission")")
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 Text(completion.completedAt.formatted(date: .omitted, time: .shortened))
-                    .font(KiddotasksDesignTokens.Typography.captionSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
             Spacer()
             VStack(spacing: 6) {
@@ -337,12 +350,12 @@ struct PendingCompletionRow: View {
     private var approveButton: some View {
         Button(action: onApprove) {
             Text("Approve")
-                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
                 .fontWeight(.bold)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(KiddotasksDesignTokens.Colors.success))
+                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.success))
         }
         .buttonStyle(KiddoPressStyle())
     }
@@ -350,13 +363,13 @@ struct PendingCompletionRow: View {
     private var declineButton: some View {
         Button(action: onDecline) {
             Text("Decline")
-                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
                 .fontWeight(.bold)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .background(
-                    Capsule().strokeBorder(KiddotasksDesignTokens.Colors.error.opacity(0.5), lineWidth: 1.5)
+                    Capsule().strokeBorder(KiddoTasksDesignTokens.Colors.error.opacity(0.5), lineWidth: 1.5)
                 )
         }
         .buttonStyle(KiddoPressStyle())
@@ -379,37 +392,37 @@ struct PendingClaimRow: View {
                 .frame(width: 40, height: 40)
                 .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(KiddotasksDesignTokens.Colors.accent)
+                        .fill(KiddoTasksDesignTokens.Colors.accent)
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(childName) wants \(rewardName)")
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 Text(claim.claimedAt.formatted(date: .omitted, time: .shortened))
-                    .font(KiddotasksDesignTokens.Typography.captionSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
             Spacer()
             VStack(spacing: 6) {
                 Button(action: onApprove) {
                     Text("Approve")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
-                        .background(Capsule().fill(KiddotasksDesignTokens.Colors.success))
+                        .background(Capsule().fill(KiddoTasksDesignTokens.Colors.success))
                 }
                 .buttonStyle(KiddoPressStyle())
                 Button(action: onDecline) {
                     Text("Decline")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .fontWeight(.bold)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
                         .background(
-                            Capsule().strokeBorder(KiddotasksDesignTokens.Colors.error.opacity(0.5), lineWidth: 1.5)
+                            Capsule().strokeBorder(KiddoTasksDesignTokens.Colors.error.opacity(0.5), lineWidth: 1.5)
                         )
                 }
                 .buttonStyle(KiddoPressStyle())

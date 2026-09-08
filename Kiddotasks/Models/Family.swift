@@ -1,13 +1,14 @@
 import Foundation
 import Observation
 
-/// Represents a family in Kiddotasks
+/// Represents a family in KiddoTasks
 @Observable
 final class Family: Identifiable, Codable {
     let id: String
     var name: String
     var memberIds: [String] // [parentId, childId1, childId2, ...]
     var familyCode: String // Unique code for sharing with other parents
+    var photoData: Data?
     var settings: FamilySettings
     let createdAt: Date
     var updatedAt: Date
@@ -17,6 +18,7 @@ final class Family: Identifiable, Codable {
         case name
         case memberIds = "members"
         case familyCode
+        case photoData
         case settings
         case createdAt
         case updatedAt
@@ -27,6 +29,7 @@ final class Family: Identifiable, Codable {
         name: String,
         memberIds: [String] = [],
         familyCode: String = LocalFamilyDataStore.generateFamilyCode(),
+        photoData: Data? = nil,
         settings: FamilySettings = .default,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -35,6 +38,7 @@ final class Family: Identifiable, Codable {
         self.name = name
         self.memberIds = memberIds
         self.familyCode = familyCode
+        self.photoData = photoData
         self.settings = settings
         self.createdAt = createdAt
         self.updatedAt = updatedAt

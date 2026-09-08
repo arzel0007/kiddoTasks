@@ -4,8 +4,9 @@ import FirebaseCore
 #endif
 
 @main
-struct KiddotasksApp: App {
+struct KiddoTasksApp: App {
     @State private var appState = AppState()
+    @State private var showSplash = true
 
     init() {
         #if canImport(FirebaseCore)
@@ -17,8 +18,18 @@ struct KiddotasksApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(appState)
+            Group {
+                if showSplash {
+                    SplashView {
+                        withAnimation {
+                            showSplash = false
+                        }
+                    }
+                } else {
+                    RootView()
+                        .environment(appState)
+                }
+            }
         }
     }
 }

@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Represents a parent/guardian in Kiddotasks
+/// Represents a parent/guardian in KiddoTasks
 @Observable
 final class Parent: Identifiable, Codable {
     let id: String

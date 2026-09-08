@@ -1,70 +1,37 @@
 import SwiftUI
 
-/// The Kiddotasks logo mark: a flat rounded square with a checklist motif.
-struct KiddotasksLogoMark: View {
+/// The KiddoTasks logo mark: uses the custom app icon image, scalable to any size.
+struct KiddoTasksLogoMark: View {
     var size: CGFloat = 64
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                .fill(KiddotasksDesignTokens.Colors.primary)
-            // Three small checkmarks — a unique flat motif.
-            VStack(alignment: .leading, spacing: size * 0.12) {
-                HStack(spacing: size * 0.06) {
-                    RoundedRectangle(cornerRadius: size * 0.04)
-                        .fill(.white)
-                        .frame(width: size * 0.10, height: size * 0.10)
-                    RoundedRectangle(cornerRadius: size * 0.04)
-                        .fill(.white.opacity(0.85))
-                        .frame(width: size * 0.40, height: size * 0.10)
-                }
-                HStack(spacing: size * 0.06) {
-                    RoundedRectangle(cornerRadius: size * 0.04)
-                        .fill(.white)
-                        .frame(width: size * 0.10, height: size * 0.10)
-                    RoundedRectangle(cornerRadius: size * 0.04)
-                        .fill(.white.opacity(0.85))
-                        .frame(width: size * 0.30, height: size * 0.10)
-                }
-                HStack(spacing: size * 0.06) {
-                    RoundedRectangle(cornerRadius: size * 0.04)
-                        .fill(.white)
-                        .frame(width: size * 0.10, height: size * 0.10)
-                    RoundedRectangle(cornerRadius: size * 0.04)
-                        .fill(.white.opacity(0.85))
-                        .frame(width: size * 0.36, height: size * 0.10)
-                }
-            }
-            .offset(y: -size * 0.02)
-        }
-        .frame(width: size, height: size)
-        .shadow(
-            color: KiddotasksDesignTokens.Colors.primary.opacity(0.25),
-            radius: size * 0.10,
-            x: 0,
-            y: size * 0.06
-        )
-        .accessibilityLabel("Kiddotasks logo")
+        Image("AppLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            .shadow(color: Color.black.opacity(0.15), radius: size * 0.08, x: 0, y: size * 0.04)
+            .accessibilityLabel("KiddoTasks logo")
     }
 }
 
 /// Logo mark + wordmark, with an optional tagline.
-struct KiddotasksWordmark: View {
+struct KiddoTasksWordmark: View {
     var size: CGFloat = 44
     var showsTagline = false
 
     var body: some View {
-        VStack(spacing: KiddotasksDesignTokens.Spacing.small) {
+        VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
             HStack(spacing: size * 0.24) {
-                KiddotasksLogoMark(size: size)
-                Text("Kiddotasks")
-                    .font(.system(size: size * 0.58, weight: .heavy, design: .rounded))
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                KiddoTasksLogoMark(size: size)
+                Text("KiddoTasks")
+                    .font(.system(size: size * 0.50, weight: .heavy, design: .rounded))
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
             }
             if showsTagline {
                 Text("Missions for kids. Control for parents.")
-                    .font(KiddotasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
         }
     }
@@ -74,33 +41,46 @@ struct KiddotasksWordmark: View {
 struct FamilyBrandHeader<Trailing: View>: View {
     let familyName: String
     var subtitle: String?
+    var familyPhotoData: Data?
     let trailing: Trailing
 
     init(
         familyName: String,
         subtitle: String? = nil,
+        familyPhotoData: Data? = nil,
         @ViewBuilder trailing: () -> Trailing = { EmptyView() }
     ) {
         self.familyName = familyName
         self.subtitle = subtitle
+        self.familyPhotoData = familyPhotoData
         self.trailing = trailing()
     }
 
     var body: some View {
-        HStack(spacing: KiddotasksDesignTokens.Spacing.small) {
-            KiddotasksLogoMark(size: 44)
-            VStack(alignment: .leading, spacing: KiddotasksDesignTokens.Spacing.xSmall) {
+        HStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
+            Group {
+                if let familyPhotoData, let uiImage = UIImage(data: familyPhotoData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
+                } else {
+                    KiddoTasksLogoMark(size: 44)
+                }
+            }
+            VStack(alignment: .leading, spacing: KiddoTasksDesignTokens.Spacing.xSmall) {
                 Text("KIDDOTASKS")
                     .font(.system(size: 11, weight: .heavy, design: .rounded))
                     .tracking(1.6)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                 Text(familyName)
-                    .font(KiddotasksDesignTokens.Typography.titleMedium)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 if let subtitle {
                     Text(subtitle)
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
             }
             Spacer()
@@ -111,8 +91,8 @@ struct FamilyBrandHeader<Trailing: View>: View {
 
 #Preview {
     VStack(spacing: 24) {
-        KiddotasksLogoMark(size: 96)
-        KiddotasksWordmark(size: 48, showsTagline: true)
+        KiddoTasksLogoMark(size: 96)
+        KiddoTasksWordmark(size: 48, showsTagline: true)
         FamilyBrandHeader(familyName: "The Resurreccions", subtitle: "Tuesday, Sep 8") {
             Image(systemName: "chevron.right")
         }
@@ -121,5 +101,5 @@ struct FamilyBrandHeader<Trailing: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
     .padding(24)
-    .kiddoPageBackground(KiddotasksDesignTokens.PageBackgrounds.kidsPlayground)
+    .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
 }

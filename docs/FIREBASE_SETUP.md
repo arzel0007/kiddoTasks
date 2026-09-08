@@ -140,8 +140,9 @@ firebase emulators:start     # auth :9099, firestore :8080, functions :5001
 ```
 
 To point the app at emulators instead of the cloud (for development), set the
-emulator hosts in `FirebaseConfig.configure()`
-(`Kiddotasks/Services/Firebase/FirebaseConfig.swift`).
+emulator wiring in `FirebaseConfig.useEmulatorsIfRequested()`
+(`Kiddotasks/Services/Firebase/FirebaseConfig.swift`) — set `FIREBASE_EMULATE=1`
+in the scheme's environment variables before running.
 
 ## Sync behavior (known, documented limits)
 

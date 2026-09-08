@@ -218,6 +218,19 @@ final class CloudSyncEngine {
         store.signOut()
         status = isAvailable ? .signedOut : .unavailable
     }
+
+    /// Sends a password reset email via Firebase Auth.
+    func sendPasswordReset(email: String) async throws {
+        #if canImport(FirebaseAuth)
+        guard isAvailable else {
+            throw FirebaseError.authNotAvailable
+        }
+        try await Auth.auth().sendPasswordReset(withEmail: email)
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
 // MARK: - Sync
 
     /// Pulls the latest family state from the cloud and applies it locally if

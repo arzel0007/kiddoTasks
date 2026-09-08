@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct ParentControlCenter: View {
     @Environment(AppState.self) private var appState
@@ -16,7 +17,7 @@ struct ParentControlCenter: View {
             ActivityView()
                 .tabItem { Label("History", systemImage: "clock") }
         }
-        .tint(KiddotasksDesignTokens.Colors.primary)
+        .tint(KiddoTasksDesignTokens.Colors.primary)
     }
 }
 
@@ -32,7 +33,7 @@ struct TaskListView: View {
                     let active = appState.store.tasks.filter(\.isActive)
                     if active.isEmpty {
                         Text("No chores yet. Tap + to add one.")
-                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                     }
                     ForEach(active) { task in
                         NavigationLink {
@@ -51,7 +52,7 @@ struct TaskListView: View {
                             } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
-                            .tint(KiddotasksDesignTokens.Colors.warning)
+                            .tint(KiddoTasksDesignTokens.Colors.warning)
                         }
                     }
                 }
@@ -72,7 +73,7 @@ struct TaskListView: View {
                                     } label: {
                                         Label("Restore", systemImage: "arrow.uturn.backward")
                                     }
-                                    .tint(KiddotasksDesignTokens.Colors.success)
+                                    .tint(KiddoTasksDesignTokens.Colors.success)
                                 }
                         }
                     }
@@ -126,16 +127,16 @@ struct TaskRow: View {
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.name)
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
                 Text("\(task.pointValue) ⭐ · \(task.recurrence.type.displayName)")
-                    .font(KiddotasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
             Spacer()
             if isArchived {
                 Text("Archived")
-                    .font(KiddotasksDesignTokens.Typography.captionSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
+                    .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
             } else {
                 Image(systemName: approvalIcon)
                     .font(.system(size: 13, weight: .bold))
@@ -164,9 +165,9 @@ struct TaskRow: View {
 
     private var approvalTint: Color {
         switch task.approvalBehavior {
-        case .useFamilyDefault: return KiddotasksDesignTokens.Colors.primary
-        case .alwaysRequireApproval: return KiddotasksDesignTokens.Colors.warning
-        case .autoApprove: return KiddotasksDesignTokens.Colors.success
+        case .useFamilyDefault: return KiddoTasksDesignTokens.Colors.primary
+        case .alwaysRequireApproval: return KiddoTasksDesignTokens.Colors.warning
+        case .autoApprove: return KiddoTasksDesignTokens.Colors.success
         }
     }
 }
@@ -255,15 +256,15 @@ struct TaskEditorView: View {
                             } label: {
                                 Image(systemName: item)
                                     .font(.system(size: 22, weight: .semibold))
-                                    .foregroundStyle(icon == item ? .white : KiddotasksDesignTokens.Colors.textSecondary)
+                                    .foregroundStyle(icon == item ? .white : KiddoTasksDesignTokens.Colors.textSecondary)
                                     .frame(width: 48, height: 48)
                                     .background {
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(icon == item ? KiddotasksDesignTokens.Colors.primary : KiddotasksDesignTokens.Colors.surface)
+                                            .fill(icon == item ? KiddoTasksDesignTokens.Colors.primary : KiddoTasksDesignTokens.Colors.surface)
                                     }
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(icon == item ? Color.clear : KiddotasksDesignTokens.Colors.border, lineWidth: 1)
+                                            .strokeBorder(icon == item ? Color.clear : KiddoTasksDesignTokens.Colors.border, lineWidth: 1)
                                     }
                             }
                             .buttonStyle(.plain)
@@ -354,7 +355,7 @@ struct RewardListView: View {
                     let active = appState.store.rewards.filter(\.isActive)
                     if active.isEmpty {
                         Text("No rewards yet. Tap + to add one.")
-                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                     }
                     ForEach(active) { reward in
                         NavigationLink {
@@ -367,14 +368,14 @@ struct RewardListView: View {
                                     .frame(width: 40, height: 40)
                                     .background {
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(KiddotasksDesignTokens.Colors.accent)
+                                            .fill(KiddoTasksDesignTokens.Colors.accent)
                                     }
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(reward.name)
-                                        .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
                                     Text("\(reward.pointCost) ⭐")
-                                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                                 }
                             }
                             .padding(.vertical, 2)
@@ -386,7 +387,7 @@ struct RewardListView: View {
                             } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
-                            .tint(KiddotasksDesignTokens.Colors.warning)
+                            .tint(KiddoTasksDesignTokens.Colors.warning)
                         }
                     }
                 }
@@ -397,11 +398,11 @@ struct RewardListView: View {
                         ForEach(archived) { reward in
                             HStack {
                                 Text(reward.name)
-                                    .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
                                 Spacer()
                                 Text("Archived")
-                                    .font(KiddotasksDesignTokens.Typography.captionSmall)
-                                    .foregroundStyle(KiddotasksDesignTokens.Colors.textTertiary)
+                                    .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                             }
                             .swipeActions(edge: .trailing) {
                                 Button {
@@ -410,7 +411,7 @@ struct RewardListView: View {
                                 } label: {
                                     Label("Restore", systemImage: "arrow.uturn.backward")
                                 }
-                                .tint(KiddotasksDesignTokens.Colors.success)
+                                .tint(KiddoTasksDesignTokens.Colors.success)
                             }
                         }
                     }
@@ -446,8 +447,8 @@ struct RewardEditorView: View {
                 TextField("Description", text: $description, axis: .vertical)
                 Stepper("Cost: \(cost) ⭐", value: $cost, in: 5...500, step: 5)
                 Text("Reward claims are always sent to a parent for approval before points are spent.")
-                    .font(KiddotasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
             .navigationTitle(reward == nil ? "New reward" : "Edit reward")
             .onAppear(perform: loadRewardIfEditing)
@@ -501,41 +502,64 @@ struct FamilyView: View {
     @State private var showFamilyNameEditor = false
     @State private var pointsEditorChild: Child?
     @State private var showResetConfirm = false
+    @State private var showFamilyPhotoPicker = false
+    @State private var pickedFamilyPhoto: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Button {
-                        showFamilyNameEditor = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            KiddotasksLogoMark(size: 48)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(appState.currentFamily?.name ?? "Our family")
-                                    .font(KiddotasksDesignTokens.Typography.titleMedium)
-                                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
-                                Text("Kiddotasks family · tap to rename")
-                                    .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    VStack(spacing: 12) {
+                        Button {
+                            showFamilyPhotoPicker = true
+                        } label: {
+                            Group {
+                                if let photoData = appState.currentFamily?.photoData,
+                                   let uiImage = UIImage(data: photoData) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                } else {
+                                    KiddoTasksLogoMark(size: 80)
+                                }
                             }
-                            Spacer()
-                            Image(systemName: "pencil")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                            .frame(width: 80, height: 80)
+                            .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        VStack(spacing: 2) {
+                            Text(appState.currentFamily?.name ?? "Our family")
+                                .font(KiddoTasksDesignTokens.Typography.titleMedium)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                            Button {
+                                showFamilyNameEditor = true
+                            } label: {
+                                Text("Tap to rename")
+                                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                            }
+                        }
+                        if appState.currentFamily?.photoData != nil {
+                            Button(role: .destructive) {
+                                try? appState.store.updateFamilyPhoto(nil)
+                            } label: {
+                                Text("Remove photo")
+                                    .font(.system(size: 13))
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity)
                 }
 
                 Section("Family code") {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Share this code with other parents")
-                                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                             Text(appState.currentFamily?.familyCode ?? "------")
                                 .font(.system(size: 22, weight: .bold, design: .monospaced))
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
                         }
                         Spacer()
                         Button {
@@ -544,7 +568,7 @@ struct FamilyView: View {
                             }
                         } label: {
                             Image(systemName: "doc.on.doc")
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
                         }
                         .accessibilityLabel("Copy family code")
                     }
@@ -557,13 +581,13 @@ struct FamilyView: View {
                                 ChildEditorView(child: child)
                             } label: {
                                 HStack(spacing: 12) {
-                                    ChildAvatarView(avatar: child.avatar, size: 40)
+                                    ChildAvatarView(avatar: child.avatar, size: 40, photoData: child.photoData)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(child.name)
-                                            .font(KiddotasksDesignTokens.Typography.titleSmall)
+                                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
                                         Text("\(child.activePoints) ⭐ balance")
-                                            .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                            .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                                     }
                                 }
                             }
@@ -572,9 +596,9 @@ struct FamilyView: View {
                             } label: {
                                 Image(systemName: "slider.horizontal.3")
                                     .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(KiddotasksDesignTokens.Colors.primary)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
                                     .frame(width: 36, height: 36)
-                                    .background(Circle().fill(KiddotasksDesignTokens.Colors.primary.opacity(0.10)))
+                                    .background(Circle().fill(KiddoTasksDesignTokens.Colors.primary.opacity(0.10)))
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Manage \(child.name)'s points")
@@ -608,8 +632,8 @@ struct FamilyView: View {
                         }
                     ))
                     Text("Individual chores can override this default.")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
                 Section("Notifications & fun") {
                     Toggle("Family notifications", isOn: Binding(
@@ -652,7 +676,7 @@ struct FamilyView: View {
                     Button("Reset all data", role: .destructive) {
                         showResetConfirm = true
                     }
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.error)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                 }
             }
             .navigationTitle("Family")
@@ -662,6 +686,19 @@ struct FamilyView: View {
             }
             .sheet(item: $pointsEditorChild) { child in
                 KidPointsEditor(child: child)
+            }
+            .photosPicker(isPresented: $showFamilyPhotoPicker, selection: $pickedFamilyPhoto, matching: .images)
+            .onChange(of: pickedFamilyPhoto) { _, newValue in
+                Task {
+                    if let item = newValue,
+                       let data = try? await item.loadTransferable(type: Data.self),
+                       let uiImage = UIImage(data: data) {
+                        let compressed = ImageCompressor.compress(uiImage)
+                        await MainActor.run {
+                            try? appState.store.updateFamilyPhoto(compressed)
+                        }
+                    }
+                }
             }
             .confirmationDialog(
                 "Remove \(childPendingRemoval?.name ?? "this child")?",
@@ -746,8 +783,8 @@ struct PINEditorRow: View {
             }
             if let statusMessage {
                 Text(statusMessage)
-                    .font(KiddotasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
         }
         .onChange(of: pin) { _, newValue in
@@ -764,14 +801,36 @@ struct ChildEditorView: View {
 
     @State private var name = ""
     @State private var avatar = ChildAvatar.default
+    @State private var photoData: Data?
     @State private var hasBirthday = false
     @State private var birthday = Date()
     @State private var didLoad = false
+    @State private var showPhotoPicker = false
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Name", text: $name)
+                Section("Photo") {
+                    HStack(spacing: 12) {
+                        ChildAvatarView(avatar: avatar, size: 64, photoData: photoData)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                showPhotoPicker = true
+                            } label: {
+                                Label("Choose photo", systemImage: "photo")
+                            }
+                            if photoData != nil {
+                                Button(role: .destructive) {
+                                    photoData = nil
+                                } label: {
+                                    Label("Remove photo", systemImage: "trash")
+                                }
+                                .font(.system(size: 13))
+                            }
+                        }
+                    }
+                }
                 Section("Avatar") {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 56))]) {
                         ForEach(Array(ChildAvatar.presets.enumerated()), id: \.offset) { _, preset in
@@ -781,7 +840,7 @@ struct ChildEditorView: View {
                                 ChildAvatarView(avatar: preset, size: 56)
                                     .overlay {
                                         if avatar == preset {
-                                            Circle().stroke(KiddotasksDesignTokens.Colors.primary, lineWidth: 3)
+                                            Circle().stroke(KiddoTasksDesignTokens.Colors.primary, lineWidth: 3)
                                         }
                                     }
                             }
@@ -805,14 +864,29 @@ struct ChildEditorView: View {
                         .disabled(name.isEmpty)
                 }
             }
+            .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhoto, matching: .images)
+            .onChange(of: pickedPhoto) { _, newValue in
+                Task {
+                    if let item = newValue,
+                       let data = try? await item.loadTransferable(type: Data.self),
+                       let uiImage = UIImage(data: data) {
+                        await MainActor.run {
+                            photoData = ImageCompressor.compress(uiImage)
+                        }
+                    }
+                }
+            }
         }
     }
+
+    @State private var pickedPhoto: PhotosPickerItem?
 
     private func loadChildIfEditing() {
         guard !didLoad, let child else { return }
         didLoad = true
         name = child.name
         avatar = child.avatar
+        photoData = child.photoData
         if let dateOfBirth = child.dateOfBirth {
             hasBirthday = true
             birthday = dateOfBirth
@@ -824,12 +898,14 @@ struct ChildEditorView: View {
             if let existing = child {
                 existing.name = name
                 existing.avatar = avatar
+                existing.photoData = photoData
                 existing.dateOfBirth = hasBirthday ? birthday : nil
                 try appState.store.updateChild(existing)
             } else {
                 try appState.store.addChild(
                     name: name,
                     avatar: avatar,
+                    photoData: photoData,
                     dateOfBirth: hasBirthday ? birthday : nil
                 )
             }
@@ -849,7 +925,7 @@ struct ActivityView: View {
                 let transactions = appState.store.transactions
                 if transactions.isEmpty {
                     Text("No activity yet. Completions and rewards will appear here.")
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
                 ForEach(transactions.reversed()) { tx in
                     HStack(spacing: 12) {
@@ -860,25 +936,25 @@ struct ActivityView: View {
                             .background {
                                 Circle().fill(
                                     tx.amount >= 0
-                                        ? KiddotasksDesignTokens.Colors.success
-                                        : KiddotasksDesignTokens.Colors.error
+                                        ? KiddoTasksDesignTokens.Colors.success
+                                        : KiddoTasksDesignTokens.Colors.error
                                 )
                             }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tx.description)
-                                .font(KiddotasksDesignTokens.Typography.bodyMedium)
+                                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
                             Text(tx.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                         Spacer()
                         Text(tx.amount > 0 ? "+\(tx.amount)" : "\(tx.amount)")
-                            .font(KiddotasksDesignTokens.Typography.titleSmall)
+                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
                             .monospacedDigit()
                             .foregroundStyle(
                                 tx.amount > 0
-                                    ? KiddotasksDesignTokens.Colors.success
-                                    : KiddotasksDesignTokens.Colors.error
+                                    ? KiddoTasksDesignTokens.Colors.success
+                                    : KiddoTasksDesignTokens.Colors.error
                             )
                     }
                     .padding(.vertical, 2)

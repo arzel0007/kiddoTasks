@@ -1,13 +1,14 @@
 import Foundation
 import Observation
 
-/// Represents a child in Kiddotasks
+/// Represents a child in KiddoTasks
 @Observable
 final class Child: Identifiable, Codable {
     let id: String
     var name: String
     let familyId: String
     var avatar: ChildAvatar
+    var photoData: Data?
     var dateOfBirth: Date?
     var activePoints: Int = 0
     var totalPointsEarned: Int = 0
@@ -19,6 +20,7 @@ final class Child: Identifiable, Codable {
         case name
         case familyId
         case avatar
+        case photoData
         case dateOfBirth
         case activePoints
         case totalPointsEarned
@@ -31,6 +33,7 @@ final class Child: Identifiable, Codable {
         name: String,
         familyId: String,
         avatar: ChildAvatar = .default,
+        photoData: Data? = nil,
         dateOfBirth: Date? = nil,
         activePoints: Int = 0,
         totalPointsEarned: Int = 0,
@@ -41,6 +44,7 @@ final class Child: Identifiable, Codable {
         self.name = name
         self.familyId = familyId
         self.avatar = avatar
+        self.photoData = photoData
         self.dateOfBirth = dateOfBirth
         self.activePoints = activePoints
         self.totalPointsEarned = totalPointsEarned

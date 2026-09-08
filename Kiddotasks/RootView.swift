@@ -17,7 +17,7 @@ struct RootView: View {
                 KidsStationView()
             }
         }
-        .animation(KiddotasksDesignTokens.Animation.standard, value: modeID)
+        .animation(KiddoTasksDesignTokens.Animation.standard, value: modeID)
         .alert("Something went wrong", isPresented: Binding(
             get: { appState.errorMessage != nil },
             set: { if !$0 { appState.clearError() } }

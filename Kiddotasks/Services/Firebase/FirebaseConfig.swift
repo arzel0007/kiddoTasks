@@ -4,13 +4,39 @@ import Foundation
 import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
+#if canImport(FirebaseFunctions)
+import FirebaseFunctions
+#endif
 
 /// Centralized Firebase configuration and initialization
 struct FirebaseConfig {
 
+    /// True once `FirebaseApp.configure()` has run, i.e. a
+    /// `GoogleService-Info.plist` was bundled and processed.
+    static var isConfigured: Bool {
+        FirebaseApp.app() != nil
+    }
+
     static func configure() {
         FirebaseApp.configure()
+        useEmulatorsIfRequested()
         configureFirestore()
+    }
+
+    /// Points the Firebase SDK at the local emulators when the
+    /// `FIREBASE_EMULATE=1` environment variable is set. Must run right after
+    /// `FirebaseApp.configure()` and before any Firestore/Auth usage.
+    ///
+    ///   - Auth      → localhost:9099
+    ///   - Firestore → localhost:8080
+    ///   - Functions → http://localhost:5001
+    static func useEmulatorsIfRequested() {
+        guard ProcessInfo.processInfo.environment["FIREBASE_EMULATE"] == "1" else { return }
+        Auth.auth().useEmulator(withHost: "localhost", port: 9099)
+        Firestore.firestore().useEmulator(withHost: "localhost", port: 8080)
+        #if canImport(FirebaseFunctions)
+        Functions.functions().useEmulator(withOrigin: "http://localhost:5001")
+        #endif
     }
 
     private static func configureFirestore() {

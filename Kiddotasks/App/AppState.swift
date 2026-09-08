@@ -14,6 +14,7 @@ final class AppState {
     var currentChildProfile: Child?
     var interfaceOverride: InterfaceOverride = .automatic
     var authenticationError: String?
+    var successMessage: String?
     var isLoading: Bool = false
     var errorMessage: String?
     /// Set after a cloud sign-up so the UI can reveal the Kids Station PIN.
@@ -182,6 +183,20 @@ final class AppState {
         interfaceOverride = .automatic
         familyBootstrapPIN = nil
         cloudSync.signOut()
+    }
+
+    /// Sends a password reset email via Firebase.
+    func sendPasswordReset(email: String) {
+        authenticationError = nil
+        successMessage = nil
+        Task { @MainActor in
+            do {
+                try await cloudSync.sendPasswordReset(email: email)
+                successMessage = "Password reset email sent. Check your inbox."
+            } catch {
+                authenticationError = friendlyAuthError(error)
+            }
+        }
     }
 
     /// Maps low-level auth errors to friendly, actionable messages.

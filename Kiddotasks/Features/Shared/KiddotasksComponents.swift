@@ -15,19 +15,19 @@ struct KiddoPressStyle: ButtonStyle {
 
 struct PrimaryButton: View {
     let title: String
-    var color: Color = KiddotasksDesignTokens.Colors.primary
+    var color: Color = KiddoTasksDesignTokens.Colors.primary
     var isDisabled: Bool = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(KiddotasksDesignTokens.Typography.buttonLabel)
+                .font(KiddoTasksDesignTokens.Typography.buttonLabel)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: KiddotasksDesignTokens.TouchTargets.recommended)
+                .frame(minHeight: KiddoTasksDesignTokens.TouchTargets.recommended)
                 .background {
-                    let shape = RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.medium, style: .continuous)
+                    let shape = RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous)
                     if isDisabled {
                         shape.fill(color.opacity(0.35))
                     } else {
@@ -45,19 +45,19 @@ struct PrimaryButton: View {
 /// Outlined button for secondary actions.
 struct SecondaryButton: View {
     let title: String
-    var color: Color = KiddotasksDesignTokens.Colors.primary
+    var color: Color = KiddoTasksDesignTokens.Colors.primary
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(KiddotasksDesignTokens.Typography.buttonLabel)
+                .font(KiddoTasksDesignTokens.Typography.buttonLabel)
                 .foregroundStyle(color)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: KiddotasksDesignTokens.TouchTargets.recommended)
+                .frame(minHeight: KiddoTasksDesignTokens.TouchTargets.recommended)
                 .background(color.opacity(0.10))
                 .overlay {
-                    RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.medium, style: .continuous)
+                    RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous)
                         .strokeBorder(color.opacity(0.45), lineWidth: 1.5)
                 }
         }
@@ -70,18 +70,30 @@ struct SecondaryButton: View {
 struct ChildAvatarView: View {
     let avatar: ChildAvatar
     var size: CGFloat = 64
+    var photoData: Data? = nil
 
     var body: some View {
-        Text(avatar.emoji)
-            .font(.system(size: size * 0.52))
-            .frame(width: size, height: size)
-            .background {
+        Group {
+            if let photoData, let uiImage = UIImage(data: photoData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Text(avatar.emoji)
+                    .font(.system(size: size * 0.52))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .background {
+            if photoData == nil {
                 Circle().fill(Color(hex: avatar.colorHex).opacity(0.28))
             }
-            .overlay {
-                Circle().strokeBorder(.white, lineWidth: max(1.5, size * 0.055))
-            }
-            .shadow(color: Color(hex: avatar.colorHex).opacity(0.30), radius: size * 0.14, x: 0, y: size * 0.08)
+        }
+        .overlay {
+            Circle().strokeBorder(.white, lineWidth: max(1.5, size * 0.055))
+        }
+        .shadow(color: Color(hex: photoData == nil ? avatar.colorHex : "#888888").opacity(0.25), radius: size * 0.10, x: 0, y: size * 0.06)
     }
 }
 
@@ -94,7 +106,7 @@ struct PointsBadge: View {
             Image(systemName: "star.fill")
                 .font(.system(size: compact ? 10 : 13, weight: .bold))
             Text("\(points)")
-                .font(compact ? KiddotasksDesignTokens.Typography.captionLarge : KiddotasksDesignTokens.Typography.titleSmall)
+                .font(compact ? KiddoTasksDesignTokens.Typography.captionLarge : KiddoTasksDesignTokens.Typography.titleSmall)
                 .monospacedDigit()
         }
         .foregroundStyle(.white)
@@ -118,10 +130,10 @@ struct EmptyStateView: View {
                 .frame(width: 96, height: 96)
                 .background(Circle().fill(.white))
                 .kiddotasksShadow(.medium)
-            Text(title).font(KiddotasksDesignTokens.Typography.headingMedium)
+            Text(title).font(KiddoTasksDesignTokens.Typography.headingMedium)
             Text(message)
-                .font(KiddotasksDesignTokens.Typography.bodyMedium)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(24)
@@ -135,25 +147,25 @@ struct EmptyStateView: View {
 struct SectionCard<Content: View>: View {
     let title: String
     var icon: String = "sparkles"
-    var tint: Color = KiddotasksDesignTokens.Colors.primary
+    var tint: Color = KiddoTasksDesignTokens.Colors.primary
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: KiddotasksDesignTokens.Spacing.small) {
+        VStack(alignment: .leading, spacing: KiddoTasksDesignTokens.Spacing.small) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
             }
             content
         }
-        .padding(KiddotasksDesignTokens.Spacing.medium)
+        .padding(KiddoTasksDesignTokens.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.large, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.large, style: .continuous))
         .kiddotasksShadow(.medium)
     }
 }
@@ -172,20 +184,20 @@ struct StatTile: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.white.opacity(0.9))
             Text("\(value)")
-                .font(KiddotasksDesignTokens.Typography.displaySmall)
+                .font(KiddoTasksDesignTokens.Typography.displaySmall)
                 .foregroundStyle(.white)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
-                .font(KiddotasksDesignTokens.Typography.taskLabel)
+                .font(KiddoTasksDesignTokens.Typography.taskLabel)
                 .foregroundStyle(.white.opacity(0.92))
                 .lineLimit(2, reservesSpace: true)
         }
-        .padding(KiddotasksDesignTokens.Spacing.small)
+        .padding(KiddoTasksDesignTokens.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.large, style: .continuous)
+            RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.large, style: .continuous)
                 .fill(color)
         }
     }
@@ -212,8 +224,8 @@ struct MissionCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.name)
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
-                    .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 StatusChip(status: completion?.status, fallback: task.category.displayName)
             }
             Spacer()
@@ -221,7 +233,7 @@ struct MissionCard: View {
                 Image(systemName: "star.fill")
                     .font(.system(size: 12, weight: .bold))
                 Text("\(task.pointValue)")
-                    .font(KiddotasksDesignTokens.Typography.titleSmall)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
                     .monospacedDigit()
             }
             .foregroundStyle(Color(hex: "#B45309"))
@@ -229,9 +241,9 @@ struct MissionCard: View {
             .padding(.vertical, 6)
             .background(Capsule().fill(Color(hex: "#FEF3C7")))
         }
-        .padding(KiddotasksDesignTokens.Spacing.medium)
+        .padding(KiddoTasksDesignTokens.Spacing.medium)
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
         .kiddotasksShadow(.medium)
         .opacity(completion?.status == .approved ? 0.6 : 1)
     }
@@ -244,7 +256,7 @@ struct StatusChip: View {
 
     var body: some View {
         Text(text)
-            .font(KiddotasksDesignTokens.Typography.captionSmall)
+            .font(KiddoTasksDesignTokens.Typography.captionSmall)
             .fontWeight(.semibold)
             .foregroundStyle(color)
             .padding(.horizontal, 8)
@@ -258,10 +270,10 @@ struct StatusChip: View {
 
     private var color: Color {
         switch status {
-        case .approved: return KiddotasksDesignTokens.Colors.success
-        case .awaitingApproval, .completed: return KiddotasksDesignTokens.Colors.warning
-        case .rejected: return KiddotasksDesignTokens.Colors.error
-        case .none: return KiddotasksDesignTokens.Colors.textSecondary
+        case .approved: return KiddoTasksDesignTokens.Colors.success
+        case .awaitingApproval, .completed: return KiddoTasksDesignTokens.Colors.warning
+        case .rejected: return KiddoTasksDesignTokens.Colors.error
+        case .none: return KiddoTasksDesignTokens.Colors.textSecondary
         }
     }
 }
@@ -280,14 +292,14 @@ struct RewardShopCard: View {
                 .frame(width: 48, height: 48)
                 .background {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(KiddotasksDesignTokens.Colors.accent)
+                        .fill(KiddoTasksDesignTokens.Colors.accent)
                 }
             Text(reward.name)
-                .font(KiddotasksDesignTokens.Typography.titleSmall)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.text)
+                .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
             Text(reward.description)
-                .font(KiddotasksDesignTokens.Typography.captionLarge)
-                .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .lineLimit(2)
             Spacer(minLength: 0)
             HStack {
@@ -297,7 +309,7 @@ struct RewardShopCard: View {
                     Text("\(reward.pointCost)")
                         .monospacedDigit()
                 }
-                .font(KiddotasksDesignTokens.Typography.captionLarge)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
                 .foregroundStyle(Color(hex: "#B45309"))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -305,23 +317,23 @@ struct RewardShopCard: View {
                 Spacer()
                 if reward.canAfford(with: points) {
                     Text("Get")
-                        .font(KiddotasksDesignTokens.Typography.captionLarge)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(KiddotasksDesignTokens.Colors.success))
+                        .background(Capsule().fill(KiddoTasksDesignTokens.Colors.success))
                 } else {
                     Text("Need \(reward.pointsNeeded(givenCurrentPoints: points))")
-                        .font(KiddotasksDesignTokens.Typography.captionSmall)
-                        .foregroundStyle(KiddotasksDesignTokens.Colors.textSecondary)
+                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
             }
         }
-        .padding(KiddotasksDesignTokens.Spacing.medium)
+        .padding(KiddoTasksDesignTokens.Spacing.medium)
         .frame(maxWidth: .infinity, minHeight: 170, alignment: .leading)
         .background(.white)
-        .clipShape(RoundedRectangle(cornerRadius: KiddotasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
         .kiddotasksShadow(.medium)
     }
 }
