@@ -110,9 +110,21 @@ export const claimReward = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
   }
   const { rewardId, childId, familyId } = data;
+  if (!rewardId || !childId || !familyId) {
+    throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
+  }
   const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
   if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
     throw new functions.https.HttpsError("permission-denied", "Not authorized");
+  }
+  // Security: child and reward must belong to the caller's family.
+  const childDoc = await db.collection("children").doc(String(childId)).get();
+  if (!childDoc.exists || childDoc.data()?.familyId !== familyId) {
+    throw new functions.https.HttpsError("permission-denied", "Child not in family");
+  }
+  const rewardDoc = await db.collection("rewards").doc(String(rewardId)).get();
+  if (!rewardDoc.exists || rewardDoc.data()?.familyId !== familyId) {
+    throw new functions.https.HttpsError("permission-denied", "Reward not in family");
   }
   const claimRef = db.collection("rewardClaims").doc();
   await claimRef.set({
@@ -133,6 +145,13 @@ export const rejectRewardClaim = functions.https.onCall(async (data, context) =>
   const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
   if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
     throw new functions.https.HttpsError("permission-denied", "Not authorized");
+  }
+  const claimDoc = await db.collection("rewardClaims").doc(String(claimId || "")).get();
+  if (!claimDoc.exists || claimDoc.data()?.familyId !== familyId) {
+    throw new functions.https.HttpsError("permission-denied", "Claim not in family");
+  }
+  if (claimDoc.data()?.status === "APPROVED") {
+    throw new functions.https.HttpsError("already-exists", "Claim already approved");
   }
   await db.collection("rewardClaims").doc(claimId).update({
     status: "REJECTED",
@@ -203,6 +222,40 @@ export const approveTaskCompletion = functions.https.onCall(
         );
       }
 
+      // Security: the completion must belong to the caller's family.
+      if (
+        typeof completion?.familyId === "string" &&
+        completion.familyId !== familyId
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Completion not in family"
+        );
+      }
+
+      // Security: prefer the task's server-stored point value over the
+      // client-supplied one so points can't be arbitrarily awarded.
+      let awardedPoints = Number(pointValue) || 0;
+      const taskDoc = await db.collection("tasks").doc(String(taskId)).get();
+      if (taskDoc.exists) {
+        const task = taskDoc.data();
+        if (typeof task?.familyId === "string" && task.familyId !== familyId) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Task not in family"
+          );
+        }
+        if (typeof task?.pointValue === "number") {
+          awardedPoints = task.pointValue;
+        }
+      }
+      if (!awardedPoints || awardedPoints <= 0) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid point value"
+        );
+      }
+
       // In a transaction, update completion and create point transaction
       const batch = db.batch();
 
@@ -211,7 +264,7 @@ export const approveTaskCompletion = functions.https.onCall(
       batch.set(db.collection("pointTransactions").doc(transactionId), {
         familyId,
         childId,
-        amount: pointValue,
+        amount: awardedPoints,
         type: "TASK_COMPLETION",
         relatedId: completionId,
         description: `Task completed: ${data.taskName || ""}`,
@@ -225,14 +278,14 @@ export const approveTaskCompletion = functions.https.onCall(
         status: "APPROVED",
         approvedAt: admin.firestore.FieldValue.serverTimestamp(),
         approvedBy: context.auth.uid,
-        pointsAwarded: pointValue,
+        pointsAwarded: awardedPoints,
         pointTransactionId: transactionId,
       });
 
       // Update child points
       batch.update(db.collection("children").doc(childId), {
-        activePoints: admin.firestore.FieldValue.increment(pointValue),
-        totalPointsEarned: admin.firestore.FieldValue.increment(pointValue),
+        activePoints: admin.firestore.FieldValue.increment(awardedPoints),
+        totalPointsEarned: admin.firestore.FieldValue.increment(awardedPoints),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -274,6 +327,22 @@ export const rejectTaskCompletion = functions.https.onCall(
         throw new functions.https.HttpsError(
           "permission-denied",
           "Not authorized"
+        );
+      }
+
+      // Security: the completion must belong to the caller's family and must
+      // not already be approved.
+      const completionDoc = await db
+        .collection("taskCompletions")
+        .doc(String(completionId || ""))
+        .get();
+      if (!completionDoc.exists || completionDoc.data()?.familyId !== familyId) {
+        throw new functions.https.HttpsError("permission-denied", "Completion not in family");
+      }
+      if (completionDoc.data()?.status === "APPROVED") {
+        throw new functions.https.HttpsError(
+          "already-exists",
+          "Completion already approved"
         );
       }
 
@@ -327,8 +396,50 @@ export const approveRewardClaim = functions.https.onCall(
         throw new functions.https.HttpsError("permission-denied", "Invalid child");
       }
 
+      // Security: the claim must belong to the caller's family and must not
+      // already be approved (prevents double point deductions).
+      const claimDoc = await db
+        .collection("rewardClaims")
+        .doc(String(claimId || ""))
+        .get();
+      if (!claimDoc.exists || claimDoc.data()?.familyId !== familyId) {
+        throw new functions.https.HttpsError("permission-denied", "Claim not in family");
+      }
+      if (claimDoc.data()?.status === "APPROVED") {
+        throw new functions.https.HttpsError(
+          "already-exists",
+          "Reward claim already approved"
+        );
+      }
+
+      // Security: prefer the reward's server-stored cost over the
+      // client-supplied one so arbitrary amounts can't be deducted.
+      let deductionCost = Number(pointCost) || 0;
+      const rewardDoc = await db
+        .collection("rewards")
+        .doc(String(rewardId || ""))
+        .get();
+      if (rewardDoc.exists) {
+        const reward = rewardDoc.data();
+        if (typeof reward?.familyId === "string" && reward.familyId !== familyId) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Reward not in family"
+          );
+        }
+        if (typeof reward?.pointCost === "number") {
+          deductionCost = reward.pointCost;
+        }
+      }
+      if (!deductionCost || deductionCost <= 0) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid point cost"
+        );
+      }
+
       const childData = childDoc.data();
-      if (childData?.activePoints < pointCost) {
+      if ((childData?.activePoints ?? 0) < deductionCost) {
         throw new functions.https.HttpsError(
           "failed-precondition",
           "Insufficient points"
@@ -343,7 +454,7 @@ export const approveRewardClaim = functions.https.onCall(
       batch.set(db.collection("pointTransactions").doc(deductionTransactionId), {
         familyId,
         childId,
-        amount: -pointCost,
+        amount: -deductionCost,
         type: "REWARD_REDEMPTION",
         relatedId: claimId,
         description: `Reward claimed: ${data.rewardName || ""}`,
@@ -362,7 +473,7 @@ export const approveRewardClaim = functions.https.onCall(
 
       // Deduct points from child
       batch.update(db.collection("children").doc(childId), {
-        activePoints: admin.firestore.FieldValue.increment(-pointCost),
+        activePoints: admin.firestore.FieldValue.increment(-deductionCost),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -412,7 +523,14 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
   const upsert = (collection: string, items: any[]) => {
     for (const item of items || []) {
       if (!item || typeof item.id !== "string") continue;
-      batch.set(db.collection(collection).doc(item.id), toFirestoreValue(item), { merge: true });
+      // Security: never write a document that claims a different family, and
+      // stamp our (validated) familyId so client payloads can't escalate.
+      if (typeof item.familyId === "string" && item.familyId !== familyId) continue;
+      batch.set(
+        db.collection(collection).doc(item.id),
+        toFirestoreValue({ ...item, familyId }),
+        { merge: true }
+      );
     }
   };
 

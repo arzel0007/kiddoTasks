@@ -49,7 +49,7 @@ to deploying the backend that already ships in this repo.
 
 1. In Xcode: **File → Add Package Dependencies…**
 2. Paste: `https://github.com/firebase/firebase-ios-sdk`
-3. Dependency rule: **Up to Next Major Version**, `11.0.0`.
+3. Dependency rule: **Up to Next Major Version**, `12.0.0`.
 4. Add the products:
    - `FirebaseAuth`
    - `FirebaseFirestore`

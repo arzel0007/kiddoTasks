@@ -5,7 +5,8 @@ DerivedData/
 .build/
 
 # Firebase secrets
-GoogleService-Info.plist
+GoogleService-Info.plist    
+.firebaserc
 *.p8
 
 # OS

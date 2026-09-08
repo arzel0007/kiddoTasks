@@ -29,13 +29,15 @@ struct FirebaseConfig {
     ///
     ///   - Auth      → localhost:9099
     ///   - Firestore → localhost:8080
-    ///   - Functions → http://localhost:5001
+    ///   - Functions → localhost:5001
     static func useEmulatorsIfRequested() {
         guard ProcessInfo.processInfo.environment["FIREBASE_EMULATE"] == "1" else { return }
         Auth.auth().useEmulator(withHost: "localhost", port: 9099)
         Firestore.firestore().useEmulator(withHost: "localhost", port: 8080)
         #if canImport(FirebaseFunctions)
-        Functions.functions().useEmulator(withOrigin: "http://localhost:5001")
+        // Firebase 12: the Functions emulator API takes host + port like the
+        // others (the old `useEmulator(withOrigin:)` no longer exists).
+        Functions.functions().useEmulator(withHost: "localhost", port: 5001)
         #endif
     }
 

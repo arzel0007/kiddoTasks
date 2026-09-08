@@ -46,14 +46,39 @@ their iPhones; children use a shared iPad as a "Kids Station".
 | Phase | Intent | Status |
 |---|---|---|
 | 0.1 Foundation | Models, repos, design tokens, rules, functions | Done |
-| 0.2 Project + Auth | Real Xcode project, Firebase, login, routing | **In progress** |
+| 0.2 Project + Auth | Real Xcode project, Firebase, login, routing | Done |
 | 1 Kids Station | Child picker → missions → complete → celebrate | Partially built (local) |
 | 2 Parent Center | Family, tasks, approval queue, dashboard | Built (local) |
 | 3 Rewards | Shop + claims + parent redeem | Built (local) |
-| 4 Cloud sync | Auth, Firestore persistence, cross-device | **New — wired, needs deploy + SDK** |
+| 4 Cloud sync | Auth, Firestore persistence, cross-device | **Deployed — 10 functions ACTIVE, rules live, awaiting first real sign-up** |
 | 5 Polish | Tests, a11y, notifications, TestFlight | Not started |
 
 ## Change log (dated)
+
+### 2026-09-08 — Firebase backend deployed to production + iOS SDK 12 integration
+
+Full session detail in [`HANDOVER.md`](HANDOVER.md). Highlights:
+
+**Cloud (project `kiddotasks-app`, Blaze, Firestore asia-southeast1)**
+- Functions deps installed & `tsc --strict` green; `package.json` gained
+  `"main": "lib/index.js"` and Node 22 engine.
+- Firestore rules fixed (`let` illegal in `match`; `rewards` create/update
+  split so creates aren't denied) and deployed.
+- All **10 Cloud Functions deployed and ACTIVE** (Node 22, 1st gen,
+  us-central1) after riding out a compute-API provisioning lag on the new
+  Blaze project; container-image cleanup policy set (1 day).
+- Verified live: `bootstrapFamily` probe → `401 UNAUTHENTICATED
+  "Must be logged in"`. Remaining check: Email/Password provider enabled.
+
+**iOS app**
+- Firebase iOS SDK **12.18.0** via SPM (first packages in the project) +
+  `GoogleService-Info.plist` in the Kiddotasks target → cloud mode active.
+- `FirebaseConfig` emulator call fixed for SDK 12 (`useEmulator(withHost:port:)`).
+- `xcodebuild` **BUILD SUCCEEDED**, 0 errors.
+- `GoogleService-Info.plist` unstaged from git (stays local, git-ignored).
+
+**Docs**
+- `docs/FIREBASE_SETUP.md` SDK guidance 11→12; new `docs/HANDOVER.md`.
 
 ### 2026-09-05 — Cloud sync engine + documentation
 

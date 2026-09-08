@@ -79,7 +79,7 @@ Next steps for the iOS app:
      GoogleService-Info.plist for bundle id com.kiddotasks.app
   2. Drag it into the Kiddotasks group in Xcode (Kiddotasks target checked)
   3. Add the Firebase iOS SDK via SPM if you have not yet:
-     https://github.com/firebase/firebase-ios-sdk (11.0.0)
+     https://github.com/firebase/firebase-ios-sdk (12.0.0)
      Products: FirebaseAuth, FirebaseFirestore, FirebaseFunctions
   4. Build & run → Create family (bootstraps the Firestore data)
 
