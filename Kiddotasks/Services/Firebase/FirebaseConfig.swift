@@ -43,9 +43,10 @@ struct FirebaseConfig {
 
     private static func configureFirestore() {
         let db = Firestore.firestore()
-        var settings = db.settings
-        settings.isPersistenceEnabled = true
-        settings.cacheSizeBytes = 10 * 1024 * 1024
+        let settings = db.settings
+        // Firebase 12: `isPersistenceEnabled`/`cacheSizeBytes` are deprecated in
+        // favor of `cacheSettings`. Persistent on-disk cache, capped at 10 MB.
+        settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 10 * 1024 * 1024))
         db.settings = settings
     }
 
