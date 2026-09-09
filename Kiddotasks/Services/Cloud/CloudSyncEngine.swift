@@ -308,10 +308,41 @@ final class CloudSyncEngine {
     }
 
     private func applyFromCloud(_ snapshot: FamilySnapshot) {
+        // Capture the store state BEFORE applying the cloud pull, so the diff
+        // below compares the incoming snapshot against what this device
+        // already showed. Self-made changes are already in `previous`, so
+        // they never banner back; the very first pull (previous == nil) is
+        // silent by design.
+        let previous = store.currentSnapshot()
         store.applyRemote(snapshot)
         lastFetchedFingerprint = fingerprint(of: snapshot)
         // Keep the push watermark in step so scheduled refreshes aren't blocked.
         lastPushedRevision = store.dataRevision
+
+        // Free-tier notification fallback: banner locally for genuinely
+        // remote changes (kid actions on another device). Mirrors the
+        // server-side push triggers; activates fully once APNs is set up.
+        guard let previous else { return }
+        let childNames = Dictionary(
+            uniqueKeysWithValues: snapshot.children.map { ($0.id, $0.name) }
+        )
+        let taskNames = Dictionary(
+            uniqueKeysWithValues: snapshot.tasks.map { ($0.id, $0.name) }
+        )
+        let rewardNames = Dictionary(
+            uniqueKeysWithValues: snapshot.rewards.map { ($0.id, ($0.name, $0.pointCost)) }
+        )
+        let events = FamilyChangeDetector.detectChanges(
+            older: previous,
+            newer: snapshot,
+            childNames: childNames,
+            taskNames: taskNames,
+            rewardNames: rewardNames
+        )
+        LocalFamilyNotifier.notify(
+            events,
+            enabled: snapshot.family.settings.enableNotifications
+        )
     }
 // MARK: - Cloud reads
 

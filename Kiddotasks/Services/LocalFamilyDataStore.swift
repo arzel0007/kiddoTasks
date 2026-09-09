@@ -663,6 +663,24 @@ final class LocalFamilyDataStore {
         claims.filter { $0.status == .claimed }
     }
 
+    /// Current in-memory state as a snapshot. Used by the sync engine to diff
+    /// before applying a cloud pull (free-tier local-notification fallback).
+    func currentSnapshot() -> FamilySnapshot? {
+        guard let family, let parent else { return nil }
+        return FamilySnapshot(
+            family: family,
+            parent: parent,
+            passwordHash: "",
+            children: children,
+            tasks: tasks,
+            completions: completions,
+            rewards: rewards,
+            claims: claims,
+            transactions: transactions,
+            achievements: achievements
+        )
+    }
+
     // MARK: - Private
 
     private func awardPoints(for completion: TaskCompletion, task: KiddoTask, parentId: String, message: String? = nil) -> TaskCompletion {

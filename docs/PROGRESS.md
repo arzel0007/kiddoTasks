@@ -37,7 +37,10 @@ their iPhones; children use a shared iPad as a "Kids Station".
       bootstrap, pull-on-sign-in, debounced push, live refresh
 - [x] **Push notifications** (`NotificationService` + FCM): task submitted /
       approved / rejected, reward requested / approved / rejected, point
-      adjustments — full coverage across all family devices
+      adjustments — full coverage across all family devices. **Free-tier local
+      fallback** (`FamilyChangeDetector` + `LocalFamilyNotifier`): local
+      banners for remote kid actions work without the paid Apple Developer
+      account while the app is alive; real push activates on `.p8` upload.
 - [ ] Install iPhone/iPad app signed for a device / TestFlight
 - [ ] Widgets, Live Activities (notifications shipped; widgets still open)
 - [ ] Kids-only iPad session gated by PIN without a parent sign-in
@@ -57,6 +60,25 @@ their iPhones; children use a shared iPad as a "Kids Station".
 | 5 Polish | Tests, a11y, notifications, TestFlight | Notifications **done**; a11y/TestFlight open |
 
 ## Change log (dated)
+
+### 2026-09-09 — Free-tier local-notification fallback
+
+No paid Apple Developer membership yet, so remote APNs pushes stay dormant.
+Added a local fallback so parents still get banners for kid actions while the
+app is alive (open or recently backgrounded):
+
+- `FamilyChangeDetector` (`Kiddotasks/Services/Notifications/`): pure diff of
+  consecutive cloud snapshots → `FamilyChangeEvent`s; mirrors the backend
+  trigger coverage (completions, claims, point ledger) with the same dedup +
+  5-minute recency guards.
+- `LocalFamilyNotifier`: schedules `UNUserNotificationCenter` banners, gated on
+  `settings.enableNotifications` + OS permission.
+- `CloudSyncEngine.applyFromCloud` diffs before applying each cloud pull
+  (self-echo suppressed, first pull silent) — covers all three sync paths
+  (restore, snapshot listener, 20s refresh).
+- 11 new unit tests (`FamilyChangeDetectorTests`); full suite green
+  (`xcodebuild test`, 23 → 34 tests, exit 0).
+
 
 ### 2026-09-08 — Push notifications (full family coverage) + FirebaseConfig warning cleanup
 

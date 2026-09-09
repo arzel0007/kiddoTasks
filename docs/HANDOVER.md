@@ -124,6 +124,30 @@ suppressed (the in-app live UI already shows the change); banners appear when
 the app is backgrounded or terminated. Tapping a push opens the app to the
 dashboard (deep-linking to specific screens is future work).
 
+### Free-tier local fallback (works without the paid Apple Developer account)
+
+Remote pushes require an APNs auth key, which requires the $99/yr Apple
+Developer Program. Until that is set up, the app still banners **locally**:
+`CloudSyncEngine.applyFromCloud` diffs each incoming cloud snapshot against
+what the device already showed (`FamilyChangeDetector` in
+`Kiddotasks/Services/Notifications/`) and fires local notifications via
+`LocalFamilyNotifier` for genuinely remote changes (kid actions on another
+device, approvals from the other parent). Guardrails mirror the backend:
+
+- Self-made changes never echo back (the diff baseline already contains them).
+- The very first pull after sign-in is silent (no replay storm).
+- A 5-minute recency window drops stale/offline-catch-up events.
+- Approval-driven ledger writes (`TASK_COMPLETION`, `REWARD_REDEMPTION`) are
+  skipped so an approval produces exactly one banner.
+- Still gated on `settings.enableNotifications` and the OS permission.
+
+Limitation: iOS suspends the app a few minutes after backgrounding, and
+nothing can wake a suspended app without APNs — so the fallback covers the
+"app open or recently backgrounded" case, while the APNs key (when uploaded)
+covers the always-on case. No code changes are needed to activate real push:
+upload the `.p8` per `FIREBASE_SETUP.md` and remote pushes take over.
+
+
 ---
 
 ## 4. How to run, deploy, verify
