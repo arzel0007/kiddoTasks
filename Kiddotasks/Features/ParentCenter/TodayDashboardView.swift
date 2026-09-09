@@ -30,7 +30,7 @@ struct TodayDashboardView: View {
                 .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
                 .padding(.bottom, KiddoTasksDesignTokens.Spacing.xLarge)
             }
-            .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .toolbar(.hidden, for: .navigationBar)
             .alert("Decline mission", isPresented: Binding(
                 get: { rejectingCompletion != nil },

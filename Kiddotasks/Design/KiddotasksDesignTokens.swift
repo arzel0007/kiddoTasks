@@ -247,10 +247,8 @@ struct KiddoPageBackgroundModifier: ViewModifier {
     let color: Color
 
     func body(content: Content) -> some View {
-        ZStack {
-            color.ignoresSafeArea()
-            content
-        }
+        content
+            .background(color)
     }
 }
 
