@@ -683,6 +683,7 @@ struct FamilyView: View {
                 }
                 Section {
                     Button("Sign out", role: .destructive) {
+                        Haptic.warning()
                         appState.signOut()
                     }
                 }

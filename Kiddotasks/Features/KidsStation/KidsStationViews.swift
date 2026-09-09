@@ -1,3 +1,4 @@
+
 import SwiftUI
 
 struct ChildSelectionView: View {
@@ -37,6 +38,7 @@ struct ChildSelectionView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 16)], spacing: 16) {
                     ForEach(Array(appState.familyChildren.enumerated()), id: \.element.id) { index, child in
                         Button {
+                            Haptic.light()
                             appState.selectChildProfile(child)
                         } label: {
                             VStack(spacing: 12) {

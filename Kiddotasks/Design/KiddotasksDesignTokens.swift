@@ -198,13 +198,14 @@ enum CornerRadiusStyle {
 
 extension KiddoTasksDesignTokens {
 
-    /// Flat page background colors. Kids screens are vivid; the parent side stays calm.
+    /// Flat page background colors that adapt to light/dark mode. Kids screens
+    /// stay vivid; the parent side stays calm.
     struct PageBackgrounds {
-        static let kidsPlayground = Color(hex: "#FEF3C7")
-        static let kidsMissionSky = Color(hex: "#DBEAFE")
-        static let kidsRewardPop = Color(hex: "#FCE7F3")
-        static let parentPage = Color(hex: "#F9FAFB")
-        static let welcome = Color(hex: "#FFFFFF")
+        static let kidsPlayground = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.20, green: 0.15, blue: 0.05, alpha: 1) : UIColor(red: 0.996, green: 0.949, blue: 0.781, alpha: 1) })
+        static let kidsMissionSky = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.05, green: 0.10, blue: 0.20, alpha: 1) : UIColor(red: 0.878, green: 0.949, blue: 0.996, alpha: 1) })
+        static let kidsRewardPop = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.20, green: 0.08, blue: 0.15, alpha: 1) : UIColor(red: 0.993, green: 0.906, blue: 0.953, alpha: 1) })
+        static let parentPage = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1) : UIColor(red: 0.976, green: 0.976, blue: 0.980, alpha: 1) })
+        static let welcome = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1) : UIColor.white })
     }
 }
 

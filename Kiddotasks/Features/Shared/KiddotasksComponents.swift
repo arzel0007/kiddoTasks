@@ -513,3 +513,56 @@ struct RewardShopCard: View {
         .kiddotasksShadow(.medium)
     }
 }
+
+// MARK: - Haptic feedback
+
+public enum Haptic {
+    public static func light() { let gen = UIImpactFeedbackGenerator(style: .light); gen.impactOccurred() }
+    public static func medium() { let gen = UIImpactFeedbackGenerator(style: .medium); gen.impactOccurred() }
+    public static func success() { let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.success) }
+    public static func error() { let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.error) }
+    public static func warning() { let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.warning) }
+}
+
+// MARK: - Skeleton loading
+
+public struct SkeletonView: View {
+    var height: CGFloat = 20
+    var cornerRadius: CGFloat = 8
+    @State private var isShimmering = false
+    public init(height: CGFloat = 20, cornerRadius: CGFloat = 8) {
+        self.height = height
+        self.cornerRadius = cornerRadius
+    }
+    public var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(Color.gray.opacity(0.15))
+            .frame(height: height)
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(LinearGradient(colors: [.clear, Color.white.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing))
+                    .offset(x: isShimmering ? 200 : -200)
+                    .animation(.linear(duration: 1.2).repeatForever(autoreverses: false), value: isShimmering)
+            }
+            .clipped()
+            .onAppear { isShimmering = true }
+    }
+}
+
+/// A row of skeleton placeholders for loading list content.
+public struct SkeletonListRow: View {
+    public init() {}
+    public var body: some View {
+        HStack(spacing: 12) {
+            SkeletonView(height: 44, cornerRadius: 12).frame(width: 44)
+            VStack(alignment: .leading, spacing: 8) {
+                SkeletonView(height: 16)
+                SkeletonView(height: 12).frame(width: 120)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}

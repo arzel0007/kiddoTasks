@@ -32,6 +32,16 @@ struct TodayDashboardView: View {
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .toolbar(.hidden, for: .navigationBar)
+            .overlay {
+                if appState.isLoading {
+                    VStack(spacing: 16) {
+                        ForEach(0..<4, id: \.self) { _ in
+                            SkeletonListRow()
+                        }
+                    }
+                    .padding()
+                }
+            }
             .alert("Decline mission", isPresented: Binding(
                 get: { rejectingCompletion != nil },
                 set: { if !$0 { rejectingCompletion = nil } }

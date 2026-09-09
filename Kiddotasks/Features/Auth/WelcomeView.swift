@@ -50,8 +50,12 @@ struct WelcomeView: View {
         }
         .padding(KiddoTasksDesignTokens.Spacing.xLarge)
         .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.welcome)
-        .sheet(isPresented: $showSignUp) { SignUpView() }
-        .sheet(isPresented: $showSignIn) { SignInView() }
+        .sheet(isPresented: $showSignUp) { SignUpView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible) }
+        .sheet(isPresented: $showSignIn) { SignInView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible) }
         .sheet(isPresented: $showJoinWithCode) { JoinWithCodeView() }
     }
 }
@@ -200,6 +204,7 @@ struct SignInView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sign in") {
+                        Haptic.medium()
                         appState.signIn(email: email, password: password) {
                             dismiss()
                         }
