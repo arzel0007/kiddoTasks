@@ -759,11 +759,8 @@ final class LocalFamilyDataStore {
     }
 
     private func seedStarterContent(familyId: String, parentId: String) {
-        let childA = Child(name: "Alex", familyId: familyId, avatar: ChildAvatar.presets[1])
-        let childB = Child(name: "Sam", familyId: familyId, avatar: ChildAvatar.presets[0])
-        children = [childA, childB]
-        family?.memberIds.append(contentsOf: [childA.id, childB.id])
-
+        // Starter tasks/rewards only — NO default kids. The parent adds their
+        // own children in Parent Center after signing up.
         tasks = [
             KiddoTask(
                 familyId: familyId,
@@ -773,7 +770,7 @@ final class LocalFamilyDataStore {
                 category: .household,
                 pointValue: 10,
                 requiresApproval: true,
-                assignedChildIds: [childA.id, childB.id],
+                assignedChildIds: [],
                 recurrence: .daily,
                 createdBy: parentId
             ),
@@ -785,7 +782,7 @@ final class LocalFamilyDataStore {
                 category: .health,
                 pointValue: 5,
                 requiresApproval: false,
-                assignedChildIds: [childA.id, childB.id],
+                assignedChildIds: [],
                 recurrence: .daily,
                 createdBy: parentId
             ),
@@ -797,7 +794,7 @@ final class LocalFamilyDataStore {
                 category: .learning,
                 pointValue: 15,
                 requiresApproval: true,
-                assignedChildIds: [childA.id],
+                assignedChildIds: [],
                 recurrence: .weekdays,
                 createdBy: parentId
             )
