@@ -15,8 +15,15 @@ assumed state. Companion docs: [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)
   Firebase iOS SDK **12.18.0** wired via SPM. Cloud sync engine fully
   integrated: sign-up/sign-in, debounced push, pull-on-sign-in, live listener.
 - **Cloud**: Firebase project **`kiddotasks-app`** is live — Firestore
-  database (asia-southeast1) with repo security rules deployed, **all 10 Cloud
-  Functions ACTIVE**, Blaze plan, container-image cleanup policy set.
+  database (asia-southeast1) with repo security rules deployed, **all 17 Cloud
+  Functions ACTIVE** (10 core + **7 push-notification**), Blaze plan,
+  container-image cleanup policy set.
+- **Push notifications**: full coverage — task submitted/auto-completed/
+  approved/rejected, reward requested/approved/rejected, and point
+  adjustments. Device tokens are server-managed in `deviceTokens/`
+  (`registerDeviceToken` / `unregisterDeviceToken` callables; Firestore rules
+  deny client access). The app registers after sign-in and respects the
+  family's "Family notifications" toggle (`settings.enableNotifications`).
 - **Verified end-to-end at the infra level**: `firebase functions:list` →
   10/10 `ACTIVE`; live probe of `bootstrapFamily` → `401 UNAUTHENTICATED`
   ("Must be logged in"), proving the endpoint runs and is auth-guarded.
@@ -75,14 +82,47 @@ assumed state. Companion docs: [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)
 | Firestore | `(default)`, region **asia-southeast1** (immutable — chosen for PH proximity), production mode + repo rules |
 | Auth | Email/Password (the only provider used) — **verify it's Enabled** |
 | Plan | Blaze (card on file; free quotas cover this app — expected $0/mo) |
-| Functions | 10 × 1st gen, `us-central1`, Node 22 runtime, source `Firebase/functions/src/index.ts` |
+| Functions | 17 × 1st gen (10 core + 7 push), `us-central1`, Node 22 runtime, source `Firebase/functions/src/index.ts` + `notifications.ts` |
 | Artifact cleanup | `gcf-artifacts` repo, images >1 day auto-deleted |
-| Firestore collections | `families`, `parents`, `children`, `tasks`, `taskCompletions`, `rewards`, `rewardClaims`, `pointTransactions`, `achievements` (`FirestoreCollections` in `FirebaseConfig.swift`) |
+| Firestore collections | `families`, `parents`, `children`, `tasks`, `taskCompletions`, `rewards`, `rewardClaims`, `pointTransactions`, `achievements`, `deviceTokens` (push registry — server-only) |
 
 **Data flow recap:** local-first app → every local mutation pushed (800 ms
 debounce) via `pushFamilySnapshot` callable → `families/{id}` snapshot listener
 + 20 s poll pull changes back → sign-in on a new device pulls the whole family
 → point ledger is written **only** by Cloud Functions (rules enforce).
+
+### Push-notification coverage
+
+The backend sends an FCM push for every user-facing event; device tokens live
+in a server-managed `deviceTokens/{fcmToken}` collection (deny-all in rules —
+clients only register through the `registerDeviceToken` / `unregisterDeviceToken`
+callables, which validate family membership). Sends respect
+`families/{id}.settings.enableNotifications` (the existing toggle).
+
+| # | Event | Backend trigger | Recipients | Message (sample) |
+|---|---|---|---|---|
+| 1 | Task submitted, needs approval | `notifyOnTaskCompletionCreated` (status `AWAITING_APPROVAL`) | parents | "Maya finished a task — \"Clean room\" needs your approval" |
+| 2 | Reward requested | `notifyOnRewardClaimCreated` | parents | "Maya wants a reward — \"Movie night\" (30⭐)" |
+| 3 | Task auto-completed (no approval) | `notifyOnTaskCompletionCreated` (status `COMPLETED`) | parents | "Maya completed \"Brush teeth\" (+5⭐)" |
+| 4 | Task approved | `notifyOnTaskCompletionUpdated` (→ `APPROVED`) | all family devices | "Task approved ✅ — Maya: \"Clean room\"" |
+| 5 | Task rejected | `notifyOnTaskCompletionUpdated` (→ `REJECTED`) | all family devices | "Maya: \"Clean room\" — Parent asked to try again" |
+| 6 | Reward approved | `notifyOnRewardClaimUpdated` (→ `APPROVED`) | all family devices | "Reward approved 🎉 — Maya can redeem \"Movie night\"" |
+| 7 | Reward rejected | `notifyOnRewardClaimUpdated` (→ `REJECTED`) | all family devices | "Maya: \"Movie night\" — Parent said not this time" |
+| 8 | Manual point adjustment / bonus | `notifyOnPointTransactionCreated` (skips `TASK_COMPLETION` / `REWARD_REDEMPTION`) | all family devices | "Points added — Maya +10⭐ — Bonus points" |
+| 9 | Point reversal | `notifyOnPointTransactionCreated` (`type == REVERSAL`) | all family devices | "Points deducted — Maya -10⭐ — Reversal of: …" |
+
+Every status transition is deduplicated (the triggers only fire on the
+`status` change, never on re-push of the same state), and a **5-minute recency
+guard** silences replay storms during first-sync / offline catch-up. The
+approval-driven ledger writes are skipped by the point trigger so an approval
+produces exactly one push.
+
+On the app side: `NotificationService` asks for permission on first sign-in,
+feeds the APNs token into FCM (`Messaging.apnsToken`), uploads the FCM token to
+`registerDeviceToken`, and unregisters on sign-out. Foreground pushes are
+suppressed (the in-app live UI already shows the change); banners appear when
+the app is backgrounded or terminated. Tapping a push opens the app to the
+dashboard (deep-linking to specific screens is future work).
 
 ---
 

@@ -35,8 +35,11 @@ their iPhones; children use a shared iPad as a "Kids Station".
 - [x] Firebase backend scaffold: rules, emulators, callable functions
 - [x] **Cloud sync engine** (`CloudSyncEngine`): Auth email/password, family
       bootstrap, pull-on-sign-in, debounced push, live refresh
+- [x] **Push notifications** (`NotificationService` + FCM): task submitted /
+      approved / rejected, reward requested / approved / rejected, point
+      adjustments — full coverage across all family devices
 - [ ] Install iPhone/iPad app signed for a device / TestFlight
-- [ ] Notifications, widgets, Live Activities
+- [ ] Widgets, Live Activities (notifications shipped; widgets still open)
 - [ ] Kids-only iPad session gated by PIN without a parent sign-in
 
 ---
@@ -50,10 +53,42 @@ their iPhones; children use a shared iPad as a "Kids Station".
 | 1 Kids Station | Child picker → missions → complete → celebrate | Partially built (local) |
 | 2 Parent Center | Family, tasks, approval queue, dashboard | Built (local) |
 | 3 Rewards | Shop + claims + parent redeem | Built (local) |
-| 4 Cloud sync | Auth, Firestore persistence, cross-device | **Deployed — 10 functions ACTIVE, rules live, awaiting first real sign-up** |
-| 5 Polish | Tests, a11y, notifications, TestFlight | Not started |
+| 4 Cloud sync | Auth, Firestore persistence, cross-device | **Deployed — 17 functions ACTIVE (10 core + 7 push), rules live, awaiting first real sign-up** |
+| 5 Polish | Tests, a11y, notifications, TestFlight | Notifications **done**; a11y/TestFlight open |
 
 ## Change log (dated)
+
+### 2026-09-08 — Push notifications (full family coverage) + FirebaseConfig warning cleanup
+
+Session adds **7 new Cloud Functions** (17 total live) and wires push end-to-end:
+
+**Backend** (`Firebase/functions/src/notifications.ts`, compiled `tsc --strict` green, deployed)
+- `notifyOnTaskCompletionCreated` — task awaiting approval + auto-completed tasks → parents
+- `notifyOnTaskCompletionUpdated` — approved / rejected → whole family
+- `notifyOnRewardClaimCreated` — reward request → parents
+- `notifyOnRewardClaimUpdated` — reward approved / rejected → whole family
+- `notifyOnPointTransactionCreated` — manual adjustments / bonuses / reversals → whole family
+  (skips approval-driven ledger types so approvals don't double-push; 5-min recency guard kills
+  first-sync replay storms)
+- `registerDeviceToken` / `unregisterDeviceToken` — server-managed `deviceTokens/{fcmToken}` push
+  registry (Firestore rules: deny-all for clients; membership validated server-side)
+
+**iOS app**
+- `NotificationService` (permission, FCM token upload, unregister on sign-out), `AppDelegate`
+  bridging APNs→FCM, `@UIApplicationDelegateAdaptor` in `KiddotasksApp`.
+- `Kiddotasks.entitlements` (aps-environment) + `remote-notification` background mode.
+- `FirebaseMessaging` SPM product added; `register(completion:)` used (Firebase 12 `fcmToken`
+  property is deprecated); `Messaging.apnsToken` fed in `didRegisterForRemoteNotifications`.
+- Hooks in `AppState` after sign-in/sign-up. Foreground pushes suppressed (in-app UI already live).
+- `FirebaseConfig.swift` `cacheSettings` cleanup (iso); full-build **0 warnings**.
+- `firebase deploy --only functions` → 17/17 ACTIVE; `firebase deploy --only firestore:rules` → ✔.
+
+**Docs**: HANDOVER (push matrix + function count + collections incl. `deviceTokens`),
+FIREBASE_SETUP (FCM section + APNs key walkthrough), PROGRESS (this entry).
+
+> **One-time setup remaining (user): upload an APNs Auth Key (.p8)** in
+> Firebase console → Project settings → Cloud Messaging → APNs Authentication
+> Key, then test on a real iPhone/iPad (simulator has no APNs).
 
 ### 2026-09-08 — Firebase backend deployed to production + iOS SDK 12 integration
 

@@ -182,6 +182,17 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     
+    // MARK: - Device Tokens (push notifications)
+    
+    // The FCM token registry is managed exclusively by Cloud Functions
+    // (registerDeviceToken / unregisterDeviceToken). Clients never read or
+    // write this collection directly — a token can only be registered by its
+    // authenticated owner through the callable, which validates family
+    // membership server-side.
+    match /deviceTokens/{fcmToken} {
+      allow read, write: if false;
+    }
+    
     // MARK: - Default: Deny all
     
     match /{document=**} {

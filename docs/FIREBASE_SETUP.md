@@ -54,8 +54,8 @@ to deploying the backend that already ships in this repo.
    - `FirebaseAuth`
    - `FirebaseFirestore`
    - `FirebaseFunctions`
-   - (optional now, recommended soon) `FirebaseAnalytics`,
-     `FirebaseMessaging`, `FirebaseCrashlytics`
+   - `FirebaseMessaging` (required for push notifications)
+   - (optional) `FirebaseAnalytics`, `FirebaseCrashlytics`
 5. Add to the **Kiddotasks** target.
 6. Build once so Xcode resolves the packages (this downloads the SDK — needs
    internet the first time).
@@ -111,6 +111,43 @@ The cloud functions and Firestore rules live in `Firebase/` in this repo.
    is pulled from the cloud.
 4. Make a change (add a task, approve a completion) → it pushes up (debounced
    ~1s) and refreshes down on the other device (family-doc listener + 20s poll).
+
+## Push notifications
+
+This app uses Firebase Cloud Messaging (FCM) for push — when a kid completes a
+task, requests a reward, or a parent approves/rejects something, all family
+devices with the app installed get a banner **even when the app is closed**.
+
+**Server side** (already deployed in this repo):
+
+| Event | FCM trigger | Message |
+|---|---|---|
+| Kid submits a task (approval needed) | `notifyOnTaskCompletionCreated` | "Maya finished a task — \"Clean room\" needs your approval" |
+| Kid submits auto-approved task | `notifyOnTaskCompletionCreated` | "Maya completed \"Brush teeth\" (+5⭐)" |
+| Parent approves a task | `notifyOnTaskCompletionUpdated` | "Task approved ✅ — Maya: \"Clean room\"" |
+| Parent rejects a task | `notifyOnTaskCompletionUpdated` | "Task needs another try — Maya: \"Clean room\"" |
+| Kid requests a reward | `notifyOnRewardClaimCreated` | "Maya wants a reward — \"Movie night\" (30⭐)" |
+| Reward approved | `notifyOnRewardClaimUpdated` | "Reward approved 🎉 — Maya can redeem \"Movie night\"" |
+| Reward rejected | `notifyOnRewardClaimUpdated` | "Reward request declined — Maya: \"Movie night\"" |
+| Points adjusted manually / bonus | `notifyOnPointTransactionCreated` | "Points added — Maya +10⭐ — Bonus points" |
+
+Device tokens are stored server-side in `deviceTokens/{fcmToken}` (managed
+exclusively by the `registerDeviceToken` / `unregisterDeviceToken` callables —
+clients never write that collection directly, and Firestore rules deny it).
+
+**APNs key (one-time setup, required for real devices):**
+1. Apple Developer → Certificates, Identifiers & Profiles → **Keys** → **+**.
+2. Enable **Apple Push Notifications service (APNs)** → keep the **Key ID** and
+   download the **`.p8`** file.
+3. Firebase console → your project → **Project settings → Cloud Messaging** →
+   **Apple app configuration → APNs Authentication Key → Upload**.
+   - Pick the team, paste the Key ID, and upload the `.p8`.
+4. The app's `Kiddotasks.entitlements` already includes
+   `aps-environment` + the `remote-notification` background mode; Xcode
+   automatic signing provisions the cert.
+
+**Testing on the iOS Simulator:** APNs tokens have not worked on simulators
+historically; use a **real iPhone/iPad** to verify pushes.
 
 ## Offline / local development
 

@@ -682,3 +682,7 @@ async function validateChildInFamily(
   const childDoc = await db.collection("children").doc(childId).get();
   return childDoc.exists && childDoc.data()?.familyId === familyId;
 }
+
+// KiddoTasks push notifications: Firestore triggers (taskCompletions /
+// rewardClaims / pointTransactions( + the server-managed device-token registry.
+export * from "./notifications";

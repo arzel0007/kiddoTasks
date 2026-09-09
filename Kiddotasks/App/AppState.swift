@@ -111,6 +111,7 @@ final class AppState {
                     )
                     familyBootstrapPIN = pin
                     completion?()
+                    await registerForPushWhenCloudEnabled()
                 } catch {
                     authenticationError = friendlyAuthError(error)
                 }
@@ -146,6 +147,7 @@ final class AppState {
                     defer { isLoading = false }
                     try await cloudSync.signIn(email: email, password: password)
                     completion?()
+                    await registerForPushWhenCloudEnabled()
                 } catch {
                     authenticationError = friendlyAuthError(error)
                 }
@@ -183,6 +185,23 @@ final class AppState {
         interfaceOverride = .automatic
         familyBootstrapPIN = nil
         cloudSync.signOut()
+        #if canImport(FirebaseFunctions) && canImport(FirebaseMessaging) && canImport(FirebaseCore)
+        Task { @MainActor in
+            await NotificationService.shared.unregisterToken()
+        }
+        #endif
+    }
+
+    /// After a successful cloud sign-in/sign-up, request notification
+    /// permission and upload this device's FCM token. Runs on the main actor
+    /// so NotificationService (which is @MainActor) can be touched safely.
+    private func registerForPushWhenCloudEnabled() async {
+        #if canImport(UserNotifications)
+        let granted = await NotificationService.shared.requestAuthorizationIfNeeded()
+        if granted {
+            await NotificationService.shared.uploadTokenIfNeeded()
+        }
+        #endif
     }
 
     /// Sends a password reset email via Firebase.
