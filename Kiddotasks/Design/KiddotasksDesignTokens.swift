@@ -208,6 +208,34 @@ extension KiddoTasksDesignTokens {
     }
 }
 
+// MARK: - Kids palette & animations
+
+extension KiddoTasksDesignTokens {
+
+    /// Vivid, playful solid colors for the Kids Station. No gradients.
+    struct KidsColors {
+        static let sunshine = Color(hex: "#FBBF24")
+        static let bubblegum = Color(hex: "#F472B6")
+        static let ocean = Color(hex: "#38BDF8")
+        static let lime = Color(hex: "#A3E635")
+        static let grape = Color(hex: "#C084FC")
+        static let coral = Color(hex: "#FB923C")
+        static let mint = Color(hex: "#34D399")
+        static let strawberry = Color(hex: "#FB7185")
+        static let sky = Color(hex: "#7DD3FC")
+        static let lavender = Color(hex: "#DDD6FE")
+        static let peach = Color(hex: "#FDBA74")
+    }
+
+    /// Spring animations tuned for playful micro-interactions.
+    struct KidsAnimations {
+        static let bouncy = SwiftUI.Animation.spring(response: 0.4, dampingFraction: 0.5)
+        static let gentle = SwiftUI.Animation.spring(response: 0.5, dampingFraction: 0.7)
+        static let quick = SwiftUI.Animation.spring(response: 0.25, dampingFraction: 0.6)
+        static let slowBounce = SwiftUI.Animation.spring(response: 0.6, dampingFraction: 0.4)
+    }
+}
+
 // MARK: - Category theming
 
 /// A color pair used to theme cards and icon tiles — flat, no gradients.

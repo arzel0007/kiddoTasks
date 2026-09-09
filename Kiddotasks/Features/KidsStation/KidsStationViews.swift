@@ -25,14 +25,17 @@ struct ChildSelectionView: View {
             .padding(.horizontal)
 
             if appState.familyChildren.isEmpty {
-                EmptyStateView(
-                    emoji: "🧒",
-                    title: "No kids yet",
-                    message: "Ask a parent to add a child in the Parent Center."
-                )
+                VStack(spacing: 16) {
+                    FloatingEmoji(emoji: "🧒", size: 72)
+                    EmptyStateView(
+                        emoji: "",
+                        title: "No kids yet",
+                        message: "Ask a parent to add a child in the Parent Center."
+                    )
+                }
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 16)], spacing: 16) {
-                    ForEach(appState.familyChildren) { child in
+                    ForEach(Array(appState.familyChildren.enumerated()), id: \.element.id) { index, child in
                         Button {
                             appState.selectChildProfile(child)
                         } label: {
@@ -53,7 +56,8 @@ struct ChildSelectionView: View {
                                     .strokeBorder(Color(hex: child.avatar.colorHex).opacity(0.25), lineWidth: 2)
                             }
                         }
-                        .buttonStyle(KiddoPressStyle())
+                        .buttonStyle(ExtraBouncyPressStyle())
+                        .popIn(delay: Double(index) * 0.08)
                     }
                 }
                 .padding()
@@ -67,17 +71,25 @@ struct ChildSelectionView: View {
 
 struct KidsStationView: View {
     @Environment(AppState.self) private var appState
+    @State private var selectedTab = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             MissionsView()
                 .tabItem { Label("Missions", systemImage: "star.fill") }
+                .tag(0)
             RewardShopView()
                 .tabItem { Label("Shop", systemImage: "gift.fill") }
+                .tag(1)
             AchievementsView()
                 .tabItem { Label("Badges", systemImage: "medal.fill") }
+                .tag(2)
         }
-        .tint(KiddoTasksDesignTokens.Colors.primary)
+        .tint(KiddoTasksDesignTokens.Colors.accent)
+        .onChange(of: selectedTab) { _, _ in
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
     }
 }
 
@@ -97,11 +109,14 @@ struct MissionsView: View {
                 if let child {
                     let missions = appState.store.tasksForChild(child.id)
                     if missions.isEmpty {
-                        EmptyStateView(emoji: "🎯", title: "All clear", message: "No missions for today.")
+                        VStack(spacing: 16) {
+                            FloatingEmoji(emoji: "🎯", size: 72)
+                            EmptyStateView(emoji: "", title: "All clear", message: "No missions for today.")
+                        }
                     } else {
                         ScrollView {
                             VStack(spacing: 12) {
-                                ForEach(missions) { task in
+                                ForEach(Array(missions.enumerated()), id: \.element.id) { index, task in
                                     Button {
                                         selectedTask = task
                                     } label: {
@@ -111,6 +126,7 @@ struct MissionsView: View {
                                         )
                                     }
                                     .buttonStyle(.plain)
+                                    .popIn(delay: Double(index) * 0.06)
                                 }
                             }
                             .padding()
@@ -199,13 +215,15 @@ struct TaskDetailView: View {
                     ) {
                         submitCompletion()
                     }
+                    .buttonStyle(ExtraBouncyPressStyle())
                 } else {
                     PrimaryButton(
-                        title: "I did it!",
+                        title: "I did it! 🎉",
                         color: KiddoTasksDesignTokens.Colors.success
                     ) {
                         submitCompletion()
                     }
+                    .buttonStyle(ExtraBouncyPressStyle())
                 }
                 Spacer()
             }
@@ -270,6 +288,7 @@ struct CelebrationView: View {
 struct RewardShopView: View {
     @Environment(AppState.self) private var appState
     @State private var message: String?
+    @State private var wiggleTrigger = false
 
     var child: Child? {
         guard let selected = appState.currentChildProfile else { return nil }
@@ -282,18 +301,33 @@ struct RewardShopView: View {
                 if let child {
                     let shop = appState.store.rewards.filter { $0.isActive && $0.isEligibleFor(child.id) }
                     if shop.isEmpty {
-                        EmptyStateView(emoji: "🎁", title: "Shop is empty", message: "Parents can add rewards.")
+                        VStack(spacing: 16) {
+                            FloatingEmoji(emoji: "🎁", size: 72)
+                            EmptyStateView(emoji: "", title: "Shop is empty", message: "Parents can add rewards.")
+                        }
                     } else {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-                                ForEach(shop) { reward in
+                                ForEach(Array(shop.enumerated()), id: \.element.id) { index, reward in
                                     Button {
                                         claim(reward, child: child)
                                     } label: {
-                                        RewardShopCard(reward: reward, points: child.activePoints)
+                                        ZStack {
+                                            RewardShopCard(reward: reward, points: child.activePoints)
+                                            if reward.canAfford(with: child.activePoints) {
+                                                SparkleOverlay(color: KiddoTasksDesignTokens.KidsColors.sunshine)
+                                            }
+                                        }
                                     }
                                     .buttonStyle(.plain)
                                     .disabled(!reward.canAfford(with: child.activePoints))
+                                    .wiggle(trigger: wiggleTrigger && reward.canAfford(with: child.activePoints))
+                                    .popIn(delay: Double(index) * 0.06)
+                                    .onAppear {
+                                        if reward.canAfford(with: child.activePoints) {
+                                            wiggleTrigger = true
+                                        }
+                                    }
                                 }
                             }
                             .padding()
@@ -336,20 +370,23 @@ struct AchievementsView: View {
             let earned = appState.store.achievements.filter { $0.childId == appState.currentChildProfile?.id }
             Group {
                 if earned.isEmpty {
-                    EmptyStateView(
-                        emoji: "🏅",
-                        title: "No badges yet",
-                        message: "Finish missions to earn badges."
-                    )
+                    VStack(spacing: 16) {
+                        FloatingEmoji(emoji: "🏅", size: 72)
+                        EmptyStateView(
+                            emoji: "",
+                            title: "No badges yet",
+                            message: "Finish missions to earn badges."
+                        )
+                    }
                 } else {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-                            ForEach(earned) { achievement in
+                            ForEach(Array(earned.enumerated()), id: \.element.id) { index, achievement in
                                 VStack(spacing: 10) {
                                     Text(achievement.type.emoji)
                                         .font(.system(size: 44))
                                         .frame(width: 76, height: 76)
-                                        .background(Circle().fill(Color(hex: "#F59E0B")))
+                                        .background(Circle().fill(KiddoTasksDesignTokens.KidsColors.sunshine))
                                     Text(achievement.type.displayName)
                                         .font(KiddoTasksDesignTokens.Typography.titleSmall)
                                         .multilineTextAlignment(.center)
@@ -364,6 +401,7 @@ struct AchievementsView: View {
                                 .background(.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                                 .kiddotasksShadow(.medium)
+                                .popIn(delay: Double(index) * 0.08)
                             }
                         }
                         .padding()

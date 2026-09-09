@@ -11,6 +11,182 @@ struct KiddoPressStyle: ButtonStyle {
     }
 }
 
+// MARK: - Extra bouncy press style
+
+/// A more dramatic press animation for kid-facing buttons — bigger scale
+/// plus a slight rotation that snaps back with a springy overshoot.
+struct ExtraBouncyPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.90 : 1)
+            .rotationEffect(.degrees(configuration.isPressed ? -3 : 0))
+            .animation(KiddoTasksDesignTokens.KidsAnimations.bouncy, value: configuration.isPressed)
+    }
+}
+
+// MARK: - Floating emoji
+
+/// An emoji that gently bobs up and down forever. Used in empty states
+/// and as decorative flourishes so the screen never feels static.
+struct FloatingEmoji: View {
+    let emoji: String
+    var size: CGFloat = 56
+    var duration: Double = 2.0
+
+    @State private var isFloating = false
+
+    var body: some View {
+        Text(emoji)
+            .font(.system(size: size))
+            .offset(y: isFloating ? -12 : 12)
+            .animation(.easeInOut(duration: duration).repeatForever(autoreverses: true), value: isFloating)
+            .onAppear { isFloating = true }
+    }
+}
+
+// MARK: - Celebration burst
+
+/// A burst of emoji particles that radiate outward and fade. Trigger by
+/// toggling `trigger` — the animation plays once each time it flips true.
+struct CelebrationBurst: View {
+    let emojis: [String]
+    var trigger: Bool
+
+    @State private var particles: [CelebrationParticle] = []
+
+    var body: some View {
+        ZStack {
+            ForEach(particles) { particle in
+                Text(particle.emoji)
+                    .font(.system(size: particle.size))
+                    .position(particle.position)
+                    .opacity(particle.opacity)
+            }
+        }
+        .allowsHitTesting(false)
+        .onChange(of: trigger) { _, newValue in
+            if newValue { burst() }
+        }
+    }
+
+    private func burst() {
+        particles = (0..<12).map { i in
+            CelebrationParticle(
+                emoji: emojis.randomElement() ?? "⭐",
+                angle: Double(i) * 30,
+                distance: Double.random(in: 60...140)
+            )
+        }
+        withAnimation(.easeOut(duration: 0.8)) {
+            for i in particles.indices {
+                let dx = CGFloat(cos(particles[i].angle * .pi / 180) * particles[i].distance)
+                let dy = CGFloat(sin(particles[i].angle * .pi / 180) * particles[i].distance)
+                particles[i].position = CGPoint(
+                    x: particles[i].position.x + dx,
+                    y: particles[i].position.y + dy
+                )
+                particles[i].opacity = 0
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            particles = []
+        }
+    }
+}
+
+private struct CelebrationParticle: Identifiable {
+    let id = UUID()
+    let emoji: String
+    let angle: Double
+    let distance: Double
+    var position: CGPoint = .zero
+    var opacity: Double = 1
+    var size: CGFloat = 28
+}
+
+// MARK: - Pop-in modifier
+
+/// Scales a view in with a bounce when it first appears. Use on cards and
+/// badges so the screen feels alive as content loads.
+struct PopInModifier: ViewModifier {
+    let delay: Double
+    @State private var isVisible = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isVisible ? 1 : 0.5)
+            .opacity(isVisible ? 1 : 0)
+            .onAppear {
+                withAnimation(KiddoTasksDesignTokens.KidsAnimations.bouncy.delay(delay)) {
+                    isVisible = true
+                }
+            }
+    }
+}
+
+extension View {
+    func popIn(delay: Double = 0) -> some View {
+        modifier(PopInModifier(delay: delay))
+    }
+}
+
+// MARK: - Wiggle modifier
+
+/// Wiggles a view left and right. Use to draw attention to interactive
+/// elements (e.g. rewards the kid can afford).
+struct WiggleModifier: ViewModifier {
+    let trigger: Bool
+    @State private var angle: Double = 0
+
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.degrees(angle))
+            .onChange(of: trigger) { _, newValue in
+                if newValue {
+                    withAnimation(.easeInOut(duration: 0.12).repeatCount(3, autoreverses: true)) {
+                        angle = 4
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        angle = 0
+                    }
+                }
+            }
+    }
+}
+
+extension View {
+    func wiggle(trigger: Bool) -> some View {
+        modifier(WiggleModifier(trigger: trigger))
+    }
+}
+
+// MARK: - Sparkle overlay
+
+/// Tiny sparkle particles that orbit around a view. Use on affordable
+/// rewards or selected avatars to make them feel magical.
+struct SparkleOverlay: View {
+    let color: Color
+    @State private var isAnimating = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<5, id: \.self) { i in
+                Text("✨")
+                    .font(.system(size: 14))
+                    .foregroundStyle(color)
+                    .offset(
+                        x: CGFloat(cos(Double(i) * 72 * .pi / 180 + (isAnimating ? .pi : 0))) * 32,
+                        y: CGFloat(sin(Double(i) * 72 * .pi / 180 + (isAnimating ? .pi : 0))) * 32
+                    )
+                    .opacity(isAnimating ? 0.3 : 1)
+            }
+        }
+        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+        .onAppear { isAnimating = true }
+        .allowsHitTesting(false)
+    }
+}
+
 // MARK: - PrimaryButton
 
 struct PrimaryButton: View {
