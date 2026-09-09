@@ -505,6 +505,20 @@ struct FamilyView: View {
     @State private var showFamilyPhotoPicker = false
     @State private var pickedFamilyPhoto: PhotosPickerItem?
 
+    /// Clears cloud data (if any), resets the local store, and either signs out
+    /// (full reset) or stays signed in with retained kids.
+    private func performReset(retainKids: Bool) {
+        Task {
+            try? await appState.cloudSync.deleteCloudData()
+            await MainActor.run {
+                appState.store.resetAllData(retainKids: retainKids)
+                if !retainKids {
+                    appState.signOut()
+                }
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -718,14 +732,20 @@ struct FamilyView: View {
             } message: {
                 Text("Their history and earned stars stay in the family record.")
             }
-            .alert("Reset all data?", isPresented: $showResetConfirm) {
-                Button("Reset", role: .destructive) {
-                    appState.store.resetAllData()
-                    appState.signOut()
+            .confirmationDialog(
+                "Reset all data?",
+                isPresented: $showResetConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Reset Everything", role: .destructive) {
+                    performReset(retainKids: false)
+                }
+                Button("Keep Kids", role: .destructive) {
+                    performReset(retainKids: true)
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("This will permanently delete your family, kids, tasks, rewards, and all history. This cannot be undone.")
+                Text("This deletes tasks, rewards, points, and history. You can choose to keep your kids.")
             }
         }
     }

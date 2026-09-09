@@ -223,6 +223,18 @@ final class CloudSyncEngine {
         status = isAvailable ? .signedOut : .unavailable
     }
 
+    /// Deletes all family data from Firestore. No-op when Firebase is not
+    /// configured (local-only mode). Used by the "Reset all data" flow so a
+    /// subsequent sign-in on any device does not pull the old data back.
+    func deleteCloudData() async throws {
+        #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
+        guard isAvailable else { return }
+        _ = try await Functions.functions()
+            .httpsCallable("deleteFamilyData")
+            .call([:])
+        #endif
+    }
+
     /// Sends a password reset email via Firebase Auth.
     func sendPasswordReset(email: String) async throws {
         #if canImport(FirebaseAuth)

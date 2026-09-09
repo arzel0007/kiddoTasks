@@ -557,6 +557,52 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
 });
 
 /**
+ * Deletes every Firestore document belonging to the caller's family. Used by the
+ * "Reset all data" flow so a subsequent sign-in on any device does not pull the
+ * old data back. Deletes the family doc and parent doc last so authorization can
+ * still be checked against them for as long as possible.
+ */
+export const deleteFamilyData = functions.https.onCall(async (_data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+  }
+  const uid = context.auth.uid;
+  const parentDoc = await db.collection("parents").doc(uid).get();
+  if (!parentDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Parent not found");
+  }
+  const familyId = parentDoc.data()?.familyId;
+  if (!familyId || typeof familyId !== "string") {
+    throw new functions.https.HttpsError("not-found", "Family not found");
+  }
+
+  const collections = [
+    "children",
+    "tasks",
+    "taskCompletions",
+    "rewards",
+    "rewardClaims",
+    "pointTransactions",
+    "achievements",
+  ];
+
+  for (const collection of collections) {
+    const snapshot = await db.collection(collection)
+      .where("familyId", "==", familyId)
+      .get();
+    if (snapshot.empty) continue;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  await db.collection("families").doc(familyId).delete();
+  await db.collection("parents").doc(uid).delete();
+
+  return { ok: true };
+});
+
+/**
  * Recursively converts a JSON callable payload into Firestore-safe values,
  * turning ISO-8601 date strings into real dates so Firestore stores timestamps.
  */

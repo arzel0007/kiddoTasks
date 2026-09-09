@@ -175,7 +175,11 @@ final class LocalFamilyDataStore {
     // MARK: - Reset all data (requirement #10)
 
     /// Wipe everything and start fresh.
-    func resetAllData() {
+    /// - Parameter retainKids: When true, kids' profiles (name, avatar, photo,
+    ///   date of birth) are preserved in a new empty family with zeroed points.
+    func resetAllData(retainKids: Bool = false) {
+        let kidsToRetain = retainKids ? children : []
+
         deleteAllLocalData()
         family = nil
         parent = nil
@@ -186,6 +190,10 @@ final class LocalFamilyDataStore {
         claims = []
         transactions = []
         achievements = []
+
+        if retainKids && !kidsToRetain.isEmpty {
+            createNewFamilyWithRetainedKids(kidsToRetain)
+        }
     }
 
     func deleteAllLocalData() {
@@ -200,6 +208,42 @@ final class LocalFamilyDataStore {
         claims = []
         transactions = []
         achievements = []
+    }
+
+    /// Creates a fresh family and parent, then re-adds previously existing kids
+    /// as new Child instances (familyId is immutable, so copies are required).
+    /// All retained kids start with zero active and total points.
+    private func createNewFamilyWithRetainedKids(_ kids: [Child]) {
+        let familyId = UUID().uuidString
+        let parentId = UUID().uuidString
+
+        let newFamily = Family(id: familyId, name: "My Family", memberIds: [parentId])
+        let newParent = Parent(
+            id: parentId,
+            email: "",
+            displayName: "Parent",
+            familyId: familyId,
+            role: .owner,
+            lastSignInAt: Date()
+        )
+
+        family = newFamily
+        parent = newParent
+
+        for kid in kids {
+            let newChild = Child(
+                name: kid.name,
+                familyId: familyId,
+                avatar: kid.avatar,
+                photoData: kid.photoData,
+                dateOfBirth: kid.dateOfBirth
+            )
+            children.append(newChild)
+            newFamily.memberIds.append(newChild.id)
+        }
+
+        persist(passwordHash: "")
+        UserDefaults.standard.set(parentId, forKey: Self.sessionKey)
     }
 
     // MARK: - Cloud sync support
