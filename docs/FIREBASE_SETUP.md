@@ -142,9 +142,18 @@ clients never write that collection directly, and Firestore rules deny it).
 3. Firebase console → your project → **Project settings → Cloud Messaging** →
    **Apple app configuration → APNs Authentication Key → Upload**.
    - Pick the team, paste the Key ID, and upload the `.p8`.
-4. The app's `Kiddotasks.entitlements` already includes
-   `aps-environment` + the `remote-notification` background mode; Xcode
-   automatic signing provisions the cert.
+4. Re-add the push entitlement to `Kiddotasks/Kiddotasks.entitlements`
+   (uncomment the two lines in its comment block):
+   `<key>aps-environment</key><string>development</string>`
+   together with the existing `remote-notification` background mode — Xcode
+   automatic signing then provisions the cert.
+
+   > **Free Apple Developer accounts:** `aps-environment` is intentionally
+   > **commented out** right now — free personal teams cannot sign push
+   > entitlements, and leaving it in breaks device builds with 3 signing
+   > errors. The app still ships local-notification banners via the sync
+   > engine (`FamilyChangeDetector` + `LocalFamilyNotifier`); only the
+   > "banner while the app is fully closed" case needs the paid program.
 
 **Testing on the iOS Simulator:** APNs tokens have not worked on simulators
 historically; use a **real iPhone/iPad** to verify pushes.

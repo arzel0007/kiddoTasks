@@ -2,7 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>aps-environment</key>
-	<string>development</string>
+    <!-- aps-environment is TEMPORARILY DISABLED: free Apple Developer teams
+         cannot sign push entitlements (build errors on device). The app ships
+         with the local-notification fallback instead (FamilyChangeDetector +
+         LocalFamilyNotifier). When you enroll in the paid program ($99/yr),
+         re-add these two lines and the dormant push pipeline activates:
+         <key>aps-environment</key><string>development</string>
+         See docs/FIREBASE_SETUP.md (APNs key upload section). -->
 </dict>
 </plist>
