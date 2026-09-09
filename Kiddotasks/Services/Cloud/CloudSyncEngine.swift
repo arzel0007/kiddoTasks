@@ -50,8 +50,11 @@ final class CloudSyncEngine {
     private var refreshTask: Task<Void, Never>?
     private var pendingPush: Task<Void, Never>?
     private var isRefreshing = false
-    private var lastPushedRevision: Int = -1
+        private var lastPushedRevision: Int = -1
     private var lastFetchedFingerprint: String?
+    /// Child IDs that were present the last time we successfully pushed the
+    /// snapshot. Used to compute deletions in `makePushPayload`.
+    private var lastPushedChildIds: Set<String> = []
 
     /// True when the Firebase SDK is linked AND the app was configured with a
     /// GoogleService-Info.plist at launch.
@@ -214,6 +217,7 @@ final class CloudSyncEngine {
         pendingPush = nil
         lastFetchedFingerprint = nil
         lastPushedRevision = -1
+        lastPushedChildIds = []
         isRefreshing = false
         store.signOut()
         status = isAvailable ? .signedOut : .unavailable
@@ -299,6 +303,7 @@ final class CloudSyncEngine {
                     ])
             }
             lastPushedRevision = store.dataRevision
+            lastPushedChildIds = Set(snapshot.children.map(\.id))
             status = .signedIn
         } catch {
             status = .error(error.localizedDescription)
@@ -441,7 +446,7 @@ final class CloudSyncEngine {
 
     // MARK: - Serialization helpers
 
-    private func makePushPayload(_ snapshot: FamilySnapshot) throws -> [String: Any] {
+        private func makePushPayload(_ snapshot: FamilySnapshot) throws -> [String: Any] {
         #if canImport(FirebaseFirestore)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -450,6 +455,11 @@ final class CloudSyncEngine {
             let data = try encoder.encode(value)
             return try JSONSerialization.jsonObject(with: data)
         }
+
+        let childIds = snapshot.children.map(\.id)
+        // Child IDs that were tracked locally last push but are no longer present.
+        // The server uses these to delete orphaned child (sub)documents.
+        let removedChildren = lastPushedChildIds.subtracting(childIds)
 
         return [
             "familyId": snapshot.family.id,
@@ -461,6 +471,7 @@ final class CloudSyncEngine {
             "claims": try enc(snapshot.claims),
             "transactions": try enc(snapshot.transactions),
             "achievements": try enc(snapshot.achievements),
+            "removedChildren": Array(removedChildren),
         ]
         #else
         throw FirebaseError.authNotAvailable
@@ -506,6 +517,13 @@ final class CloudSyncEngine {
             return number
         case is NSNull, is Void:
             return NSNull()
+        case let data as Data:
+            // Firestore stores `Data` as a binary blob. Round-trip it through a
+            // base64 string so `JSONDecoder` (which decodes base64 back into
+            // `Data`) preserves photo bytes instead of stringifying them.
+            return data.base64EncodedString()
+        case let data as NSData:
+            return data.base64EncodedString()
         default:
             return String(describing: value)
         }
