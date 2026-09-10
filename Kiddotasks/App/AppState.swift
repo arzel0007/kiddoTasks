@@ -202,12 +202,22 @@ final class AppState {
         currentChildProfile = nil
         interfaceOverride = .automatic
         familyBootstrapPIN = nil
+        authenticationError = nil
+        successMessage = nil
+        isLoading = false
         cloudSync.signOut()
         #if canImport(FirebaseFunctions) && canImport(FirebaseMessaging) && canImport(FirebaseCore)
         Task { @MainActor in
             await NotificationService.shared.unregisterToken()
         }
         #endif
+    }
+
+    /// Clears auth-sheet messages so a failed Sign in does not reappear when
+    /// the user opens Create family or Join.
+    func clearAuthMessages() {
+        authenticationError = nil
+        successMessage = nil
     }
 
     /// After a successful cloud sign-in/sign-up, request notification

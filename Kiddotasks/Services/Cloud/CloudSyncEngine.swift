@@ -164,8 +164,20 @@ final class CloudSyncEngine {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
 
-        let authResult = try await Auth.auth().createUser(withEmail: email, password: password)
-        let uid = authResult.user.uid
+        let uid: String
+        do {
+            let authResult = try await Auth.auth().createUser(withEmail: email, password: password)
+            uid = authResult.user.uid
+        } catch {
+            // Account already exists (common after Reset all data, which wipes
+            // family docs but leaves the Firebase Auth user). Recover by signing
+            // in — signIn re-bootstraps a family if the docs are gone.
+            if Self.isEmailAlreadyInUse(error) {
+                try await signIn(email: email, password: password)
+                return store.family?.settings.kidsStationPIN ?? "1234"
+            }
+            throw error
+        }
 
         let callResult = try await Functions.functions()
             .httpsCallable("bootstrapFamily")
@@ -208,6 +220,8 @@ final class CloudSyncEngine {
 
     /// Signs in an existing account. Pushes any dirty local work first, then
     /// pulls the family — so switching devices never discards unpushed edits.
+    /// If cloud parent/family docs are missing (e.g. after Reset all data),
+    /// re-bootstraps a family for this Auth user so the account is usable again.
     func signIn(email: String, password: String) async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
@@ -221,10 +235,25 @@ final class CloudSyncEngine {
         }
 
         if store.family != nil, hasUnsyncedLocalChanges {
-            try await pushSnapshotAndWait()
+            try? await pushSnapshotAndWait()
         }
 
-        let snapshot = try await fetchSnapshot(uid: uid, email: email)
+        let snapshot: FamilySnapshot
+        do {
+            snapshot = try await fetchSnapshot(uid: uid, email: email)
+        } catch {
+            // Auth user exists but family/parent docs are gone (Reset wiped them).
+            // Create a fresh cloud family for this account instead of dead-ending.
+            if Self.isMissingCloudFamily(error) {
+                try await rebootstrapFamilyAfterMissingDocs(uid: uid, email: email)
+                startListening()
+                startPeriodicRefresh()
+                status = .signedIn
+                return
+            }
+            throw error
+        }
+
         if hasUnsyncedLocalChanges {
             // Still dirty — keep local, wire listeners, let retries finish.
             startListening()
@@ -239,6 +268,70 @@ final class CloudSyncEngine {
         #else
         throw FirebaseError.authNotAvailable
         #endif
+    }
+
+    /// Recreates family + parent docs for an Auth user whose cloud family was
+    /// deleted (Reset all data). Seeds a clean local store and pushes starter content.
+    private func rebootstrapFamilyAfterMissingDocs(uid: String, email: String) async throws {
+        #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
+        let displayName = store.parent?.displayName ?? "Parent"
+        let familyName = store.family?.name ?? "Our family"
+        store.clearSyncMeta()
+        store.deleteAllLocalData()
+
+        let callResult = try await Functions.functions()
+            .httpsCallable("bootstrapFamily")
+            .call([
+                "familyName": familyName,
+                "displayName": displayName,
+                "email": email,
+            ])
+        guard let data = callResult.data as? [String: Any],
+              let familyId = data["familyId"] as? String else {
+            throw FirebaseError.operationFailed("Could not restore your family. Try again.")
+        }
+        let pin = (data["kidsStationPIN"] as? String) ?? "1234"
+        let familyCode = data["familyCode"] as? String
+
+        try store.seedLocalFamilyAfterCloudBootstrap(
+            familyId: familyId,
+            parentId: uid,
+            familyName: familyName,
+            parentName: displayName,
+            email: email
+        )
+        store.family?.settings.kidsStationPIN = pin
+        if let familyCode, let family = store.family {
+            family.familyCode = familyCode
+        }
+        try await pushSnapshotAndWait()
+        store.markPushAcknowledged()
+        #endif
+    }
+
+    private static func isEmailAlreadyInUse(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        // FIRAuthErrorCodeEmailAlreadyInUse = 17007
+        if nsError.domain.contains("FIRAuthErrorDomain"), nsError.code == 17007 {
+            return true
+        }
+        let message = error.localizedDescription.lowercased()
+        return message.contains("already in use")
+            || message.contains("already exists")
+            || message.contains("email address is already")
+    }
+
+    private static func isMissingCloudFamily(_ error: Error) -> Bool {
+        if let firebaseError = error as? FirebaseError {
+            switch firebaseError {
+            case .documentNotFound, .invalidFamily:
+                return true
+            default:
+                return false
+            }
+        }
+        let message = error.localizedDescription.lowercased()
+        return message.contains("not found") || message.contains("no document")
     }
 
     /// Co-parent joins an existing cloud family with their own Firebase account.
@@ -316,10 +409,10 @@ final class CloudSyncEngine {
     func deleteCloudData() async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { return }
+        defer { store.clearSyncMeta() }
         _ = try await Functions.functions()
             .httpsCallable("deleteFamilyData")
             .call([:])
-        store.clearSyncMeta()
         #endif
     }
 

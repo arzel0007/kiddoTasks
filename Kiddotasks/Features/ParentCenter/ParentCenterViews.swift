@@ -512,6 +512,7 @@ struct FamilyView: View {
             try? await appState.cloudSync.deleteCloudData()
             await MainActor.run {
                 appState.store.resetAllData(retainKids: retainKids)
+                appState.store.clearSyncMeta()
                 if !retainKids {
                     appState.signOut()
                 }

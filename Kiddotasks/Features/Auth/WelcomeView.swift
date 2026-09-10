@@ -57,6 +57,15 @@ struct WelcomeView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible) }
         .sheet(isPresented: $showJoinWithCode) { JoinWithCodeView() }
+        .onChange(of: showSignUp) { _, isShowing in
+            if isShowing { appState.clearAuthMessages() }
+        }
+        .onChange(of: showSignIn) { _, isShowing in
+            if isShowing { appState.clearAuthMessages() }
+        }
+        .onChange(of: showJoinWithCode) { _, isShowing in
+            if isShowing { appState.clearAuthMessages() }
+        }
     }
 }
 
@@ -101,9 +110,13 @@ struct SignUpView: View {
                 }
             }
             .navigationTitle("New family")
+            .onAppear { appState.clearAuthMessages() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        appState.clearAuthMessages()
+                        dismiss()
+                    }
                 }
                 if appState.isLoading {
                     ToolbarItem(placement: .principal) {
@@ -193,9 +206,13 @@ struct SignInView: View {
                 }
             }
             .navigationTitle("Sign in")
+            .onAppear { appState.clearAuthMessages() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        appState.clearAuthMessages()
+                        dismiss()
+                    }
                 }
                 if appState.isLoading {
                     ToolbarItem(placement: .principal) {
@@ -261,9 +278,13 @@ struct JoinWithCodeView: View {
                 }
             }
             .navigationTitle("Join family")
+            .onAppear { appState.clearAuthMessages() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        appState.clearAuthMessages()
+                        dismiss()
+                    }
                 }
                 if appState.isLoading {
                     ToolbarItem(placement: .principal) {
