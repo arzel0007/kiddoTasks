@@ -218,62 +218,99 @@ final class CloudSyncEngine {
         #endif
     }
 
-    /// Signs in an existing account. Pushes any dirty local work first, then
-    /// pulls the family — so switching devices never discards unpushed edits.
-    /// If cloud parent/family docs are missing (e.g. after Reset all data),
-    /// re-bootstraps a family for this Auth user so the account is usable again.
+    /// Signs in an existing account.
+    ///
+    /// Always ends with a loaded local family, or throws. Never returns
+    /// success while the store is unauthenticated — that dismissed the sheet
+    /// and bounced the user back to Welcome.
     func signIn(email: String, password: String) async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
+        print("[Auth] signIn begin email=\(email)")
         do {
             _ = try await Auth.auth().signIn(withEmail: email, password: password)
+            print("[Auth] Firebase Auth ok uid=\(Auth.auth().currentUser?.uid ?? "?")")
         } catch {
+            print("[Auth] Firebase Auth failed: \(error.localizedDescription)")
             throw FirebaseError.invalidCredentials
         }
         guard let uid = Auth.auth().currentUser?.uid else {
             throw FirebaseError.notAuthenticated
         }
 
+        // Keep unpushed local work when we have a family; never block restore
+        // when local is empty (post-reset) — cloud must win in that case.
         if store.family != nil, hasUnsyncedLocalChanges {
+            print("[Auth] pushing dirty local work before pull")
             try? await pushSnapshotAndWait()
         }
 
         let snapshot: FamilySnapshot
         do {
             snapshot = try await fetchSnapshot(uid: uid, email: email)
+            print("[Auth] fetched family=\(snapshot.family.id) kids=\(snapshot.children.count) tasks=\(snapshot.tasks.count)")
         } catch {
-            // Auth user exists but family/parent docs are gone (Reset wiped them).
-            // Create a fresh cloud family for this account instead of dead-ending.
+            print("[Auth] fetch failed: \(error.localizedDescription)")
+            // Only recreate family docs when they are actually missing/unreadable.
+            // A network blip must NOT create a duplicate family.
             if Self.isMissingCloudFamily(error) {
-                try await rebootstrapFamilyAfterMissingDocs(uid: uid, email: email)
+                print("[Auth] missing cloud family — rebootstrap")
+                try await rebootstrapFamilyAfterMissingDocs(
+                    uid: uid,
+                    email: email,
+                    reason: error.localizedDescription
+                )
                 startListening()
                 startPeriodicRefresh()
                 status = .signedIn
+                guard store.isAuthenticated else {
+                    throw FirebaseError.operationFailed("Could not restore your family. Try again.")
+                }
+                print("[Auth] rebootstrap done family=\(store.family?.id ?? "nil")")
                 return
             }
             throw error
         }
 
-        if hasUnsyncedLocalChanges {
-            // Still dirty — keep local, wire listeners, let retries finish.
+        if store.family == nil || !hasUnsyncedLocalChanges {
+            applyFromCloud(snapshot)
+        } else {
+            // Still dirty after push attempt — keep local, but only succeed
+            // if this device actually has a signed-in family to show.
+            print("[Auth] still dirty after push; keeping local")
             startListening()
             startPeriodicRefresh()
             status = .pending
+            guard store.isAuthenticated else {
+                throw FirebaseError.operationFailed(
+                    "Could not finish sign-in. Check your connection and try again."
+                )
+            }
             return
         }
-        applyFromCloud(snapshot)
+
         startListening()
         startPeriodicRefresh()
         status = .signedIn
+        guard store.isAuthenticated else {
+            throw FirebaseError.operationFailed("Sign-in did not load your family. Try again.")
+        }
+        print("[Auth] signIn success family=\(store.family?.id ?? "nil")")
         #else
         throw FirebaseError.authNotAvailable
         #endif
     }
 
     /// Recreates family + parent docs for an Auth user whose cloud family was
-    /// deleted (Reset all data). Seeds a clean local store and pushes starter content.
-    private func rebootstrapFamilyAfterMissingDocs(uid: String, email: String) async throws {
+    /// deleted or is unreadable.
+    ///
+    /// Uses `forceNewFamily: true` so the server always issues a brand-new
+    /// familyId and wipes leftover docs for the previous family. Reusing the
+    /// old id after a partial reset is what caused old kids/tasks to resurrect
+    /// and duplicate next to newly created ones.
+    private func rebootstrapFamilyAfterMissingDocs(uid: String, email: String, reason: String = "") async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
+        print("[Auth] rebootstrap start reason=\(reason)")
         let displayName = store.parent?.displayName ?? "Parent"
         let familyName = store.family?.name ?? "Our family"
         store.clearSyncMeta()
@@ -285,13 +322,16 @@ final class CloudSyncEngine {
                 "familyName": familyName,
                 "displayName": displayName,
                 "email": email,
+                "forceNewFamily": true,
             ])
         guard let data = callResult.data as? [String: Any],
               let familyId = data["familyId"] as? String else {
+            print("[Auth] bootstrapFamily bad response: \(String(describing: callResult.data))")
             throw FirebaseError.operationFailed("Could not restore your family. Try again.")
         }
         let pin = (data["kidsStationPIN"] as? String) ?? "1234"
         let familyCode = data["familyCode"] as? String
+        print("[Auth] bootstrapFamily ok familyId=\(familyId)")
 
         try store.seedLocalFamilyAfterCloudBootstrap(
             familyId: familyId,
@@ -330,8 +370,15 @@ final class CloudSyncEngine {
                 return false
             }
         }
+        let nsError = error as NSError
+        // Firestore not-found
+        if nsError.domain.contains("FIRFirestoreErrorDomain"), nsError.code == 5 {
+            return true
+        }
         let message = error.localizedDescription.lowercased()
-        return message.contains("not found") || message.contains("no document")
+        return message.contains("no document")
+            || message.contains("document not found")
+            || message.contains("not found")
     }
 
     /// Co-parent joins an existing cloud family with their own Firebase account.

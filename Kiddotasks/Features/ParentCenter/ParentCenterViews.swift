@@ -507,9 +507,22 @@ struct FamilyView: View {
 
     /// Clears cloud data (if any), resets the local store, and either signs out
     /// (full reset) or stays signed in with retained kids.
+    ///
+    /// Cloud wipe must succeed before local reset when cloud is enabled —
+    /// otherwise leftover Firestore docs resurrect on the next pull.
     private func performReset(retainKids: Bool) {
         Task {
-            try? await appState.cloudSync.deleteCloudData()
+            if appState.isCloudEnabled {
+                do {
+                    try await appState.cloudSync.deleteCloudData()
+                } catch {
+                    await MainActor.run {
+                        appState.errorMessage =
+                            "Could not delete cloud data (\(error.localizedDescription)). Nothing was reset. Check your connection and try again."
+                    }
+                    return
+                }
+            }
             await MainActor.run {
                 appState.store.resetAllData(retainKids: retainKids)
                 appState.store.clearSyncMeta()

@@ -15,10 +15,23 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
   const displayName = String(data.displayName || "Parent");
   const email = String(data.email || context.auth.token.email || "");
   const uid = context.auth.uid;
+  const forceNewFamily = data?.forceNewFamily === true;
 
   const existing = await db.collection("parents").doc(uid).get();
-  if (existing.exists) {
+
+  // Normal path: parent already has a family — return it (unless forcing a
+  // clean slate after Reset / recovery, which must NEVER reuse the old id).
+  if (existing.exists && !forceNewFamily) {
     return { familyId: existing.data()?.familyId, parentId: uid };
+  }
+
+  // Force-new or first-time: wipe any leftover docs for the previous family
+  // so they cannot resurrect into the new session (duplicate kids/tasks bug).
+  const previousFamilyId = existing.exists
+    ? String(existing.data()?.familyId || "")
+    : "";
+  if (previousFamilyId) {
+    await deleteAllDocsForFamily(previousFamilyId);
   }
 
   const familyRef = db.collection("families").doc();
@@ -51,7 +64,6 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
       createdAt: now,
       lastSignInAt: now,
     });
-    // Index for co-parent join-by-code lookups.
     tx.set(db.collection("familyCodes").doc(familyCode), {
       familyId: familyRef.id,
       createdAt: now,
@@ -60,6 +72,65 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
 
   return { familyId: familyRef.id, parentId: uid, kidsStationPIN, familyCode };
 });
+
+/**
+ * Deletes every family-scoped document for `familyId` (paginated, batched).
+ * Used by deleteFamilyData and by bootstrapFamily(forceNewFamily).
+ */
+async function deleteAllDocsForFamily(familyId: string): Promise<void> {
+  if (!familyId) return;
+  const collections = [
+    "children",
+    "tasks",
+    "taskCompletions",
+    "rewards",
+    "rewardClaims",
+    "pointTransactions",
+    "achievements",
+    "taskInstances",
+  ];
+
+  for (const collection of collections) {
+    // Loop until empty so we never stop at the first page / 500-op batch limit.
+    for (;;) {
+      const snap = await db
+        .collection(collection)
+        .where("familyId", "==", familyId)
+        .limit(400)
+        .get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+    }
+  }
+
+  // Drop join-code index entries that still point at this family.
+  const codes = await db
+    .collection("familyCodes")
+    .where("familyId", "==", familyId)
+    .limit(400)
+    .get();
+  if (!codes.empty) {
+    const batch = db.batch();
+    codes.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  // Device tokens are keyed by fcmToken with familyId field — best-effort.
+  const tokens = await db
+    .collection("deviceTokens")
+    .where("familyId", "==", familyId)
+    .limit(400)
+    .get();
+  if (!tokens.empty) {
+    const batch = db.batch();
+    tokens.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+
+  await db.collection("families").doc(familyId).delete();
+}
 
 /**
  * Co-parent join: authenticates a second parent and attaches them to an
@@ -708,30 +779,12 @@ export const deleteFamilyData = functions.https.onCall(async (_data, context) =>
     throw new functions.https.HttpsError("not-found", "Family not found");
   }
 
-  const collections = [
-    "children",
-    "tasks",
-    "taskCompletions",
-    "rewards",
-    "rewardClaims",
-    "pointTransactions",
-    "achievements",
-  ];
-
-  for (const collection of collections) {
-    const snapshot = await db.collection(collection)
-      .where("familyId", "==", familyId)
-      .get();
-    if (snapshot.empty) continue;
-    const batch = db.batch();
-    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
-    await batch.commit();
-  }
-
-  await db.collection("families").doc(familyId).delete();
+  // Thorough wipe (paginated). Partial deletes previously left orphan kids/
+  // tasks that resurrected on the next pull (duplicates after reset).
+  await deleteAllDocsForFamily(familyId);
   await db.collection("parents").doc(uid).delete();
 
-  return { ok: true };
+  return { ok: true, familyId };
 });
 
 /**

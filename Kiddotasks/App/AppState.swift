@@ -110,6 +110,10 @@ final class AppState {
                         parentName: parentName
                     )
                     familyBootstrapPIN = pin
+                    guard store.isAuthenticated else {
+                        authenticationError = "Account created but your family did not load. Try signing in."
+                        return
+                    }
                     completion?()
                     await registerForPushWhenCloudEnabled()
                 } catch {
@@ -146,14 +150,24 @@ final class AppState {
                     isLoading = true
                     defer { isLoading = false }
                     try await cloudSync.signIn(email: email, password: password)
+                    // Only dismiss the sheet when a family is actually loaded.
+                    guard store.isAuthenticated else {
+                        authenticationError = "Sign-in did not finish loading your family. Please try again."
+                        return
+                    }
                     completion?()
                     await registerForPushWhenCloudEnabled()
                 } catch {
+                    print("[Auth] signIn UI error: \(error.localizedDescription)")
                     authenticationError = friendlyAuthError(error)
                 }
             } else {
                 do {
                     try store.signIn(email: email, password: password)
+                    guard store.isAuthenticated else {
+                        authenticationError = "Sign-in did not finish loading your family. Please try again."
+                        return
+                    }
                     completion?()
                 } catch {
                     authenticationError = friendlyAuthError(error)
@@ -258,7 +272,8 @@ final class AppState {
         if message.contains("wrong") || message.contains("invalid") || message.contains("incorrect") {
             return "Email or password is incorrect."
         }
-        if message.contains("network") || message.contains("offline") || message.contains("internet") {
+        if message.contains("network") || message.contains("offline") || message.contains("internet")
+            || message.contains("unavailable") || message.contains("connectivity") {
             return "Can't reach the cloud right now. Check your connection and try again."
         }
         if message.contains("too many") {
