@@ -420,9 +420,22 @@ final class LocalFamilyDataStore {
     // MARK: - Children
 
     @discardableResult
-    func addChild(name: String, avatar: ChildAvatar, photoData: Data? = nil, dateOfBirth: Date?) throws -> Child {
+    func addChild(
+        name: String,
+        avatar: ChildAvatar,
+        photoData: Data? = nil,
+        photoURL: String? = nil,
+        dateOfBirth: Date?
+    ) throws -> Child {
         guard let family, let parent else { throw FirebaseError.notAuthenticated }
-        let child = Child(name: name, familyId: family.id, avatar: avatar, photoData: photoData, dateOfBirth: dateOfBirth)
+        let child = Child(
+            name: name,
+            familyId: family.id,
+            avatar: avatar,
+            photoData: photoData,
+            photoURL: photoURL,
+            dateOfBirth: dateOfBirth
+        )
         children.append(child)
         family.memberIds.append(child.id)
         family.updatedAt = Date()
@@ -696,9 +709,10 @@ final class LocalFamilyDataStore {
         persistKeepingPassword()
     }
 
-    func updateFamilyPhoto(_ photoData: Data?) throws {
+    func updateFamilyPhoto(_ photoData: Data?, photoURL: String? = nil) throws {
         guard let family else { throw FirebaseError.notAuthenticated }
         family.photoData = photoData
+        family.photoURL = photoURL
         family.updatedAt = Date()
         persistKeepingPassword()
     }

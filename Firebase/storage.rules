@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Firebase Storage rules for Kiddotasks profile photos.
+// Objects live under families/{familyId}/...
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /families/{familyId}/{allPaths=**} {
+      // Authenticated parents manage photos for their family.
+      // Membership is enforced lightly here (any signed-in parent can read/write
+      // family media). Tighten with custom claims or a callable if abuse appears.
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+  }
+}

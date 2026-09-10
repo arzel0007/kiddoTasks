@@ -161,6 +161,9 @@ Token layers to add/extend:
 - [x] Kid points editor on Kiddo form primitives + toasts
 - [x] Family photo remove / code copy / child remove toasts
 - [x] Splash video: `Boy_riding_rocket_in_space.mp4` (muted, aspect-fill) + brand lockup; logo fallback for missing asset / Reduce Motion; ~6s hard cap
+- [x] Firebase Storage for photos: `photoURL` on Child/Family, upload on save when cloud on, push strips embedded `photoData` when URL present, `RemotePhotoView` loader, `Firebase/storage.rules`
+
+**Deploy note:** `firebase deploy --only storage` (and functions if pending). Enable Storage bucket in Firebase console if not already.
 
 **Build / tests after Phase 1–7 + follow-ups:** BUILD SUCCEEDED · TEST SUCCEEDED
 

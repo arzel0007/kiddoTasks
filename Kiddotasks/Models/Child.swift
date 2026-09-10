@@ -9,31 +9,35 @@ final class Child: Identifiable, Codable {
     let familyId: String
     var avatar: ChildAvatar
     var photoData: Data?
+    /// Download URL in Firebase Storage when cloud sync is enabled.
+    var photoURL: String?
     var dateOfBirth: Date?
     var activePoints: Int = 0
     var totalPointsEarned: Int = 0
     let createdAt: Date
     var updatedAt: Date
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
         case familyId
         case avatar
         case photoData
+        case photoURL
         case dateOfBirth
         case activePoints
         case totalPointsEarned
         case createdAt
         case updatedAt
     }
-    
+
     init(
         id: String = UUID().uuidString,
         name: String,
         familyId: String,
         avatar: ChildAvatar = .default,
         photoData: Data? = nil,
+        photoURL: String? = nil,
         dateOfBirth: Date? = nil,
         activePoints: Int = 0,
         totalPointsEarned: Int = 0,
@@ -45,6 +49,7 @@ final class Child: Identifiable, Codable {
         self.familyId = familyId
         self.avatar = avatar
         self.photoData = photoData
+        self.photoURL = photoURL
         self.dateOfBirth = dateOfBirth
         self.activePoints = activePoints
         self.totalPointsEarned = totalPointsEarned

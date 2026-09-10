@@ -9,6 +9,8 @@ final class Family: Identifiable, Codable {
     var memberIds: [String] // [parentId, childId1, childId2, ...]
     var familyCode: String // Unique code for sharing with other parents
     var photoData: Data?
+    /// Download URL in Firebase Storage when cloud sync is enabled.
+    var photoURL: String?
     var settings: FamilySettings
     let createdAt: Date
     var updatedAt: Date
@@ -22,6 +24,7 @@ final class Family: Identifiable, Codable {
         case memberIds = "members"
         case familyCode
         case photoData
+        case photoURL
         case settings
         case createdAt
         case updatedAt
@@ -34,6 +37,7 @@ final class Family: Identifiable, Codable {
         memberIds: [String] = [],
         familyCode: String = LocalFamilyDataStore.generateFamilyCode(),
         photoData: Data? = nil,
+        photoURL: String? = nil,
         settings: FamilySettings = .default,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -44,6 +48,7 @@ final class Family: Identifiable, Codable {
         self.memberIds = memberIds
         self.familyCode = familyCode
         self.photoData = photoData
+        self.photoURL = photoURL
         self.settings = settings
         self.createdAt = createdAt
         self.updatedAt = updatedAt

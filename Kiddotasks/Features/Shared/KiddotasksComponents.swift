@@ -286,10 +286,40 @@ struct SecondaryButton: View {
 
 // MARK: - Avatars & points
 
+/// Loads a Storage download URL with a small in-memory cache.
+struct RemotePhotoView: View {
+    let urlString: String?
+    var size: CGFloat = 64
+
+    @State private var loader = RemotePhotoLoader()
+
+    var body: some View {
+        Group {
+            if let image = loader.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            }
+        }
+        .frame(width: size, height: size)
+        .onAppear {
+            if let urlString { loader.load(urlString: urlString) }
+        }
+        .onChange(of: urlString) { _, newValue in
+            if let newValue { loader.load(urlString: newValue) }
+        }
+    }
+}
+
 struct ChildAvatarView: View {
     let avatar: ChildAvatar
     var size: CGFloat = 64
     var photoData: Data? = nil
+    var photoURL: String? = nil
+
+    private var hasPhoto: Bool {
+        photoData != nil || !(photoURL ?? "").isEmpty
+    }
 
     var body: some View {
         Group {
@@ -297,6 +327,8 @@ struct ChildAvatarView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
+            } else if let photoURL, !photoURL.isEmpty {
+                RemotePhotoView(urlString: photoURL, size: size)
             } else {
                 Text(avatar.emoji)
                     .font(.system(size: size * 0.52))
@@ -305,14 +337,14 @@ struct ChildAvatarView: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .background {
-            if photoData == nil {
+            if !hasPhoto {
                 Circle().fill(Color(hex: avatar.colorHex).opacity(0.28))
             }
         }
         .overlay {
             Circle().strokeBorder(KiddoTasksDesignTokens.Colors.surfaceCard, lineWidth: max(1.5, size * 0.055))
         }
-        .shadow(color: Color(hex: photoData == nil ? avatar.colorHex : "#888888").opacity(0.25), radius: size * 0.10, x: 0, y: size * 0.06)
+        .shadow(color: Color(hex: hasPhoto ? "#888888" : avatar.colorHex).opacity(0.25), radius: size * 0.10, x: 0, y: size * 0.06)
     }
 }
 

@@ -11,6 +11,7 @@
 		1F885B5F305044150086F915 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 1F885B5E305044150086F915 /* FirebaseFirestore */; };
 		1F885B61305044150086F915 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 1F885B60305044150086F915 /* FirebaseFunctions */; };
 		1F885B7C305044150086F916 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 1F885B7D305044150086F916 /* FirebaseMessaging */; };
+		1F885B7E305044150086F917 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 1F885B7F305044150086F917 /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +51,7 @@
 				1F885B5D305044150086F915 /* FirebaseAuth in Frameworks */,
 				1F885B5F305044150086F915 /* FirebaseFirestore in Frameworks */,
 				1F885B7C305044150086F916 /* FirebaseMessaging in Frameworks */,
+				1F885B7E305044150086F917 /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

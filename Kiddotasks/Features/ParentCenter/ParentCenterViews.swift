@@ -678,7 +678,7 @@ struct FamilyView: View {
                                 ChildEditorView(child: child)
                             } label: {
                                 HStack(spacing: 12) {
-                                    ChildAvatarView(avatar: child.avatar, size: 40, photoData: child.photoData)
+                                    ChildAvatarView(avatar: child.avatar, size: 40, photoData: child.photoData, photoURL: child.photoURL)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(child.name)
                                             .font(KiddoTasksDesignTokens.Typography.titleSmall)
@@ -794,7 +794,23 @@ struct FamilyView: View {
                        let uiImage = UIImage(data: data) {
                         let compressed = ImageCompressor.compress(uiImage)
                         await MainActor.run {
-                            try? appState.store.updateFamilyPhoto(compressed)
+                            Task { @MainActor in
+                                do {
+                                    var photoURL: String? = appState.currentFamily?.photoURL
+                                    if let compressed, appState.isCloudEnabled, let familyId = appState.currentFamily?.id {
+                                        photoURL = try await FamilyPhotoStorage.uploadPhoto(
+                                            familyId: familyId,
+                                            kind: .family,
+                                            itemId: familyId,
+                                            data: compressed
+                                        )
+                                    }
+                                    try appState.store.updateFamilyPhoto(compressed, photoURL: photoURL)
+                                    appState.toastSuccess("Family photo updated")
+                                } catch {
+                                    appState.toastError(error.localizedDescription)
+                                }
+                            }
                         }
                     }
                 }
@@ -1030,25 +1046,44 @@ struct ChildEditorView: View {
     }
 
     private func save() {
-        do {
-            if let existing = child {
-                existing.name = name
-                existing.avatar = avatar
-                existing.photoData = photoData
-                existing.dateOfBirth = hasBirthday ? birthday : nil
-                try appState.store.updateChild(existing)
-            } else {
-                try appState.store.addChild(
-                    name: name,
-                    avatar: avatar,
-                    photoData: photoData,
-                    dateOfBirth: hasBirthday ? birthday : nil
-                )
+        Task { @MainActor in
+            do {
+                var photoURL = child?.photoURL
+                let familyId = appState.currentFamily?.id
+                let itemId = child?.id ?? UUID().uuidString
+
+                // Upload to Storage when cloud is on so snapshots stay small.
+                if let photoData, appState.isCloudEnabled, let familyId {
+                    photoURL = try await FamilyPhotoStorage.uploadPhoto(
+                        familyId: familyId,
+                        kind: .child,
+                        itemId: itemId,
+                        data: photoData
+                    )
+                }
+
+                if let existing = child {
+                    existing.name = name
+                    existing.avatar = avatar
+                    existing.photoData = photoData
+                    existing.photoURL = photoURL
+                    existing.dateOfBirth = hasBirthday ? birthday : nil
+                    try appState.store.updateChild(existing)
+                } else {
+                    try appState.store.addChild(
+                        name: name,
+                        avatar: avatar,
+                        photoData: photoData,
+                        photoURL: photoURL,
+                        dateOfBirth: hasBirthday ? birthday : nil
+                    )
+                }
+                appState.toastSuccess(child == nil ? "\(name) added" : "Profile updated")
+                dismiss()
+            } catch {
+                appState.toastError(error.localizedDescription)
+                appState.presentError(error)
             }
-            appState.toastSuccess(child == nil ? "\(name) added" : "Profile updated")
-            dismiss()
-        } catch {
-            appState.presentError(error)
         }
     }
 }

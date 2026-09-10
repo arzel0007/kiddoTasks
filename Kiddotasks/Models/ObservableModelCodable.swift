@@ -6,9 +6,9 @@ import Foundation
 extension Child {
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(id: try c.decode(String.self, forKey: .id), name: try c.decode(String.self, forKey: .name), familyId: try c.decode(String.self, forKey: .familyId), avatar: try c.decode(ChildAvatar.self, forKey: .avatar), photoData: try c.decodeIfPresent(Data.self, forKey: .photoData), dateOfBirth: try c.decodeIfPresent(Date.self, forKey: .dateOfBirth), activePoints: try c.decode(Int.self, forKey: .activePoints), totalPointsEarned: try c.decode(Int.self, forKey: .totalPointsEarned), createdAt: try c.decode(Date.self, forKey: .createdAt), updatedAt: try c.decode(Date.self, forKey: .updatedAt))
+        self.init(id: try c.decode(String.self, forKey: .id), name: try c.decode(String.self, forKey: .name), familyId: try c.decode(String.self, forKey: .familyId), avatar: try c.decode(ChildAvatar.self, forKey: .avatar), photoData: try c.decodeIfPresent(Data.self, forKey: .photoData), photoURL: try c.decodeIfPresent(String.self, forKey: .photoURL), dateOfBirth: try c.decodeIfPresent(Date.self, forKey: .dateOfBirth), activePoints: try c.decode(Int.self, forKey: .activePoints), totalPointsEarned: try c.decode(Int.self, forKey: .totalPointsEarned), createdAt: try c.decode(Date.self, forKey: .createdAt), updatedAt: try c.decode(Date.self, forKey: .updatedAt))
     }
-    func encode(to encoder: Encoder) throws { var c = encoder.container(keyedBy: CodingKeys.self); try c.encode(id, forKey: .id); try c.encode(name, forKey: .name); try c.encode(familyId, forKey: .familyId); try c.encode(avatar, forKey: .avatar); try c.encodeIfPresent(photoData, forKey: .photoData); try c.encodeIfPresent(dateOfBirth, forKey: .dateOfBirth); try c.encode(activePoints, forKey: .activePoints); try c.encode(totalPointsEarned, forKey: .totalPointsEarned); try c.encode(createdAt, forKey: .createdAt); try c.encode(updatedAt, forKey: .updatedAt) }
+    func encode(to encoder: Encoder) throws { var c = encoder.container(keyedBy: CodingKeys.self); try c.encode(id, forKey: .id); try c.encode(name, forKey: .name); try c.encode(familyId, forKey: .familyId); try c.encode(avatar, forKey: .avatar); try c.encodeIfPresent(photoData, forKey: .photoData); try c.encodeIfPresent(photoURL, forKey: .photoURL); try c.encodeIfPresent(dateOfBirth, forKey: .dateOfBirth); try c.encode(activePoints, forKey: .activePoints); try c.encode(totalPointsEarned, forKey: .totalPointsEarned); try c.encode(createdAt, forKey: .createdAt); try c.encode(updatedAt, forKey: .updatedAt) }
 }
 
 extension Family {
@@ -20,6 +20,7 @@ extension Family {
             memberIds: try c.decode([String].self, forKey: .memberIds),
             familyCode: try c.decodeIfPresent(String.self, forKey: .familyCode) ?? LocalFamilyDataStore.generateFamilyCode(),
             photoData: try c.decodeIfPresent(Data.self, forKey: .photoData),
+            photoURL: try c.decodeIfPresent(String.self, forKey: .photoURL),
             settings: try c.decode(FamilySettings.self, forKey: .settings),
             createdAt: try c.decode(Date.self, forKey: .createdAt),
             updatedAt: try c.decode(Date.self, forKey: .updatedAt),
@@ -33,6 +34,7 @@ extension Family {
         try c.encode(memberIds, forKey: .memberIds)
         try c.encode(familyCode, forKey: .familyCode)
         try c.encodeIfPresent(photoData, forKey: .photoData)
+        try c.encodeIfPresent(photoURL, forKey: .photoURL)
         try c.encode(settings, forKey: .settings)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)

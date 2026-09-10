@@ -757,7 +757,23 @@ final class CloudSyncEngine {
 
         func enc<T: Encodable>(_ value: T) throws -> Any {
             let data = try encoder.encode(value)
-            return try JSONSerialization.jsonObject(with: data)
+            let json = try JSONSerialization.jsonObject(with: data)
+            return strippingEmbeddedPhotoData(json)
+        }
+
+        /// Drop `photoData` when a Storage `photoURL` exists so snapshot pushes
+        /// stay small; clients load images from Storage instead.
+        func strippingEmbeddedPhotoData(_ any: Any) -> Any {
+            if var dict = any as? [String: Any] {
+                if let url = dict["photoURL"] as? String, !url.isEmpty {
+                    dict.removeValue(forKey: "photoData")
+                }
+                return dict.mapValues { strippingEmbeddedPhotoData($0) }
+            }
+            if let array = any as? [Any] {
+                return array.map { strippingEmbeddedPhotoData($0) }
+            }
+            return any
         }
 
         return [

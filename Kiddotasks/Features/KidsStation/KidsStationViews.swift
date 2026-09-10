@@ -148,7 +148,7 @@ private struct PlayerCard: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 12) {
-                ChildAvatarView(avatar: child.avatar, size: 84, photoData: child.photoData)
+                ChildAvatarView(avatar: child.avatar, size: 84, photoData: child.photoData, photoURL: child.photoURL)
                     .scaleEffect(isPreviewed ? 1.05 : 1)
 
                 Text(child.name)
