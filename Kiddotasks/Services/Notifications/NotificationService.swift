@@ -124,6 +124,13 @@ final class NotificationService: NSObject {
         }
         #endif
     }
+
+    /// Deep-link target stored for AppState to consume on the next UI pass.
+    nonisolated func handleRemoteNotification(route: String?) {
+        Task { @MainActor in
+            AppState.sharedNotificationRoute = route ?? "today"
+        }
+    }
 }
 
 // MARK: - FCM token refresh
@@ -153,11 +160,17 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         []
     }
 
-    /// Deep-linking is future work; for now tapping a push just opens the app.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        // No-op — opening the app lands on the dashboard where the event is visible.
+        let userInfo = response.notification.request.content.userInfo
+        let route = (userInfo["route"] as? String) ?? "today"
+        handleRemoteNotification(route: route)
     }
+}
+
+extension AppState {
+    /// Process-wide route set by NotificationService (bridged until we inject AppState).
+    static var sharedNotificationRoute: String?
 }

@@ -182,6 +182,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     
+    // MARK: - Kids PIN index (server-only for openKidsSession)
+    match /kidsPins/{pin} {
+      allow read, write: if false;
+    }
+
     // MARK: - Family codes (co-parent join index)
     // Maintained only by Cloud Functions (Admin SDK). Clients never access this.
     match /familyCodes/{code} {

@@ -23,11 +23,44 @@ struct RootView: View {
         }
         // No root `.animation`/`.transaction` — those overrode NavigationStack
         // push/pop and tab transitions (janky navigation).
+        .overlay(alignment: .top) {
+            if appState.cloudSyncStatus == .pending
+                || appState.cloudSyncStatus == .syncing {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text(appState.cloudSyncStatus == .syncing ? "Syncing…" : "Waiting to sync…")
+                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.95)))
+                .padding(.top, 4)
+                .zIndex(9)
+            } else if case .error = appState.cloudSyncStatus {
+                HStack(spacing: 6) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
+                    Text("Offline — changes save on this device")
+                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.95)))
+                .padding(.top, 4)
+                .zIndex(9)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let toast = toastCenter.current {
-                ToastBannerView(item: toast) {
-                    toastCenter.dismiss()
-                }
+                ToastBannerView(
+                    item: toast,
+                    onDismiss: { toastCenter.dismiss() },
+                    onAction: { toastCenter.performAction() }
+                )
                 .padding(.bottom, 72)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)

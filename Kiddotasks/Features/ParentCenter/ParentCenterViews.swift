@@ -34,18 +34,32 @@ struct TaskListView: View {
     @Environment(AppState.self) private var appState
     @State private var showEditor = false
     @State private var taskPendingDeletion: KiddoTask?
+    @State private var search = ""
+
+    private var activeTasks: [KiddoTask] {
+        let base = appState.store.tasks.filter(\.isActive)
+        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return base }
+        return base.filter {
+            $0.name.lowercased().contains(q) || $0.description.lowercased().contains(q)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section("Active") {
-                    let active = appState.store.tasks.filter(\.isActive)
+                    let active = activeTasks
                     if active.isEmpty {
                         EmptyListHint(
                             emoji: "📋",
-                            title: "No chores yet. Create one for the kids.",
-                            actionTitle: "Add task"
-                        ) { showEditor = true }
+                            title: search.isEmpty
+                                ? "No chores yet. Create one for the kids."
+                                : "No chores match “\(search)”.",
+                            actionTitle: search.isEmpty ? "Add task" : nil
+                        ) {
+                            showEditor = true
+                        }
                     }
                     ForEach(active) { task in
                         NavigationLink {
@@ -63,7 +77,14 @@ struct TaskListView: View {
                             Button {
                                 do {
                                     try appState.store.archiveTask(task.id)
-                                    appState.toastSuccess("Task archived")
+                                    appState.toastSuccessUndo("Task archived") {
+                                        do {
+                                            try appState.store.restoreTask(task.id)
+                                            appState.toastSuccess("Task restored")
+                                        } catch {
+                                            appState.toastError(error.localizedDescription)
+                                        }
+                                    }
                                 } catch {
                                     appState.toastError(error.localizedDescription)
                                 }
@@ -103,6 +124,7 @@ struct TaskListView: View {
                 }
             }
             .navigationTitle("Tasks")
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search chores")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showEditor = true } label: { Image(systemName: "plus") }
@@ -764,6 +786,24 @@ struct FamilyView: View {
                             }
                         }
                     ))
+                    if appState.currentFamily?.settings.enableMiniGames ?? true {
+                        Stepper(
+                            appState.currentFamily?.settings.basketballMaxMinutes == 0
+                                ? "Basketball time: default"
+                                : "Basketball time: \(appState.currentFamily?.settings.basketballMaxMinutes ?? 0) min",
+                            value: Binding(
+                                get: { appState.currentFamily?.settings.basketballMaxMinutes ?? 0 },
+                                set: { value in
+                                    try? appState.store.updateBasketballMaxMinutes(value)
+                                }
+                            ),
+                            in: 0...30,
+                            step: 5
+                        )
+                        Text("0 uses the standard 60s solo / 45s per player turns.")
+                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    }
                     Text("Shows a Play tab in Kids Space for the basketball challenge.")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
@@ -848,7 +888,7 @@ struct FamilyView: View {
                 Text("Their history and earned stars stay in the family record.")
             }
             .confirmationDialog(
-                "Reset all data?",
+                "Reset all data for “\(appState.currentFamily?.name ?? "this family")”?",
                 isPresented: $showResetConfirm,
                 titleVisibility: .visible
             ) {
@@ -860,7 +900,7 @@ struct FamilyView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("This deletes tasks, rewards, points, and history. You can choose to keep your kids.")
+                Text("This permanently deletes tasks, rewards, points, and history from this device and the cloud. You cannot undo this.")
             }
         }
     }
@@ -925,6 +965,12 @@ struct PINEditorRow: View {
                 Button("Save") {
                     do {
                         try appState.store.updateKidsPIN(pin)
+                        // Keep cloud kidsPins index in sync when possible.
+                        if appState.isCloudEnabled {
+                            Task { @MainActor in
+                                try? await appState.cloudSync.syncKidsPINIndex(pin: pin)
+                            }
+                        }
                         pin = ""
                         appState.toastSuccess("PIN updated")
                     } catch {

@@ -68,9 +68,131 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
       familyId: familyRef.id,
       createdAt: now,
     });
+    tx.set(db.collection("kidsPins").doc(kidsStationPIN), {
+      familyId: familyRef.id,
+      createdAt: now,
+    });
   });
 
   return { familyId: familyRef.id, parentId: uid, kidsStationPIN, familyCode };
+});
+
+/**
+ * Kids Station PIN unlock (no parent password).
+ * Looks up the family by Kids PIN and returns a snapshot the iPad can use
+ * without a parent Firebase Auth session.
+ */
+export const openKidsSession = functions.https.onCall(async (data, context) => {
+  const pin = String(data?.pin || "").trim();
+  if (!/^\d{4,6}$/.test(pin)) {
+    throw new functions.https.HttpsError("invalid-argument", "Enter the family PIN");
+  }
+
+  const pinDoc = await db.collection("kidsPins").doc(pin).get();
+  if (!pinDoc.exists) {
+    // Fallback: scan families settings (legacy families without kidsPins index)
+    const scan = await db.collection("families")
+      .where("settings.kidsStationPIN", "==", pin)
+      .limit(1)
+      .get();
+    if (scan.empty) {
+      throw new functions.https.HttpsError("not-found", "Wrong PIN");
+    }
+    return buildKidsSnapshot(scan.docs[0].id, scan.docs[0].data());
+  }
+
+  const familyId = String(pinDoc.data()?.familyId || "");
+  const familyDoc = await db.collection("families").doc(familyId).get();
+  if (!familyDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Family not found");
+  }
+  return buildKidsSnapshot(familyId, familyDoc.data() || {});
+});
+
+async function buildKidsSnapshot(familyId: string, familyData: any) {
+  const family = { id: familyId, ...familyData };
+  // Firestore timestamps → ISO for the client decoder
+  const iso = (v: any) => {
+    if (v && typeof v.toDate === "function") return v.toDate().toISOString();
+    return v ?? null;
+  };
+  family.createdAt = iso(family.createdAt);
+  family.updatedAt = iso(family.updatedAt);
+  family.serverUpdatedAt = iso(family.serverUpdatedAt);
+
+  const col = async (name: string) => {
+    const snap = await db.collection(name).where("familyId", "==", familyId).get();
+    return snap.docs.map((d) => {
+      const row: any = { id: d.id, ...d.data() };
+      for (const key of Object.keys(row)) {
+        if (row[key] && typeof row[key].toDate === "function") {
+          row[key] = row[key].toDate().toISOString();
+        }
+      }
+      return row;
+    });
+  };
+
+  const [children, tasks, completions, rewards, claims, transactions, achievements] = await Promise.all([
+    col("children"),
+    col("tasks"),
+    col("taskCompletions"),
+    col("rewards"),
+    col("rewardClaims"),
+    col("pointTransactions"),
+    col("achievements"),
+  ]);
+
+  return {
+    familyId,
+    family,
+    children,
+    tasks,
+    completions,
+    rewards,
+    claims,
+    transactions,
+    achievements,
+  };
+}
+
+/**
+ * Parent-only: rotate Kids PIN and update the lookup index.
+ */
+export const updateKidsStationPIN = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+  }
+  const uid = context.auth.uid;
+  const pin = String(data?.pin || "").trim();
+  const previousPin = String(data?.previousPin || "").trim();
+  if (!/^\d{4,6}$/.test(pin)) {
+    throw new functions.https.HttpsError("invalid-argument", "PIN must be 4–6 digits");
+  }
+  const parentDoc = await db.collection("parents").doc(uid).get();
+  if (!parentDoc.exists) {
+    throw new functions.https.HttpsError("permission-denied", "Not a parent");
+  }
+  const familyId = parentDoc.data()?.familyId;
+  if (!familyId) {
+    throw new functions.https.HttpsError("not-found", "Family not found");
+  }
+
+  const batch = db.batch();
+  batch.update(db.collection("families").doc(familyId), {
+    "settings.kidsStationPIN": pin,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    serverUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  batch.set(db.collection("kidsPins").doc(pin), {
+    familyId,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  if (previousPin && previousPin !== pin) {
+    batch.delete(db.collection("kidsPins").doc(previousPin));
+  }
+  await batch.commit();
+  return { ok: true, pin };
 });
 
 /**

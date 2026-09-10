@@ -56,6 +56,7 @@ struct BasketballGameView: View {
         }
         .onAppear {
             engine.bestSoloScore = UserDefaults.standard.integer(forKey: "kiddo.bball.best")
+            applyParentTimeLimit()
         }
         .onChange(of: engine.phase) { _, phase in
             if phase == .gameOver, engine.mode == .solo {
@@ -92,11 +93,23 @@ struct BasketballGameView: View {
                 .padding(.top, 12)
 
                 PrimaryButton(title: "1 Player", color: KiddoTasksDesignTokens.Colors.primary) {
+                    applyParentTimeLimit()
                     engine.startSolo(child: currentChild)
                 }
 
                 PrimaryButton(title: "2 Players", color: KiddoTasksDesignTokens.Colors.accent) {
+                    applyParentTimeLimit()
                     engine.phase = .selectPlayers
+                }
+
+                if children.count >= 3 {
+                    SecondaryButton(title: "Tournament (\(min(children.count, 4)) players)") {
+                        applyParentTimeLimit()
+                        let roster = children.prefix(4).map {
+                            BasketballPlayer(childId: $0.id, name: $0.name, accentHex: $0.avatar.colorHex)
+                        }
+                        engine.startTournament(players: Array(roster))
+                    }
                 }
 
                 if engine.bestSoloScore > 0 {
@@ -504,6 +517,11 @@ struct BasketballGameView: View {
             )
             .padding(24)
         }
+    }
+
+    private func applyParentTimeLimit() {
+        let minutes = appState.currentFamily?.settings.basketballMaxMinutes ?? 0
+        engine.configureClocks(parentMaxMinutes: minutes)
     }
 
     private var versusResultTitle: String {

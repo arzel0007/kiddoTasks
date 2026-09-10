@@ -756,6 +756,13 @@ final class LocalFamilyDataStore {
         persistKeepingPassword()
     }
 
+    func updateBasketballMaxMinutes(_ minutes: Int) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.basketballMaxMinutes = max(0, minutes)
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
     // MARK: - Dashboard aggregations
 
     struct TodayTotals {

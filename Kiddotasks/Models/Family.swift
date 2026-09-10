@@ -66,6 +66,8 @@ struct FamilySettings: Codable {
     var kidsStationPIN: String = "1234"
     /// When true, Kids Space shows the Play tab (basketball mini-game).
     var enableMiniGames: Bool = true
+    /// Max minutes for basketball per session (0 = unlimited / default game length).
+    var basketballMaxMinutes: Int = 0
 
     static let `default` = FamilySettings()
 
@@ -77,6 +79,7 @@ struct FamilySettings: Codable {
         case weekStartsOn
         case kidsStationPIN
         case enableMiniGames
+        case basketballMaxMinutes
     }
 
     init(
@@ -86,7 +89,8 @@ struct FamilySettings: Codable {
         requireApprovalByDefault: Bool = true,
         weekStartsOn: Int = 1,
         kidsStationPIN: String = "1234",
-        enableMiniGames: Bool = true
+        enableMiniGames: Bool = true,
+        basketballMaxMinutes: Int = 0
     ) {
         self.pointDisplaySymbol = pointDisplaySymbol
         self.enableNotifications = enableNotifications
@@ -95,6 +99,7 @@ struct FamilySettings: Codable {
         self.weekStartsOn = weekStartsOn
         self.kidsStationPIN = kidsStationPIN
         self.enableMiniGames = enableMiniGames
+        self.basketballMaxMinutes = basketballMaxMinutes
     }
 
     init(from decoder: Decoder) throws {
@@ -106,5 +111,6 @@ struct FamilySettings: Codable {
         weekStartsOn = try c.decodeIfPresent(Int.self, forKey: .weekStartsOn) ?? 1
         kidsStationPIN = try c.decodeIfPresent(String.self, forKey: .kidsStationPIN) ?? "1234"
         enableMiniGames = try c.decodeIfPresent(Bool.self, forKey: .enableMiniGames) ?? true
+        basketballMaxMinutes = try c.decodeIfPresent(Int.self, forKey: .basketballMaxMinutes) ?? 0
     }
 }

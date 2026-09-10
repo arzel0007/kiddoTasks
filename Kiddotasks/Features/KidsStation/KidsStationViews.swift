@@ -244,23 +244,32 @@ struct MissionsView: View {
                             message: "No missions for today. Great job!"
                         )
                     } else {
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                ForEach(Array(missions.enumerated()), id: \.element.id) { index, task in
-                                    Button {
-                                        selectedTask = task
-                                    } label: {
-                                        MissionCard(
-                                            task: task,
-                                            completion: appState.store.todaysCompletion(taskId: task.id, childId: child.id)
-                                        )
+                        List {
+                            ForEach(Array(missions.enumerated()), id: \.element.id) { index, task in
+                                let completion = appState.store.todaysCompletion(taskId: task.id, childId: child.id)
+                                Button {
+                                    selectedTask = task
+                                } label: {
+                                    MissionCard(task: task, completion: completion)
+                                        .padding(.vertical, 4)
+                                }
+                                .buttonStyle(CardPressStyle())
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    if completion == nil || completion?.status == .rejected {
+                                        Button {
+                                            quickSubmit(task: task, child: child)
+                                        } label: {
+                                            Label("Done", systemImage: "checkmark.circle.fill")
+                                        }
+                                        .tint(KiddoTasksDesignTokens.Colors.success)
                                     }
-                                    .buttonStyle(CardPressStyle())
-                                    .popIn(delay: Double(index) * 0.06)
                                 }
                             }
-                            .padding()
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 }
             }
@@ -268,7 +277,15 @@ struct MissionsView: View {
             .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Switch") { appState.clearChildProfile() }
+                    Button("Switch") {
+                        // Leaving the active kid profile; if this was a PIN-only
+                        // session with no parent account, lock back to Welcome.
+                        if appState.currentParent?.id == "kids-session" {
+                            appState.lockKidsSession()
+                        } else {
+                            appState.clearChildProfile()
+                        }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     if let child {
@@ -287,6 +304,20 @@ struct MissionsView: View {
             .fullScreenCover(item: $celebration) { task in
                 CelebrationView(task: task) { celebration = nil }
             }
+        }
+    }
+
+    private func quickSubmit(task: KiddoTask, child: Child) {
+        do {
+            _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
+            let needsApproval = task.requiresParentApproval(using: appState.currentFamily?.settings ?? .default)
+            if needsApproval {
+                appState.toastSuccess("Sent to a parent — \(task.name)")
+            } else {
+                appState.toastSuccess("+\(task.pointValue) ★ \(task.name)!")
+            }
+        } catch {
+            appState.toastError(error.localizedDescription)
         }
     }
 }

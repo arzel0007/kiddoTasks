@@ -13,6 +13,8 @@ enum BasketballPhase: Equatable {
 enum BasketballMode: Equatable {
     case solo
     case versus
+    /// Simple bracket: 3–4 players, each pair plays once (short clock).
+    case tournament
 }
 
 struct BasketballPlayer: Equatable {
@@ -76,6 +78,21 @@ final class BasketballGameEngine {
     private let soloDuration: TimeInterval = 60
     private let turnDuration: TimeInterval = 45
 
+    /// Parent override from Family settings (0 = defaults).
+    func configureClocks(parentMaxMinutes: Int) {
+        guard parentMaxMinutes > 0 else {
+            // leave defaults
+            return
+        }
+        let seconds = TimeInterval(parentMaxMinutes * 60)
+        // Use the shorter of default and parent cap so we never exceed parent limit.
+        soloDurationOverride = min(soloDuration, seconds)
+        turnDurationOverride = min(turnDuration, seconds)
+    }
+
+    private var soloDurationOverride: TimeInterval = 60
+    private var turnDurationOverride: TimeInterval = 45
+
     // Ball physics (normalized 0...1 court space)
     var ballX: CGFloat = 0.5
     var ballY: CGFloat = 0.82
@@ -113,6 +130,49 @@ final class BasketballGameEngine {
     private var flightTime: CGFloat = 0
     private var clockAccumulator: TimeInterval = 0
 
+    // Tournament roster
+    var tournamentPlayers: [BasketballPlayer] = []
+    var tournamentMatchIndex = 0
+    var tournamentScores: [String: Int] = [:]
+
+    /// Builds a round-robin list of (p1, p2) pairs.
+    private var tournamentMatches: [(BasketballPlayer, BasketballPlayer)] {
+        var pairs: [(BasketballPlayer, BasketballPlayer)] = []
+        let players = tournamentPlayers
+        guard players.count >= 2 else { return pairs }
+        for i in 0..<players.count {
+            for j in (i+1)..<players.count {
+                pairs.append((players[i], players[j]))
+            }
+        }
+        return pairs
+    }
+
+    func startTournament(players: [BasketballPlayer]) {
+        mode = .tournament
+        tournamentPlayers = players
+        tournamentMatchIndex = 0
+        tournamentScores = Dictionary(uniqueKeysWithValues: players.map { ($0.name, 0) })
+        beginCurrentTournamentMatch()
+    }
+
+    private func beginCurrentTournamentMatch() {
+        let pairs = tournamentMatches
+        guard tournamentMatchIndex < pairs.count else {
+            finishGame()
+            return
+        }
+        let (a, b) = pairs[tournamentMatchIndex]
+        player1 = a
+        player2 = b
+        stats1 = BasketballStats()
+        stats2 = BasketballStats()
+        activePlayerIndex = 0
+        p1TimeRemaining = 20
+        p2TimeRemaining = 20
+        beginCountdown()
+    }
+
     var activeStats: BasketballStats {
         get { activePlayerIndex == 0 ? stats1 : stats2 }
         set {
@@ -127,7 +187,8 @@ final class BasketballGameEngine {
     var activeTimeRemaining: TimeInterval {
         switch mode {
         case .solo: return soloTimeRemaining
-        case .versus: return activePlayerIndex == 0 ? p1TimeRemaining : p2TimeRemaining
+        case .versus, .tournament:
+            return activePlayerIndex == 0 ? p1TimeRemaining : p2TimeRemaining
         }
     }
 
@@ -152,7 +213,7 @@ final class BasketballGameEngine {
         stats1 = BasketballStats()
         stats2 = BasketballStats()
         activePlayerIndex = 0
-        soloTimeRemaining = soloDuration
+        soloTimeRemaining = soloDurationOverride
         beginCountdown()
     }
 
@@ -163,8 +224,8 @@ final class BasketballGameEngine {
         stats1 = BasketballStats()
         stats2 = BasketballStats()
         activePlayerIndex = 0
-        p1TimeRemaining = turnDuration
-        p2TimeRemaining = turnDuration
+        p1TimeRemaining = turnDurationOverride
+        p2TimeRemaining = turnDurationOverride
         beginCountdown()
     }
 
@@ -327,29 +388,24 @@ final class BasketballGameEngine {
                 soloTimeRemaining = 0
                 finishGame()
             }
-        case .versus:
+        case .versus, .tournament:
             if activePlayerIndex == 0 {
                 p1TimeRemaining -= tick
                 if p1TimeRemaining <= 0 {
                     p1TimeRemaining = 0
-                    // Other player still has time?
-                    if p2TimeRemaining > 0 && stats1.attempted + stats2.attempted >= 0 {
-                        if p2TimeRemaining > 0 {
-                            activePlayerIndex = 1
-                            resetBall()
-                            flashMessage = "\(player2.name)'s turn!"
-                        } else {
-                            finishGame()
-                        }
+                    if p2TimeRemaining > 0 {
+                        activePlayerIndex = 1
+                        resetBall()
+                        flashMessage = "\(player2.name)'s turn!"
                     } else {
-                        finishGame()
+                        endCurrentMatchOrGame()
                     }
                 }
             } else {
                 p2TimeRemaining -= tick
                 if p2TimeRemaining <= 0 {
                     p2TimeRemaining = 0
-                    finishGame()
+                    endCurrentMatchOrGame()
                 }
             }
         }
@@ -380,6 +436,7 @@ final class BasketballGameEngine {
             }
             rimHitFlash = 1
             Haptic.light()
+            BasketballSounds.rim()
         }
 
         // Rim as ellipse ring: collide when near the ring path and not cleanly inside.
@@ -422,6 +479,8 @@ final class BasketballGameEngine {
         let hy = Self.hoopY
         let dx = abs(ballX - Self.hoopX)
         let withinOpening = dx <= Self.rimHalfWidth * 0.78
+        // Swish: never touched the rim band this flight.
+        let clean = rimHitFlash < 0.15
 
         if ballY < hy - 0.02 {
             crossedAboveRim = true
@@ -430,28 +489,43 @@ final class BasketballGameEngine {
         if crossedAboveRim, crossedDown, withinOpening, !scoredThisFlight {
             scoredThisFlight = true
             lastShotScored = true
+            // +2 swish vs +1 with rim touch
+            pendingShotBonus = clean ? 2 : 1
         }
     }
+
+    private var pendingShotBonus: Int = 1
 
     private func finishShot(scored: Bool) {
         isFlying = false
         var stats = activeStats
         stats.attempted += 1
         if scored {
+            let bonus = max(1, min(pendingShotBonus, 3))
             stats.made += 1
             stats.streak += 1
             stats.bestStreak = max(stats.bestStreak, stats.streak)
-            let bonus = min(stats.streak, 3)
-            stats.score += bonus
-            flashMessage = stats.streak >= 3 ? "🔥 \(stats.streak) STREAK!  +\(bonus)" : "Swish!  +\(bonus)"
+            // Streak adds up to +2 extra on top of base swish/normal.
+            let streakBonus = min(max(stats.streak - 1, 0), 2)
+            let points = bonus + streakBonus
+            stats.score += points
+            if bonus >= 2 {
+                flashMessage = "✨ Swish! +\(points)"
+            } else if stats.streak >= 3 {
+                flashMessage = "🔥 \(stats.streak) STREAK!  +\(points)"
+            } else {
+                flashMessage = "Nice!  +\(points)"
+            }
             celebrationLevel = stats.streak >= 5 ? 2 : 1
             Haptic.success()
+            if bonus >= 2 { BasketballSounds.swish() } else { BasketballSounds.score() }
         } else {
             stats.streak = 0
             flashMessage = ["Nice try! 🏀", "So close!", "Almost!"][Int.random(in: 0..<3)]
             Haptic.light()
         }
         activeStats = stats
+        pendingShotBonus = 1
 
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -467,25 +541,38 @@ final class BasketballGameEngine {
 
     private func advanceAfterShot() {
         resetBall()
-        if mode == .versus {
-            // Alternate turns while both still have clock left.
+        switch mode {
+        case .solo:
+            break
+        case .versus, .tournament:
             if p1TimeRemaining <= 0 && p2TimeRemaining <= 0 {
-                finishGame()
+                endCurrentMatchOrGame()
                 return
             }
             activePlayerIndex = activePlayerIndex == 0 ? 1 : 0
-            // Skip a player with no time left
-            if activePlayerIndex == 0 && p1TimeRemaining <= 0 {
-                activePlayerIndex = 1
-            }
-            if activePlayerIndex == 1 && p2TimeRemaining <= 0 {
-                activePlayerIndex = 0
-            }
+            if activePlayerIndex == 0 && p1TimeRemaining <= 0 { activePlayerIndex = 1 }
+            if activePlayerIndex == 1 && p2TimeRemaining <= 0 { activePlayerIndex = 0 }
             flashMessage = "\(activePlayer.name)'s turn!"
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 700_000_000)
                 if flashMessage?.contains("turn") == true { flashMessage = nil }
             }
+        }
+    }
+
+    private func endCurrentMatchOrGame() {
+        if mode == .tournament {
+            // Accumulate scores then next pair
+            tournamentScores[player1.name, default: 0] += stats1.score
+            tournamentScores[player2.name, default: 0] += stats2.score
+            tournamentMatchIndex += 1
+            if tournamentMatchIndex < tournamentMatches.count {
+                beginCurrentTournamentMatch()
+            } else {
+                finishGame()
+            }
+        } else {
+            finishGame()
         }
     }
 

@@ -28,9 +28,12 @@ struct ToastItem: Identifiable, Equatable {
     let id = UUID()
     let style: ToastStyle
     let message: String
+    var actionTitle: String?
+    /// Opaque undo payload; caller supplies the handler when showing the toast.
+    var hasAction: Bool { actionTitle != nil }
 }
 
-/// Lightweight in-app toast queue. Call `ToastCenter.shared.show(...)` from actions.
+/// Lightweight in-app toast queue with optional Undo action.
 @Observable
 @MainActor
 final class ToastCenter {
@@ -38,9 +41,11 @@ final class ToastCenter {
 
     private(set) var current: ToastItem?
     private var dismissTask: Task<Void, Never>?
+    private var pendingAction: (() -> Void)?
 
-    func show(_ style: ToastStyle, _ message: String) {
-        let item = ToastItem(style: style, message: message)
+    func show(_ style: ToastStyle, _ message: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        let item = ToastItem(style: style, message: message, actionTitle: actionTitle)
+        pendingAction = action
         withAnimation(KiddoTasksDesignTokens.Animation.standard) {
             current = item
         }
@@ -50,13 +55,16 @@ final class ToastCenter {
         case .info: Haptic.light()
         }
         dismissTask?.cancel()
+        // Undo toasts linger a bit longer.
+        let duration: UInt64 = actionTitle != nil ? 4_200_000_000 : 2_600_000_000
         dismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            try? await Task.sleep(nanoseconds: duration)
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 withAnimation(KiddoTasksDesignTokens.Animation.standard) {
                     if self?.current?.id == item.id {
                         self?.current = nil
+                        self?.pendingAction = nil
                     }
                 }
             }
@@ -67,8 +75,19 @@ final class ToastCenter {
     func error(_ message: String) { show(.error, message) }
     func info(_ message: String) { show(.info, message) }
 
+    func successUndo(_ message: String, undoTitle: String = "Undo", action: @escaping () -> Void) {
+        show(.success, message, actionTitle: undoTitle, action: action)
+    }
+
+    func performAction() {
+        let action = pendingAction
+        dismiss()
+        action?()
+    }
+
     func dismiss() {
         dismissTask?.cancel()
+        pendingAction = nil
         withAnimation(KiddoTasksDesignTokens.Animation.standard) {
             current = nil
         }
@@ -79,6 +98,7 @@ final class ToastCenter {
 struct ToastBannerView: View {
     let item: ToastItem
     let onDismiss: () -> Void
+    var onAction: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .center, spacing: KiddoTasksDesignTokens.Spacing.small) {
@@ -91,6 +111,15 @@ struct ToastBannerView: View {
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let title = item.actionTitle, let onAction {
+                Button(title) { onAction() }
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .fontWeight(.bold)
+                    .foregroundStyle(item.style.tint)
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 4)
+            }
 
             Button {
                 onDismiss()

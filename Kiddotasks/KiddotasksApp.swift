@@ -49,7 +49,16 @@ struct KiddoTasksApp: App {
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 80_000_000)
                     launchReady = true
+                    if let route = AppState.sharedNotificationRoute {
+                        AppState.sharedNotificationRoute = nil
+                        appState.handleNotificationRoute(route)
+                    }
                 }
+            }
+            .onChange(of: AppState.sharedNotificationRoute) { _, route in
+                guard let route else { return }
+                AppState.sharedNotificationRoute = nil
+                appState.handleNotificationRoute(route)
             }
         }
     }

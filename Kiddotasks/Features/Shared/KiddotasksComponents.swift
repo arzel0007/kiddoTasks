@@ -621,6 +621,23 @@ struct RewardShopCard: View {
                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .lineLimit(2)
+
+            // Progress toward cost
+            let progress = min(1, Double(points) / Double(max(reward.pointCost, 1)))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(KiddoTasksDesignTokens.Colors.surfaceElevated)
+                    Capsule()
+                        .fill(reward.canAfford(with: points)
+                              ? KiddoTasksDesignTokens.Colors.success
+                              : KiddoTasksDesignTokens.Colors.primary)
+                        .frame(width: max(8, geo.size.width * progress))
+                }
+            }
+            .frame(height: 8)
+            .accessibilityLabel("\(Int(progress * 100)) percent of cost")
+
             Spacer(minLength: 0)
             HStack {
                 HStack(spacing: 3) {

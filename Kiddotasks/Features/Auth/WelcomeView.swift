@@ -5,6 +5,7 @@ struct WelcomeView: View {
     @State private var showSignUp = false
     @State private var showSignIn = false
     @State private var showJoinWithCode = false
+    @State private var showKidsPIN = false
 
     var body: some View {
         VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
@@ -27,6 +28,7 @@ struct WelcomeView: View {
                     title: "Sign in",
                     color: KiddoTasksDesignTokens.Colors.primary
                 ) { showSignIn = true }
+                SecondaryButton(title: "Kids Station (PIN)") { showKidsPIN = true }
                 SecondaryButton(title: "Join existing family") { showJoinWithCode = true }
                 SecondaryButton(title: "Create a new family") { showSignUp = true }
             } else {
@@ -34,6 +36,7 @@ struct WelcomeView: View {
                     title: "Create family",
                     color: KiddoTasksDesignTokens.Colors.primary
                 ) { showSignUp = true }
+                SecondaryButton(title: "Kids Station (PIN)") { showKidsPIN = true }
                 SecondaryButton(title: "Join existing family") { showJoinWithCode = true }
                 SecondaryButton(title: "I already have a family — sign in") { showSignIn = true }
             }
@@ -57,6 +60,10 @@ struct WelcomeView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible) }
         .sheet(isPresented: $showJoinWithCode) { JoinWithCodeView() }
+        .sheet(isPresented: $showKidsPIN) {
+            KidsPINUnlockView()
+                .presentationDetents([.medium, .large])
+        }
         .onChange(of: showSignUp) { _, isShowing in
             if isShowing { appState.clearAuthMessages() }
         }

@@ -19,6 +19,12 @@ final class AppState {
     var errorMessage: String?
     /// Set after a cloud sign-up so the UI can reveal the Kids Station PIN.
     var familyBootstrapPIN: String?
+    /// Kids unlocked this session via PIN (may be without a parent UI session).
+    var kidsSessionUnlocked = false
+    /// Where a push notification wants us to go after launch.
+    var pendingDeepLink: String?
+    /// Set when a notification arrived in foreground/background.
+    var lastNotificationRoute: String?
 
     /// True when the Firebase SDK is linked and configured with a plist.
     var isCloudEnabled: Bool { cloudSync.isAvailable }
@@ -63,6 +69,10 @@ final class AppState {
 
     var applicationMode: ApplicationMode {
         if !isAuthenticated {
+            // PIN-unlocked kids session on a shared iPad without a parent sign-in UI.
+            if kidsSessionUnlocked, store.family != nil {
+                return currentChildProfile == nil ? .kidsSelection : .kidsStation
+            }
             return .login
         }
         switch interfaceOverride {
@@ -75,6 +85,68 @@ final class AppState {
                 return currentChildProfile == nil ? .kidsSelection : .kidsStation
             }
             return .parentControl
+        }
+    }
+
+    /// Unlocks Kids Station with the family PIN (local cache or cloud callable).
+    func unlockKidsStation(pin: String) async -> Bool {
+        let trimmed = pin.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 4 else { return false }
+
+        // 1) Local family already on this device
+        if let family = store.family, family.settings.kidsStationPIN == trimmed {
+            kidsSessionUnlocked = true
+            interfaceOverride = .kids
+            currentChildProfile = nil
+            return true
+        }
+
+        // 2) Cloud lookup (works without parent password when functions are deployed)
+        guard isCloudEnabled else { return false }
+        do {
+            let ok = try await cloudSync.openKidsSession(pin: trimmed)
+            if ok {
+                kidsSessionUnlocked = true
+                interfaceOverride = .kids
+                currentChildProfile = nil
+                return true
+            }
+            return false
+        } catch {
+            print("[KidsPIN] unlock failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func lockKidsSession() {
+        kidsSessionUnlocked = false
+        currentChildProfile = nil
+        interfaceOverride = .automatic
+    }
+
+    /// Routes from a push notification tap (or local notification).
+    func handleNotificationRoute(_ route: String?) {
+        lastNotificationRoute = route
+        guard let route, isAuthenticated || kidsSessionUnlocked else {
+            pendingDeepLink = route
+            return
+        }
+        applyDeepLink(route)
+    }
+
+    func applyDeepLink(_ route: String) {
+        interfaceOverride = .parent
+        currentChildProfile = nil
+        // Future: switch parent tab via a published index.
+        switch route {
+        case "approvals", "today":
+            toastInfo("Open Today to review approvals")
+        case "rewards":
+            toastInfo("Open Rewards to review requests")
+        case "kids":
+            interfaceOverride = .kids
+        default:
+            break
         }
     }
 
@@ -313,6 +385,10 @@ final class AppState {
 
     func toastInfo(_ message: String) {
         ToastCenter.shared.info(message)
+    }
+
+    func toastSuccessUndo(_ message: String, action: @escaping () -> Void) {
+        ToastCenter.shared.successUndo(message, action: action)
     }
 }
 

@@ -453,6 +453,85 @@ final class CloudSyncEngine {
         status = isAvailable ? .signedOut : .unavailable
     }
 
+    /// Keeps the server-side kidsPins index in sync after a parent changes the PIN.
+    func syncKidsPINIndex(pin: String) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { return }
+        _ = try await Functions.functions()
+            .httpsCallable("updateKidsStationPIN")
+            .call(["pin": pin])
+        #endif
+    }
+
+    /// Kids PIN unlock: pulls a family snapshot via `openKidsSession` without
+    /// requiring the parent password (shared iPad).
+    func openKidsSession(pin: String) async throws -> Bool {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { return false }
+        let result = try await Functions.functions()
+            .httpsCallable("openKidsSession")
+            .call(["pin": pin])
+        guard let data = result.data as? [String: Any],
+              let familyId = data["familyId"] as? String else {
+            return false
+        }
+        // Decode snapshot pieces into the local store so Kids UI can run.
+        try applyKidsSessionPayload(data, familyId: familyId)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    private func applyKidsSessionPayload(_ data: [String: Any], familyId: String) throws {
+        #if canImport(FirebaseFirestore)
+        func decodeList<T: Decodable>(_ type: T.Type, key: String) -> [T] {
+            guard let arr = data[key] as? [[String: Any]] else { return [] }
+            return arr.compactMap { dict in
+                try? decodeJSON(type, from: dict)
+            }
+        }
+        guard var familyDict = data["family"] as? [String: Any] else {
+            throw FirebaseError.invalidFamily
+        }
+        familyDict["id"] = familyId
+        let family = try decodeJSON(Family.self, from: familyDict)
+        let children = decodeList(Child.self, key: "children")
+        let tasks = decodeList(KiddoTask.self, key: "tasks")
+        let completions = decodeList(TaskCompletion.self, key: "completions")
+        let rewards = decodeList(Reward.self, key: "rewards")
+        let claims = decodeList(RewardClaim.self, key: "claims")
+        let transactions = decodeList(PointTransaction.self, key: "transactions")
+        let achievements = decodeList(Achievement.self, key: "achievements")
+
+        // Lightweight parent shell so the store treats the device as signed-in
+        // for kids-only mutations (completions/claims need a family, not a real UID).
+        let parent = Parent(
+            id: "kids-session",
+            email: "",
+            displayName: "Kids Station",
+            familyId: familyId,
+            role: .owner,
+            lastSignInAt: Date()
+        )
+        let snapshot = FamilySnapshot(
+            family: family,
+            parent: parent,
+            passwordHash: "",
+            children: children,
+            tasks: tasks,
+            completions: completions,
+            rewards: rewards,
+            claims: claims,
+            transactions: transactions,
+            achievements: achievements
+        )
+        store.clearSyncMeta()
+        store.applyRemote(snapshot)
+        store.markPushAcknowledged()
+        #endif
+    }
+
     func deleteCloudData() async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { return }

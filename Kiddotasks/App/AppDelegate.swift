@@ -41,4 +41,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // registration only. Log for diagnostics.
         print("APNs registration failed: \(error.localizedDescription)")
     }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        let route = (userInfo["route"] as? String) ?? "today"
+        NotificationService.shared.handleRemoteNotification(route: route)
+        completionHandler(.newData)
+    }
 }
