@@ -15,3 +15,10 @@ GoogleService-Info.plist
 # Node
 Firebase/functions/node_modules/
 Firebase/functions/lib/
+
+# Firebase emulator / CLI debug logs
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.debug.log
+.firebase/
