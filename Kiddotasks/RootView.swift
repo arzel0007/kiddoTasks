@@ -21,11 +21,8 @@ struct RootView: View {
                 KidsStationView()
             }
         }
-        .animation(KiddoTasksDesignTokens.Animation.standard, value: modeID)
-        .transaction { tx in
-            // Subtle content crossfade; no large slide (feels calmer, less template-y).
-            tx.animation = KiddoTasksDesignTokens.Animation.standard
-        }
+        // No root `.animation`/`.transaction` — those overrode NavigationStack
+        // push/pop and tab transitions (janky navigation).
         .overlay(alignment: .bottom) {
             if let toast = toastCenter.current {
                 ToastBannerView(item: toast) {
@@ -46,15 +43,6 @@ struct RootView: View {
             Button("OK", role: .cancel) { appState.clearError() }
         } message: {
             Text(appState.errorMessage ?? "")
-        }
-    }
-
-    private var modeID: String {
-        switch appState.applicationMode {
-        case .login: return "login"
-        case .parentControl: return "parent"
-        case .kidsSelection: return "kidsSelect"
-        case .kidsStation: return "kids"
         }
     }
 }

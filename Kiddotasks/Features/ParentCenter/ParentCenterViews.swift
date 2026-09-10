@@ -788,30 +788,25 @@ struct FamilyView: View {
             }
             .photosPicker(isPresented: $showFamilyPhotoPicker, selection: $pickedFamilyPhoto, matching: .images)
             .onChange(of: pickedFamilyPhoto) { _, newValue in
-                Task {
-                    if let item = newValue,
-                       let data = try? await item.loadTransferable(type: Data.self),
-                       let uiImage = UIImage(data: data) {
-                        let compressed = ImageCompressor.compress(uiImage)
-                        await MainActor.run {
-                            Task { @MainActor in
-                                do {
-                                    var photoURL: String? = appState.currentFamily?.photoURL
-                                    if let compressed, appState.isCloudEnabled, let familyId = appState.currentFamily?.id {
-                                        photoURL = try await FamilyPhotoStorage.uploadPhoto(
-                                            familyId: familyId,
-                                            kind: .family,
-                                            itemId: familyId,
-                                            data: compressed
-                                        )
-                                    }
-                                    try appState.store.updateFamilyPhoto(compressed, photoURL: photoURL)
-                                    appState.toastSuccess("Family photo updated")
-                                } catch {
-                                    appState.toastError(error.localizedDescription)
-                                }
-                            }
+                Task { @MainActor in
+                    guard let item = newValue,
+                          let data = try? await item.loadTransferable(type: Data.self),
+                          let uiImage = UIImage(data: data) else { return }
+                    let compressed = ImageCompressor.compress(uiImage)
+                    do {
+                        var photoURL: String? = appState.currentFamily?.photoURL
+                        if let compressed, appState.isCloudEnabled, let familyId = appState.currentFamily?.id {
+                            photoURL = try await FamilyPhotoStorage.uploadPhoto(
+                                familyId: familyId,
+                                kind: .family,
+                                itemId: familyId,
+                                data: compressed
+                            )
                         }
+                        try appState.store.updateFamilyPhoto(compressed, photoURL: photoURL)
+                        appState.toastSuccess("Family photo updated")
+                    } catch {
+                        appState.toastError(error.localizedDescription)
                     }
                 }
             }
