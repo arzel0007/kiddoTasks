@@ -4,10 +4,31 @@ import SwiftUI
 
 /// Adds a springy press animation to any button.
 struct KiddoPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? (reduceMotion ? 1 : 0.96) : 1)
+            .opacity(configuration.isPressed ? 0.92 : 1)
+            .animation(
+                reduceMotion ? .easeInOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.6),
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// Deeper press for parent-facing cards and list chrome.
+struct CardPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? (reduceMotion ? 1 : 0.985) : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(
+                reduceMotion ? .easeInOut(duration: 0.1) : .spring(response: 0.28, dampingFraction: 0.75),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -16,11 +37,16 @@ struct KiddoPressStyle: ButtonStyle {
 /// A more dramatic press animation for kid-facing buttons — bigger scale
 /// plus a slight rotation that snaps back with a springy overshoot.
 struct ExtraBouncyPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.90 : 1)
-            .rotationEffect(.degrees(configuration.isPressed ? -3 : 0))
-            .animation(KiddoTasksDesignTokens.KidsAnimations.bouncy, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? (reduceMotion ? 1 : 0.90) : 1)
+            .rotationEffect(.degrees(configuration.isPressed && !reduceMotion ? -3 : 0))
+            .animation(
+                reduceMotion ? .easeInOut(duration: 0.12) : KiddoTasksDesignTokens.KidsAnimations.bouncy,
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -28,19 +54,26 @@ struct ExtraBouncyPressStyle: ButtonStyle {
 
 /// An emoji that gently bobs up and down forever. Used in empty states
 /// and as decorative flourishes so the screen never feels static.
+/// Respects Reduce Motion (static when enabled).
 struct FloatingEmoji: View {
     let emoji: String
     var size: CGFloat = 56
     var duration: Double = 2.0
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isFloating = false
 
     var body: some View {
         Text(emoji)
             .font(.system(size: size))
-            .offset(y: isFloating ? -12 : 12)
-            .animation(.easeInOut(duration: duration).repeatForever(autoreverses: true), value: isFloating)
-            .onAppear { isFloating = true }
+            .offset(y: reduceMotion ? 0 : (isFloating ? -12 : 12))
+            .animation(
+                reduceMotion
+                    ? .default
+                    : .easeInOut(duration: duration).repeatForever(autoreverses: true),
+                value: isFloating
+            )
+            .onAppear { if !reduceMotion { isFloating = true } }
     }
 }
 
@@ -110,14 +143,19 @@ private struct CelebrationParticle: Identifiable {
 /// badges so the screen feels alive as content loads.
 struct PopInModifier: ViewModifier {
     let delay: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isVisible = false
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(isVisible ? 1 : 0.5)
+            .scaleEffect(isVisible ? 1 : (reduceMotion ? 1 : 0.92))
             .opacity(isVisible ? 1 : 0)
             .onAppear {
-                withAnimation(KiddoTasksDesignTokens.KidsAnimations.bouncy.delay(delay)) {
+                withAnimation(
+                    reduceMotion
+                        ? .easeInOut(duration: 0.15).delay(delay)
+                        : KiddoTasksDesignTokens.KidsAnimations.gentle.delay(delay)
+                ) {
                     isVisible = true
                 }
             }
@@ -136,12 +174,14 @@ extension View {
 /// elements (e.g. rewards the kid can afford).
 struct WiggleModifier: ViewModifier {
     let trigger: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var angle: Double = 0
 
     func body(content: Content) -> some View {
         content
             .rotationEffect(.degrees(angle))
             .onChange(of: trigger) { _, newValue in
+                guard !reduceMotion else { return }
                 if newValue {
                     withAnimation(.easeInOut(duration: 0.12).repeatCount(3, autoreverses: true)) {
                         angle = 4
@@ -166,24 +206,27 @@ extension View {
 /// rewards or selected avatars to make them feel magical.
 struct SparkleOverlay: View {
     let color: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
 
     var body: some View {
-        ZStack {
-            ForEach(0..<5, id: \.self) { i in
-                Text("✨")
-                    .font(.system(size: 14))
-                    .foregroundStyle(color)
-                    .offset(
-                        x: CGFloat(cos(Double(i) * 72 * .pi / 180 + (isAnimating ? .pi : 0))) * 32,
-                        y: CGFloat(sin(Double(i) * 72 * .pi / 180 + (isAnimating ? .pi : 0))) * 32
-                    )
-                    .opacity(isAnimating ? 0.3 : 1)
+        if !reduceMotion {
+            ZStack {
+                ForEach(0..<5, id: \.self) { i in
+                    Text("✨")
+                        .font(.system(size: 14))
+                        .foregroundStyle(color)
+                        .offset(
+                            x: CGFloat(cos(Double(i) * 72 * .pi / 180 + (isAnimating ? .pi : 0))) * 32,
+                            y: CGFloat(sin(Double(i) * 72 * .pi / 180 + (isAnimating ? .pi : 0))) * 32
+                        )
+                        .opacity(isAnimating ? 0.3 : 1)
+                }
             }
+            .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+            .onAppear { isAnimating = true }
+            .allowsHitTesting(false)
         }
-        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
-        .onAppear { isAnimating = true }
-        .allowsHitTesting(false)
     }
 }
 
@@ -250,7 +293,7 @@ struct ChildAvatarView: View {
 
     var body: some View {
         Group {
-            if let photoData, let uiImage = UIImage(data: photoData) {
+            if let photoData, let uiImage = KiddoImageCache.image(from: photoData) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
@@ -267,7 +310,7 @@ struct ChildAvatarView: View {
             }
         }
         .overlay {
-            Circle().strokeBorder(.white, lineWidth: max(1.5, size * 0.055))
+            Circle().strokeBorder(KiddoTasksDesignTokens.Colors.surfaceCard, lineWidth: max(1.5, size * 0.055))
         }
         .shadow(color: Color(hex: photoData == nil ? avatar.colorHex : "#888888").opacity(0.25), radius: size * 0.10, x: 0, y: size * 0.06)
     }
@@ -277,6 +320,8 @@ struct PointsBadge: View {
     let points: Int
     var compact: Bool = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "star.fill")
@@ -284,6 +329,11 @@ struct PointsBadge: View {
             Text("\(points)")
                 .font(compact ? KiddoTasksDesignTokens.Typography.captionLarge : KiddoTasksDesignTokens.Typography.titleSmall)
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(
+                    reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.7),
+                    value: points
+                )
         }
         .foregroundStyle(.white)
         .padding(.horizontal, compact ? 8 : 12)
@@ -294,26 +344,88 @@ struct PointsBadge: View {
 
 // MARK: - Empty state
 
+/// Single empty-state component for the whole app.
+/// Owns the illustration (emoji + soft bob), title, message, and optional CTA.
 struct EmptyStateView: View {
-    let emoji: String
+    var emoji: String = "✨"
     let title: String
     let message: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(
+        emoji: String = "✨",
+        title: String,
+        message: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.emoji = emoji
+        self.title = title
+        self.message = message
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text(emoji)
-                .font(.system(size: 52))
-                .frame(width: 96, height: 96)
-                .background(Circle().fill(.white))
-                .kiddotasksShadow(.medium)
-            Text(title).font(KiddoTasksDesignTokens.Typography.headingMedium)
-            Text(message)
-                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+            if !emoji.isEmpty {
+                FloatingEmoji(emoji: emoji, size: 56, duration: reduceMotion ? 0 : 2.2)
+                    .frame(width: 104, height: 104)
+                    .background(Circle().fill(KiddoTasksDesignTokens.Colors.surfaceCard))
+                    .kiddotasksShadow(.medium)
+            }
+
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(KiddoTasksDesignTokens.Typography.headingMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                    .multilineTextAlignment(.center)
+                Text(message)
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let actionTitle, let action {
+                PrimaryButton(title: actionTitle, action: action)
+                    .frame(maxWidth: 240)
+                    .padding(.top, 4)
+            }
         }
-        .padding(24)
+        .padding(KiddoTasksDesignTokens.Spacing.xLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Compact empty row for List sections (parent Tasks/Rewards).
+struct EmptyListHint: View {
+    let emoji: String
+    let title: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Text(emoji)
+                    .font(.system(size: 22))
+                Text(title)
+                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+            }
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 
@@ -340,7 +452,7 @@ struct SectionCard<Content: View>: View {
         }
         .padding(KiddoTasksDesignTokens.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white)
+        .background(KiddoTasksDesignTokens.Colors.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.large, style: .continuous))
         .kiddotasksShadow(.medium)
     }
@@ -418,7 +530,7 @@ struct MissionCard: View {
             .background(Capsule().fill(Color(hex: "#FEF3C7")))
         }
         .padding(KiddoTasksDesignTokens.Spacing.medium)
-        .background(.white)
+        .background(KiddoTasksDesignTokens.Colors.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
         .kiddotasksShadow(.medium)
         .opacity(completion?.status == .approved ? 0.6 : 1)
@@ -508,7 +620,7 @@ struct RewardShopCard: View {
         }
         .padding(KiddoTasksDesignTokens.Spacing.medium)
         .frame(maxWidth: .infinity, minHeight: 170, alignment: .leading)
-        .background(.white)
+        .background(KiddoTasksDesignTokens.Colors.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
         .kiddotasksShadow(.medium)
     }
@@ -529,23 +641,28 @@ public enum Haptic {
 public struct SkeletonView: View {
     var height: CGFloat = 20
     var cornerRadius: CGFloat = 8
-    @State private var isShimmering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing = false
     public init(height: CGFloat = 20, cornerRadius: CGFloat = 8) {
         self.height = height
         self.cornerRadius = cornerRadius
     }
     public var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(Color.gray.opacity(0.15))
+            .fill(KiddoTasksDesignTokens.Colors.surfaceElevated)
             .frame(height: height)
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(LinearGradient(colors: [.clear, Color.white.opacity(0.4), .clear], startPoint: .leading, endPoint: .trailing))
-                    .offset(x: isShimmering ? 200 : -200)
-                    .animation(.linear(duration: 1.2).repeatForever(autoreverses: false), value: isShimmering)
+                    .fill(KiddoTasksDesignTokens.Colors.textTertiary.opacity(0.18))
+                    .opacity(isPulsing ? 0.35 : 0.85)
             }
-            .clipped()
-            .onAppear { isShimmering = true }
+            .animation(
+                reduceMotion
+                    ? .default
+                    : .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                value: isPulsing
+            )
+            .onAppear { if !reduceMotion { isPulsing = true } }
     }
 }
 
@@ -562,7 +679,7 @@ public struct SkeletonListRow: View {
             Spacer()
         }
         .padding(12)
-        .background(.white)
+        .background(KiddoTasksDesignTokens.Colors.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }

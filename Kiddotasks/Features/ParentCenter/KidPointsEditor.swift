@@ -17,6 +17,13 @@ struct KidPointsEditor: View {
         var id: String { rawValue }
         var label: String {
             switch self {
+            case .add: return "Add"
+            case .deduct: return "Deduct"
+            case .set: return "Set"
+            }
+        }
+        var fullLabel: String {
+            switch self {
             case .add: return "Add points"
             case .deduct: return "Deduct (bad deed)"
             case .set: return "Set to value"
@@ -24,68 +31,100 @@ struct KidPointsEditor: View {
         }
     }
 
+    private var modeOptions: [KiddoChipOption<Mode>] {
+        Mode.allCases.map { KiddoChipOption(id: $0, title: $0.label) }
+    }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack(spacing: 12) {
-                        ChildAvatarView(avatar: child.avatar, size: 48, photoData: child.photoData)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(child.name)
-                                .font(KiddoTasksDesignTokens.Typography.titleMedium)
-                            Text("\(child.activePoints) ⭐ balance")
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                    KiddoFormSection(title: child.name, icon: "person.fill") {
+                        HStack(spacing: 12) {
+                            ChildAvatarView(avatar: child.avatar, size: 52, photoData: child.photoData)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(child.activePoints)")
+                                    .font(KiddoTasksDesignTokens.Typography.displaySmall)
+                                    .monospacedDigit()
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                                Text("current balance")
+                                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            }
+                            Spacer()
+                            PointsBadge(points: child.activePoints)
+                        }
+                    }
+
+                    KiddoFormSection(title: "Action", icon: "slider.horizontal.3") {
+                        KiddoChipPicker(label: "Mode", options: modeOptions, selection: $mode)
+                            .padding(.bottom, 4)
+
+                        switch mode {
+                        case .set:
+                            KiddoTextField(
+                                label: "New balance",
+                                placeholder: "e.g. 50",
+                                text: $setToValue,
+                                keyboard: .numberPad
+                            )
+                        case .add, .deduct:
+                            KiddoPointsStepper(
+                                label: mode == .deduct ? "Stars to remove" : "Stars to add",
+                                value: $amount,
+                                range: 1...500
+                            )
+                        }
+
+                        KiddoTextField(
+                            label: "Reason",
+                            placeholder: mode == .deduct ? "Optional (shows in history)" : "Optional",
+                            text: $reason
+                        )
+
+                        if mode == .deduct {
+                            Text("Deductions appear in history and reduce the balance immediately.")
                                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
-                }
 
-                Section("Action") {
-                    Picker("Mode", selection: $mode) {
-                        ForEach(Mode.allCases) { m in
-                            Text(m.label).tag(m)
+                    KiddoFormSection(title: "Danger zone", icon: "exclamationmark.triangle") {
+                        Button(role: .destructive) {
+                            showResetConfirm = true
+                        } label: {
+                            Label("Reset points to zero", systemImage: "arrow.counterclockwise")
+                                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 4)
                         }
-                    }
-                    .pickerStyle(.segmented)
-
-                    if mode == .set {
-                        TextField("New balance", text: $setToValue)
-                            .keyboardType(.numberPad)
-                    } else {
-                        Stepper("\(mode == .deduct ? "-" : "+")\(amount) ⭐", value: $amount, in: 1...500)
+                        .buttonStyle(.plain)
                     }
 
-                    TextField("Reason (optional)", text: $reason)
+                    PrimaryButton(title: "Apply", color: mode == .deduct ? KiddoTasksDesignTokens.Colors.warning : KiddoTasksDesignTokens.Colors.primary) {
+                        apply()
+                    }
+                    .disabled(!canApply)
+                    .opacity(canApply ? 1 : 0.5)
                 }
-
-                if mode == .deduct {
-                    Section {
-                        Text("Deductions appear in the child's history and reduce their balance immediately.")
-                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                    }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        showResetConfirm = true
-                    } label: {
-                        Label("Reset points to zero", systemImage: "arrow.counterclockwise")
-                    }
-                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .navigationTitle("Manage points")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply", action: apply)
-                        .disabled(!canApply)
-                }
             }
             .alert("Reset \(child.name)'s points?", isPresented: $showResetConfirm) {
                 Button("Reset", role: .destructive) {
-                    try? appState.store.resetPoints(for: child.id)
+                    do {
+                        try appState.store.resetPoints(for: child.id)
+                        appState.toastSuccess("Points reset to zero")
+                    } catch {
+                        appState.toastError(error.localizedDescription)
+                    }
                     dismiss()
                 }
                 Button("Cancel", role: .cancel) { }
@@ -108,16 +147,28 @@ struct KidPointsEditor: View {
         do {
             switch mode {
             case .add:
-                try appState.store.adjustPoints(for: child.id, amount: amount, reason: reason.isEmpty ? "Bonus points" : reason)
+                try appState.store.adjustPoints(
+                    for: child.id,
+                    amount: amount,
+                    reason: reason.isEmpty ? "Bonus points" : reason
+                )
+                appState.toastSuccess("Added \(amount) ★ to \(child.name)")
             case .deduct:
-                try appState.store.adjustPoints(for: child.id, amount: -amount, reason: reason.isEmpty ? "Deduction" : reason)
+                try appState.store.adjustPoints(
+                    for: child.id,
+                    amount: -amount,
+                    reason: reason.isEmpty ? "Deduction" : reason
+                )
+                appState.toastSuccess("Removed \(amount) ★ from \(child.name)")
             case .set:
                 if let value = Int(setToValue) {
                     try appState.store.setPoints(for: child.id, to: value, reason: reason)
+                    appState.toastSuccess("\(child.name) balance set to \(value)")
                 }
             }
             dismiss()
         } catch {
+            appState.toastError(error.localizedDescription)
             appState.presentError(error)
         }
     }

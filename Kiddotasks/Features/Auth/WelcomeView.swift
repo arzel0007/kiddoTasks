@@ -80,10 +80,10 @@ struct SignUpView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                     HStack(spacing: 12) {
-                        KiddoTasksLogoMark(size: 44)
+                        KiddoTasksLogoMark(size: 48)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("New family")
                                 .font(KiddoTasksDesignTokens.Typography.titleSmall)
@@ -92,39 +92,39 @@ struct SignUpView: View {
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-                Section("Family") {
-                    TextField("Family name", text: $familyName)
-                    TextField("Your name", text: $parentName)
-                }
-                Section("Account") {
-                    TextField("Email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                    SecureField("Password (6+ characters)", text: $password)
-                }
-                if let error = appState.authenticationError {
-                    Text(error).foregroundStyle(KiddoTasksDesignTokens.Colors.error)
-                }
-            }
-            .navigationTitle("New family")
-            .onAppear { appState.clearAuthMessages() }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        appState.clearAuthMessages()
-                        dismiss()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 4)
+
+                    KiddoFormSection(title: "Family", icon: "house.fill") {
+                        KiddoTextField(label: "Family name", placeholder: "Our family", text: $familyName)
+                        KiddoTextField(label: "Your name", placeholder: "Parent", text: $parentName)
                     }
-                }
-                if appState.isLoading {
-                    ToolbarItem(placement: .principal) {
-                        ProgressView()
+
+                    KiddoFormSection(title: "Account", icon: "person.crop.circle") {
+                        KiddoTextField(
+                            label: "Email",
+                            placeholder: "you@example.com",
+                            text: $email,
+                            keyboard: .emailAddress,
+                            autocapitalization: .never
+                        )
+                        KiddoTextField(
+                            label: "Password",
+                            placeholder: "6+ characters",
+                            text: $password,
+                            isSecure: true
+                        )
                     }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+
+                    if let error = appState.authenticationError {
+                        Text(error)
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 4)
+                    }
+
+                    PrimaryButton(title: appState.isLoading ? "Creating…" : "Create family") {
                         guard password.count >= 6 else {
                             appState.authenticationError = "Password must be at least 6 characters"
                             return
@@ -143,6 +143,19 @@ struct SignUpView: View {
                         }
                     }
                     .disabled(email.isEmpty || password.isEmpty || appState.isLoading)
+                    .opacity(appState.isLoading ? 0.7 : 1)
+                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
+            }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .navigationTitle("New family")
+            .onAppear { appState.clearAuthMessages() }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        appState.clearAuthMessages()
+                        dismiss()
+                    }
                 }
             }
             .alert("Your Kids Station PIN", isPresented: $showPinAlert) {
@@ -162,10 +175,10 @@ struct SignInView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                     HStack(spacing: 12) {
-                        KiddoTasksLogoMark(size: 44)
+                        KiddoTasksLogoMark(size: 48)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Welcome back")
                                 .font(KiddoTasksDesignTokens.Typography.titleSmall)
@@ -176,35 +189,59 @@ struct SignInView: View {
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-                Section("Account") {
-                    TextField("Email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                    SecureField("Password", text: $password)
-                    Button("Forgot password?") {
-                        appState.sendPasswordReset(email: email)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    KiddoFormSection(title: "Account", icon: "person.crop.circle") {
+                        KiddoTextField(
+                            label: "Email",
+                            placeholder: "you@example.com",
+                            text: $email,
+                            keyboard: .emailAddress,
+                            autocapitalization: .never
+                        )
+                        KiddoTextField(label: "Password", placeholder: "Your password", text: $password, isSecure: true)
+                        Button("Forgot password?") {
+                            appState.sendPasswordReset(email: email)
+                        }
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                        .disabled(email.isEmpty)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .font(.system(size: 13))
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
-                    .disabled(email.isEmpty)
-                }
-                if let error = appState.authenticationError {
-                    Text(error).foregroundStyle(KiddoTasksDesignTokens.Colors.error)
-                }
-                if let successMessage = appState.successMessage {
-                    Text(successMessage).foregroundStyle(KiddoTasksDesignTokens.Colors.success)
-                }
-                Section {
+
+                    if let error = appState.authenticationError {
+                        Text(error)
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if let successMessage = appState.successMessage {
+                        Text(successMessage)
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.success)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    PrimaryButton(title: appState.isLoading ? "Signing in…" : "Sign in") {
+                        Haptic.medium()
+                        appState.signIn(email: email, password: password) {
+                            dismiss()
+                        }
+                    }
+                    .disabled(email.isEmpty || password.isEmpty || appState.isLoading)
+                    .opacity(appState.isLoading ? 0.7 : 1)
+
                     Text(appState.isCloudEnabled
                          ? "Your account and family live in the cloud, so this family can be opened on any of your devices."
                          : "Right now this family is saved on this device. Connect Firebase to sync it everywhere.")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
                 }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .navigationTitle("Sign in")
             .onAppear { appState.clearAuthMessages() }
             .toolbar {
@@ -213,20 +250,6 @@ struct SignInView: View {
                         appState.clearAuthMessages()
                         dismiss()
                     }
-                }
-                if appState.isLoading {
-                    ToolbarItem(placement: .principal) {
-                        ProgressView()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Sign in") {
-                        Haptic.medium()
-                        appState.signIn(email: email, password: password) {
-                            dismiss()
-                        }
-                    }
-                    .disabled(email.isEmpty || password.isEmpty || appState.isLoading)
                 }
             }
         }
@@ -243,10 +266,10 @@ struct JoinWithCodeView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                     HStack(spacing: 12) {
-                        KiddoTasksLogoMark(size: 44)
+                        KiddoTasksLogoMark(size: 48)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Join a family")
                                 .font(KiddoTasksDesignTokens.Typography.titleSmall)
@@ -255,44 +278,39 @@ struct JoinWithCodeView: View {
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-                Section("Family code") {
-                    TextField("KDO-XXXX", text: $familyCode)
-                        .textInputAutocapitalization(.characters)
-                }
-                Section("Your account") {
-                    TextField("Email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                    SecureField("Password", text: $password)
-                }
-                if let error = appState.authenticationError {
-                    Text(error).foregroundStyle(KiddoTasksDesignTokens.Colors.error)
-                }
-                Section {
-                    Text("The family code was shown in the other parent's Family tab.")
-                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                }
-            }
-            .navigationTitle("Join family")
-            .onAppear { appState.clearAuthMessages() }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        appState.clearAuthMessages()
-                        dismiss()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    KiddoFormSection(title: "Family code", icon: "qrcode") {
+                        KiddoTextField(
+                            label: "Code",
+                            placeholder: "KDO-XXXX",
+                            text: $familyCode,
+                            autocapitalization: .characters
+                        )
+                        Text("Shown in the other parent's Family tab.")
+                            .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                     }
-                }
-                if appState.isLoading {
-                    ToolbarItem(placement: .principal) {
-                        ProgressView()
+
+                    KiddoFormSection(title: "Your account", icon: "person.crop.circle") {
+                        KiddoTextField(
+                            label: "Email",
+                            placeholder: "you@example.com",
+                            text: $email,
+                            keyboard: .emailAddress,
+                            autocapitalization: .never
+                        )
+                        KiddoTextField(label: "Password", placeholder: "Create a password", text: $password, isSecure: true)
                     }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Join") {
+
+                    if let error = appState.authenticationError {
+                        Text(error)
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    PrimaryButton(title: appState.isLoading ? "Joining…" : "Join family") {
                         appState.joinWithCode(
                             code: familyCode,
                             email: email,
@@ -302,6 +320,19 @@ struct JoinWithCodeView: View {
                         }
                     }
                     .disabled(familyCode.isEmpty || email.isEmpty || password.isEmpty || appState.isLoading)
+                    .opacity(appState.isLoading ? 0.7 : 1)
+                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
+            }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .navigationTitle("Join family")
+            .onAppear { appState.clearAuthMessages() }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        appState.clearAuthMessages()
+                        dismiss()
+                    }
                 }
             }
         }

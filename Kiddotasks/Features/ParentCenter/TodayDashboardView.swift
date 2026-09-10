@@ -12,9 +12,16 @@ struct TodayDashboardView: View {
     @State private var approveClaimMessage = ""
     @State private var approvingClaim: RewardClaim?
 
-    private var totals: LocalFamilyDataStore.TodayTotals {
-        appState.store.todayTotals()
-    }
+    /// Aggregates recomputed only when the store revision changes — avoids
+    /// scanning transactions twice on every unrelated body pass.
+    @State private var totals = LocalFamilyDataStore.TodayTotals(
+        starsEarned: 0,
+        missionsApproved: 0,
+        pendingApprovals: 0,
+        pendingRewardRequests: 0,
+        tasksDueToday: 0
+    )
+    @State private var weeklySeries: [LocalFamilyDataStore.DailyPoints] = []
 
     var body: some View {
         NavigationStack {
@@ -22,7 +29,7 @@ struct TodayDashboardView: View {
                 VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                     header
                     statTiles
-                    WeeklyStarsCard(series: appState.store.weeklyPointsSeries())
+                    WeeklyStarsCard(series: weeklySeries)
                     childProgress
                     pendingApprovalsCard
                     rewardRequestsCard
@@ -42,6 +49,10 @@ struct TodayDashboardView: View {
                     .padding()
                 }
             }
+            .onAppear(perform: recomputeAggregates)
+            .onChange(of: appState.store.dataRevision) { _, _ in
+                recomputeAggregates()
+            }
             .alert("Decline mission", isPresented: Binding(
                 get: { rejectingCompletion != nil },
                 set: { if !$0 { rejectingCompletion = nil } }
@@ -49,7 +60,12 @@ struct TodayDashboardView: View {
                 TextField("Reason (optional)", text: $rejectReason)
                 Button("Decline", role: .destructive) {
                     if let completion = rejectingCompletion {
-                        try? appState.store.rejectCompletion(completion.id, reason: rejectReason)
+                        do {
+                            try appState.store.rejectCompletion(completion.id, reason: rejectReason)
+                            appState.toastInfo("Mission declined")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
                     }
                     rejectReason = ""
                     rejectingCompletion = nil
@@ -63,7 +79,12 @@ struct TodayDashboardView: View {
                 TextField("Message for child (optional)", text: $approveMessage)
                 Button("Approve") {
                     if let completion = approvingCompletion {
-                        try? appState.store.approveCompletion(completion.id, message: approveMessage.isEmpty ? nil : approveMessage)
+                        do {
+                            try appState.store.approveCompletion(completion.id, message: approveMessage.isEmpty ? nil : approveMessage)
+                            appState.toastSuccess("Mission approved")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
                     }
                     approveMessage = ""
                     approvingCompletion = nil
@@ -77,7 +98,12 @@ struct TodayDashboardView: View {
                 TextField("Message for child (optional)", text: $approveClaimMessage)
                 Button("Approve") {
                     if let claim = approvingClaim {
-                        try? appState.store.approveClaim(claim.id, message: approveClaimMessage.isEmpty ? nil : approveClaimMessage)
+                        do {
+                            try appState.store.approveClaim(claim.id, message: approveClaimMessage.isEmpty ? nil : approveClaimMessage)
+                            appState.toastSuccess("Reward approved")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
                     }
                     approveClaimMessage = ""
                     approvingClaim = nil
@@ -85,6 +111,11 @@ struct TodayDashboardView: View {
                 Button("Cancel", role: .cancel) { approvingClaim = nil }
             }
         }
+    }
+
+    private func recomputeAggregates() {
+        totals = appState.store.todayTotals()
+        weeklySeries = appState.store.weeklyPointsSeries()
     }
 
     // MARK: Header
@@ -147,9 +178,15 @@ struct TodayDashboardView: View {
     private var childProgress: some View {
         SectionCard(title: "Kids today", icon: "figure.run", tint: KiddoTasksDesignTokens.Colors.primary) {
             if appState.familyChildren.isEmpty {
-                Text("Add a child in the Family tab to get started.")
-                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                EmptyStateView(
+                    emoji: "👋",
+                    title: "Add your kids",
+                    message: "Create child profiles in the Family tab so missions can be assigned.",
+                    actionTitle: "Got it"
+                ) {
+                    appState.toastInfo("Open the Family tab to add kids")
+                }
+                .frame(minHeight: 180)
             } else {
                 VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                     ForEach(appState.familyChildren) { child in
@@ -172,9 +209,10 @@ struct TodayDashboardView: View {
         ) {
             let pending = appState.store.pendingCompletions()
             if pending.isEmpty {
-                Text("No missions waiting. Nice! 🎉")
-                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                EmptyListHint(
+                    emoji: "✨",
+                    title: "No missions waiting. Nice!"
+                )
             } else {
                 VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                     ForEach(pending) { completion in
@@ -203,9 +241,10 @@ struct TodayDashboardView: View {
         ) {
             let claims = appState.store.pendingClaims()
             if claims.isEmpty {
-                Text("No reward requests right now.")
-                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                EmptyListHint(
+                    emoji: "🎁",
+                    title: "No reward requests right now."
+                )
             } else {
                 VStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                     ForEach(claims) { claim in

@@ -3,77 +3,199 @@ import SwiftUI
 
 struct ChildSelectionView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Soft-previewed child (press/focus) — drives the page wash before enter.
+    @State private var previewChild: Child?
+
+    private var pageTheme: ChildPlayerTheme {
+        ChildPlayerTheme.theme(for: previewChild, colorScheme: colorScheme)
+    }
 
     var body: some View {
-        VStack(spacing: 24) {
-            HStack {
-                Button("Parent") {
-                    appState.clearChildProfile()
-                    appState.interfaceOverride = .parent
+        ZStack {
+            // Flat base + accent wash (two solids, no gradient).
+            KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground
+            if let previewChild {
+                Color(hex: previewChild.avatar.colorHex)
+                    .opacity(colorScheme == .dark ? 0.22 : 0.18)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            }
+
+            VStack(spacing: 20) {
+                header
+
+                if appState.familyChildren.isEmpty {
+                    emptyState
+                } else {
+                    playerGrid
                 }
-                .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                Spacer()
+
+                Spacer(minLength: 8)
+            }
+            .padding(.top, 20)
+            .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
+        }
+        .animation(
+            reduceMotion ? .easeInOut(duration: 0.15) : KiddoTasksDesignTokens.Animation.standard,
+            value: previewChild?.id
+        )
+    }
+
+    private var header: some View {
+        HStack {
+            Button {
+                appState.clearChildProfile()
+                appState.interfaceOverride = .parent
+            } label: {
+                Text("Parent")
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.85))
+                    )
+            }
+            .buttonStyle(KiddoPressStyle())
+            .accessibilityLabel("Back to Parent Center")
+
+            Spacer()
+
+            VStack(spacing: 4) {
                 HStack(spacing: 8) {
-                    KiddoTasksLogoMark(size: 26)
+                    KiddoTasksLogoMark(size: 24)
                     Text("Who's playing?")
                         .font(KiddoTasksDesignTokens.Typography.headingLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 }
-                Spacer()
-                Color.clear.frame(width: 48, height: 1)
+                Text(previewSubtitle)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    .opacity(previewChild == nil ? 0.7 : 1)
             }
-            .padding(.horizontal)
 
-            if appState.familyChildren.isEmpty {
-                VStack(spacing: 16) {
-                    FloatingEmoji(emoji: "🧒", size: 72)
-                    EmptyStateView(
-                        emoji: "",
-                        title: "No kids yet",
-                        message: "Ask a parent to add a child in the Parent Center."
-                    )
-                }
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 16)], spacing: 16) {
-                    ForEach(Array(appState.familyChildren.enumerated()), id: \.element.id) { index, child in
-                        Button {
-                            Haptic.light()
-                            appState.selectChildProfile(child)
-                        } label: {
-                            VStack(spacing: 12) {
-                                ChildAvatarView(avatar: child.avatar, size: 88, photoData: child.photoData)
-                                Text(child.name)
-                                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
-                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                                PointsBadge(points: child.activePoints, compact: true)
-                            }
-                            .padding(20)
-                            .frame(maxWidth: .infinity)
-                            .background(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                            .kiddotasksShadow(.large)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                    .strokeBorder(Color(hex: child.avatar.colorHex).opacity(0.25), lineWidth: 2)
-                            }
+            Spacer()
+
+            Color.clear.frame(width: 64, height: 1)
+        }
+    }
+
+    private var previewSubtitle: String {
+        if let previewChild {
+            return "Tap to start as \(previewChild.name)"
+        }
+        return "Pick your face to start"
+    }
+
+    private var emptyState: some View {
+        EmptyStateView(
+            emoji: "🧒",
+            title: "No kids yet",
+            message: "Ask a parent to add a child in the Parent Center."
+        )
+        .frame(maxWidth: .infinity)
+    }
+
+    private var playerGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+            ForEach(Array(appState.familyChildren.enumerated()), id: \.element.id) { index, child in
+                PlayerCard(
+                    child: child,
+                    isPreviewed: previewChild?.id == child.id,
+                    colorScheme: colorScheme
+                ) {
+                    // Brief wash, then enter — feels like stepping into their space.
+                    previewChild = child
+                    Haptic.medium()
+                    let delay: UInt64 = reduceMotion ? 0 : 220_000_000
+                    Task { @MainActor in
+                        if delay > 0 {
+                            try? await Task.sleep(nanoseconds: delay)
                         }
-                        .buttonStyle(ExtraBouncyPressStyle())
-                        .popIn(delay: Double(index) * 0.08)
+                        appState.selectChildProfile(child)
                     }
                 }
-                .padding()
+                .buttonStyle(ExtraBouncyPressStyle())
+                .popIn(delay: reduceMotion ? 0 : Double(index) * 0.06)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            if previewChild?.id != child.id {
+                                withAnimation {
+                                    previewChild = child
+                                }
+                            }
+                        }
+                )
             }
-            Spacer()
         }
-        .padding(.top, 24)
-        .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
+    }
+}
+
+/// Large kid-facing player tile with accent wash + strong identity.
+private struct PlayerCard: View {
+    let child: Child
+    let isPreviewed: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    private var accent: Color { Color(hex: child.avatar.colorHex) }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                ChildAvatarView(avatar: child.avatar, size: 84, photoData: child.photoData)
+                    .scaleEffect(isPreviewed ? 1.05 : 1)
+
+                Text(child.name)
+                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                PointsBadge(points: child.activePoints, compact: true)
+            }
+            .padding(.vertical, 22)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(isPreviewed ? accent.opacity(colorScheme == .dark ? 0.28 : 0.20) : KiddoTasksDesignTokens.Colors.surfaceCard)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .strokeBorder(
+                        isPreviewed ? accent.opacity(0.65) : accent.opacity(0.28),
+                        lineWidth: isPreviewed ? 3 : 2
+                    )
+            )
+            .kiddotasksShadow(isPreviewed ? .large : .medium)
+            .scaleEffect(isPreviewed ? 1.02 : 1)
+            .animation(
+                .spring(response: 0.32, dampingFraction: 0.72),
+                value: isPreviewed
+            )
+        }
+        .accessibilityLabel("\(child.name), \(child.activePoints) stars")
+        .accessibilityHint("Starts Kids Station for \(child.name)")
     }
 }
 
 struct KidsStationView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab = 0
+    @State private var tabContentID = 0
+
+    private var child: Child? {
+        guard let selected = appState.currentChildProfile else { return nil }
+        return appState.child(id: selected.id)
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -87,10 +209,10 @@ struct KidsStationView: View {
                 .tabItem { Label("Badges", systemImage: "medal.fill") }
                 .tag(2)
         }
-        .tint(KiddoTasksDesignTokens.Colors.accent)
+        .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.accent)
         .onChange(of: selectedTab) { _, _ in
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
+            if !reduceMotion { Haptic.light() }
+            tabContentID += 1
         }
     }
 }
@@ -111,10 +233,11 @@ struct MissionsView: View {
                 if let child {
                     let missions = appState.store.tasksForChild(child.id)
                     if missions.isEmpty {
-                        VStack(spacing: 16) {
-                            FloatingEmoji(emoji: "🎯", size: 72)
-                            EmptyStateView(emoji: "", title: "All clear", message: "No missions for today.")
-                        }
+                        EmptyStateView(
+                            emoji: "🎯",
+                            title: "All clear",
+                            message: "No missions for today. Great job!"
+                        )
                     } else {
                         ScrollView {
                             VStack(spacing: 12) {
@@ -127,7 +250,7 @@ struct MissionsView: View {
                                             completion: appState.store.todaysCompletion(taskId: task.id, childId: child.id)
                                         )
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(CardPressStyle())
                                     .popIn(delay: Double(index) * 0.06)
                                 }
                             }
@@ -136,7 +259,7 @@ struct MissionsView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
+            .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -230,7 +353,8 @@ struct TaskDetailView: View {
                 Spacer()
             }
             .padding(24)
-            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle("Mission")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -244,8 +368,10 @@ struct TaskDetailView: View {
     private func submitCompletion() {
         do {
             _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
+            appState.toastSuccess("Mission sent to a parent")
             onFinish(true)
         } catch {
+            appState.toastError(error.localizedDescription)
             appState.presentError(error)
         }
     }
@@ -255,21 +381,31 @@ struct CelebrationView: View {
     let task: KiddoTask
     let onDone: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
             ZStack {
-                ForEach(0..<8, id: \.self) { index in
-                    Text(["🎉", "⭐", "✨", "🎊"][index % 4])
-                        .font(.system(size: 22))
-                        .offset(
-                            x: cos(Double(index) / 8 * .pi * 2) * 112,
-                            y: sin(Double(index) / 8 * .pi * 2) * 112
-                        )
-                        .opacity(0.9)
+                if !reduceMotion {
+                    ForEach(0..<8, id: \.self) { index in
+                        Text(["🎉", "⭐", "✨", "🎊"][index % 4])
+                            .font(.system(size: 22))
+                            .offset(
+                                x: cos(Double(index) / 8 * .pi * 2) * 112,
+                                y: sin(Double(index) / 8 * .pi * 2) * 112
+                            )
+                            .opacity(0.9)
+                    }
                 }
                 Text("🎉")
                     .font(.system(size: 104))
+                    .scaleEffect(appeared ? 1 : (reduceMotion ? 1 : 0.7))
+                    .animation(
+                        reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.45, dampingFraction: 0.55),
+                        value: appeared
+                    )
             }
             Text("Awesome!")
                 .font(KiddoTasksDesignTokens.Typography.displayLarge)
@@ -284,6 +420,7 @@ struct CelebrationView: View {
         }
         .padding(24)
         .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
+        .onAppear { appeared = true }
     }
 }
 
@@ -303,10 +440,11 @@ struct RewardShopView: View {
                 if let child {
                     let shop = appState.store.rewards.filter { $0.isActive && $0.isEligibleFor(child.id) }
                     if shop.isEmpty {
-                        VStack(spacing: 16) {
-                            FloatingEmoji(emoji: "🎁", size: 72)
-                            EmptyStateView(emoji: "", title: "Shop is empty", message: "Parents can add rewards.")
-                        }
+                        EmptyStateView(
+                            emoji: "🎁",
+                            title: "Shop is empty",
+                            message: "Parents can add rewards in the Parent Center."
+                        )
                     } else {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
@@ -337,7 +475,7 @@ struct RewardShopView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
+            .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
             .navigationTitle("Reward shop")
             .alert("Shop", isPresented: Binding(
                 get: { message != nil },
@@ -354,12 +492,12 @@ struct RewardShopView: View {
         do {
             let claim = try appState.store.claimReward(rewardId: reward.id, childId: child.id)
             if claim.status == .approved {
-                message = "You got \(reward.name)!"
+                appState.toastSuccess("You got \(reward.name)!")
             } else {
-                message = "Asked a parent for \(reward.name)."
+                appState.toastSuccess("Asked a parent for \(reward.name)")
             }
         } catch {
-            message = error.localizedDescription
+            appState.toastError(error.localizedDescription)
         }
     }
 }
@@ -367,19 +505,21 @@ struct RewardShopView: View {
 struct AchievementsView: View {
     @Environment(AppState.self) private var appState
 
+    private var child: Child? {
+        guard let selected = appState.currentChildProfile else { return nil }
+        return appState.child(id: selected.id)
+    }
+
     var body: some View {
         NavigationStack {
             let earned = appState.store.achievements.filter { $0.childId == appState.currentChildProfile?.id }
             Group {
                 if earned.isEmpty {
-                    VStack(spacing: 16) {
-                        FloatingEmoji(emoji: "🏅", size: 72)
-                        EmptyStateView(
-                            emoji: "",
-                            title: "No badges yet",
-                            message: "Finish missions to earn badges."
-                        )
-                    }
+                    EmptyStateView(
+                        emoji: "🏅",
+                        title: "No badges yet",
+                        message: "Finish missions to earn badges."
+                    )
                 } else {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
@@ -400,9 +540,17 @@ struct AchievementsView: View {
                                 }
                                 .padding(16)
                                 .frame(maxWidth: .infinity)
-                                .background(.white)
+                                .background(KiddoTasksDesignTokens.Colors.surfaceCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                                 .kiddotasksShadow(.medium)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                        .strokeBorder(
+                                            (child?.playerAccentColor ?? KiddoTasksDesignTokens.KidsColors.sunshine)
+                                                .opacity(0.20),
+                                            lineWidth: 1.5
+                                        )
+                                }
                                 .popIn(delay: Double(index) * 0.08)
                             }
                         }
@@ -410,7 +558,7 @@ struct AchievementsView: View {
                     }
                 }
             }
-            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
+            .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
             .navigationTitle("Badges")
         }
     }

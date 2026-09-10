@@ -301,6 +301,19 @@ final class AppState {
     func clearError() {
         errorMessage = nil
     }
+
+    /// Toast helpers so feature code stays short.
+    func toastSuccess(_ message: String) {
+        ToastCenter.shared.success(message)
+    }
+
+    func toastError(_ message: String) {
+        ToastCenter.shared.error(message)
+    }
+
+    func toastInfo(_ message: String) {
+        ToastCenter.shared.info(message)
+    }
 }
 
 enum ApplicationMode {

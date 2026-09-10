@@ -3,21 +3,30 @@ import PhotosUI
 
 struct ParentControlCenter: View {
     @Environment(AppState.self) private var appState
+    @State private var selectedTab = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             TodayDashboardView()
                 .tabItem { Label("Today", systemImage: "checkmark.seal.fill") }
+                .tag(0)
             TaskListView()
                 .tabItem { Label("Tasks", systemImage: "list.bullet.clipboard") }
+                .tag(1)
             RewardListView()
                 .tabItem { Label("Rewards", systemImage: "gift") }
+                .tag(2)
             FamilyView()
                 .tabItem { Label("Family", systemImage: "house.fill") }
+                .tag(3)
             ActivityView()
                 .tabItem { Label("History", systemImage: "clock") }
+                .tag(4)
         }
         .tint(KiddoTasksDesignTokens.Colors.primary)
+        .onChange(of: selectedTab) { _, _ in
+            Haptic.light()
+        }
     }
 }
 
@@ -32,8 +41,11 @@ struct TaskListView: View {
                 Section("Active") {
                     let active = appState.store.tasks.filter(\.isActive)
                     if active.isEmpty {
-                        Text("No chores yet. Tap + to add one.")
-                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        EmptyListHint(
+                            emoji: "📋",
+                            title: "No chores yet. Create one for the kids.",
+                            actionTitle: "Add task"
+                        ) { showEditor = true }
                     }
                     ForEach(active) { task in
                         NavigationLink {
@@ -41,6 +53,7 @@ struct TaskListView: View {
                         } label: {
                             TaskRow(task: task)
                         }
+                        .buttonStyle(CardPressStyle())
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 taskPendingDeletion = task
@@ -48,7 +61,12 @@ struct TaskListView: View {
                                 Label("Delete", systemImage: "trash")
                             }
                             Button {
-                                try? appState.store.archiveTask(task.id)
+                                do {
+                                    try appState.store.archiveTask(task.id)
+                                    appState.toastSuccess("Task archived")
+                                } catch {
+                                    appState.toastError(error.localizedDescription)
+                                }
                             } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
@@ -69,7 +87,12 @@ struct TaskListView: View {
                                         Label("Delete", systemImage: "trash")
                                     }
                                     Button {
-                                        try? appState.store.restoreTask(task.id)
+                                        do {
+                                            try appState.store.restoreTask(task.id)
+                                            appState.toastSuccess("Task restored")
+                                        } catch {
+                                            appState.toastError(error.localizedDescription)
+                                        }
                                     } label: {
                                         Label("Restore", systemImage: "arrow.uturn.backward")
                                     }
@@ -98,7 +121,12 @@ struct TaskListView: View {
             ) {
                 Button("Delete task", role: .destructive) {
                     if let task = taskPendingDeletion {
-                        try? appState.store.deleteTask(task.id)
+                        do {
+                            try appState.store.deleteTask(task.id)
+                            appState.toastSuccess("Task deleted")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
                     }
                     taskPendingDeletion = nil
                 }
@@ -189,112 +217,108 @@ struct TaskEditorView: View {
     @State private var icon = "checkmark.circle.fill"
     @State private var didPickIconManually = false
 
-    private let icons = [
-        "checkmark.circle.fill", "bed.double.fill", "fork.knife", "trash.fill",
-        "book.fill", "figure.run", "mouth.fill", "tshirt.fill", "pawprint.fill",
-        "leaf.fill", "sparkles", "cart.fill", "pencil.and.outline", "gamecontroller.fill",
-        "music.note", "hammer.fill", "heart.fill"
-    ]
+    private var categoryOptions: [KiddoChipOption<TaskCategory>] {
+        TaskCategory.allCases.map { KiddoChipOption(id: $0, title: $0.displayName) }
+    }
 
-    /// Maps common chore keywords to a matching SF Symbol name.
-    private static func suggestedIcon(for name: String) -> String {
-        let lower = name.lowercased()
-        let mapping: [(keywords: [String], icon: String)] = [
-            (["bed", "sleep", "tidy room", "make bed"], "bed.double.fill"),
-            (["dish", "kitchen", "plate", "food", "cook", "meal", "set table", "clear table"], "fork.knife"),
-            (["trash", "garbage", "take out", "bin"], "trash.fill"),
-            (["read", "book", "study", "homework", "school"], "book.fill"),
-            (["run", "exercise", "play outside", "sport", "walk", "bike"], "figure.run"),
-            (["teeth", "brush", "shower", "bath", "wash", "clean body"], "mouth.fill"),
-            (["laundry", "clothes", "fold", "dress"], "tshirt.fill"),
-            (["pet", "dog", "cat", "feed animal", "walk dog"], "pawprint.fill"),
-            (["garden", "plant", "water", "weed", "mow"], "leaf.fill"),
-            (["vacuum", "sweep", "mop", "dust", "clean", "tidy"], "sparkles"),
-            (["shop", "grocery", "buy", "store"], "cart.fill"),
-            (["write", "draw", "art", "craft"], "pencil.and.outline"),
-            (["practice", "piano", "instrument", "music"], "music.note"),
-            (["fix", "repair", "build", "tool"], "hammer.fill"),
-            (["love", "help", "care", "kind", "share"], "heart.fill")
-        ]
-        for (keywords, icon) in mapping {
-            for keyword in keywords {
-                if lower.contains(keyword) {
-                    return icon
-                }
-            }
-        }
-        return "checkmark.circle.fill"
+    private var recurrenceOptions: [KiddoChipOption<RecurrenceType>] {
+        RecurrenceType.allCases.map { KiddoChipOption(id: $0, title: $0.displayName) }
+    }
+
+    private var approvalOptions: [KiddoChipOption<TaskApprovalBehavior>] {
+        TaskApprovalBehavior.allCases.map { KiddoChipOption(id: $0, title: $0.displayName) }
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                TextField("Name", text: $name)
-                TextField("Description", text: $description, axis: .vertical)
-                Stepper("Stars: \(points)", value: $points, in: 1...100)
-                Picker("Category", selection: $category) {
-                    ForEach(TaskCategory.allCases, id: \.self) { item in
-                        Text(item.displayName).tag(item)
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                    KiddoFormSection(title: "Details", icon: "text.alignleft") {
+                        KiddoTextField(label: "Name", placeholder: "e.g. Make your bed", text: $name)
+                        KiddoTextArea(label: "Description", placeholder: "Optional tip for the kids", text: $description)
                     }
-                }
-                Picker("Repeat", selection: $recurrence) {
-                    ForEach(RecurrenceType.allCases, id: \.self) { item in
-                        Text(item.displayName).tag(item)
+
+                    KiddoFormSection(title: "Reward", icon: "star.fill") {
+                        KiddoPointsStepper(label: "Stars earned", value: $points, range: 1...100)
                     }
-                }
-                Picker("Approval", selection: $approvalBehavior) {
-                    ForEach(TaskApprovalBehavior.allCases) { behavior in
-                        Text(behavior.displayName).tag(behavior)
+
+                    KiddoFormSection(title: "Schedule & rules", icon: "calendar") {
+                        KiddoChipPicker(label: "Category", options: categoryOptions, selection: $category)
+                        KiddoChipPicker(label: "Repeat", options: recurrenceOptions, selection: $recurrence)
+                        KiddoChipPicker(label: "Approval", options: approvalOptions, selection: $approvalBehavior)
                     }
-                }
-                Section("Icon") {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 52))], spacing: 12) {
-                        ForEach(icons, id: \.self) { item in
-                            Button {
-                                icon = item
-                                didPickIconManually = true
-                            } label: {
-                                Image(systemName: item)
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .foregroundStyle(icon == item ? .white : KiddoTasksDesignTokens.Colors.textSecondary)
-                                    .frame(width: 48, height: 48)
-                                    .background {
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(icon == item ? KiddoTasksDesignTokens.Colors.primary : KiddoTasksDesignTokens.Colors.surface)
+
+                    KiddoFormSection(title: "Icon", icon: "square.grid.2x2") {
+                        KiddoIconPicker(
+                            categories: KiddoIconCatalog.taskCategories,
+                            selection: $icon,
+                            onPick: { didPickIconManually = true }
+                        )
+                    }
+
+                    if !appState.familyChildren.isEmpty {
+                        KiddoFormSection(title: "Assign to", icon: "person.2.fill") {
+                            FlowLayout(spacing: 8) {
+                                ForEach(appState.familyChildren) { child in
+                                    Button {
+                                        Haptic.light()
+                                        if assigned.contains(child.id) {
+                                            assigned.remove(child.id)
+                                        } else {
+                                            assigned.insert(child.id)
+                                        }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            ChildAvatarView(avatar: child.avatar, size: 28, photoData: child.photoData)
+                                            Text(child.name)
+                                                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                                                .fontWeight(.semibold)
+                                            if assigned.contains(child.id) {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.success)
+                                            }
+                                        }
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            Capsule().fill(
+                                                assigned.contains(child.id)
+                                                    ? KiddoTasksDesignTokens.Colors.success.opacity(0.15)
+                                                    : KiddoTasksDesignTokens.Colors.surfaceElevated
+                                            )
+                                        )
+                                        .overlay(
+                                            Capsule().strokeBorder(
+                                                assigned.contains(child.id)
+                                                    ? KiddoTasksDesignTokens.Colors.success.opacity(0.4)
+                                                    : KiddoTasksDesignTokens.Colors.borderSubtle,
+                                                lineWidth: 1
+                                            )
+                                        )
                                     }
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(icon == item ? Color.clear : KiddoTasksDesignTokens.Colors.border, lineWidth: 1)
-                                    }
+                                    .buttonStyle(KiddoPressStyle())
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
-                Section("Assign to") {
-                    ForEach(appState.familyChildren) { child in
-                        Toggle(child.name, isOn: Binding(
-                            get: { assigned.contains(child.id) },
-                            set: { on in
-                                if on { assigned.insert(child.id) } else { assigned.remove(child.id) }
-                            }
-                        ))
-                    }
-                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .navigationTitle(task == nil ? "New task" : "Edit task")
             .onAppear(perform: loadTaskIfEditing)
             .onChange(of: name) { _, newValue in
                 if !didPickIconManually {
-                    icon = TaskEditorView.suggestedIcon(for: newValue)
+                    icon = KiddoIconCatalog.suggestedTaskIcon(for: newValue)
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(name.isEmpty)
+                        .fontWeight(.semibold)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -337,6 +361,7 @@ struct TaskEditorView: View {
                     recurrence: TaskRecurrence(type: recurrence)
                 )
             }
+            appState.toastSuccess(task == nil ? "Task created" : "Task updated")
             dismiss()
         } catch {
             appState.presentError(error)
@@ -354,8 +379,11 @@ struct RewardListView: View {
                 Section("Active") {
                     let active = appState.store.rewards.filter(\.isActive)
                     if active.isEmpty {
-                        Text("No rewards yet. Tap + to add one.")
-                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        EmptyListHint(
+                            emoji: "🎁",
+                            title: "No rewards yet. Kids can shop once you add some.",
+                            actionTitle: "Add reward"
+                        ) { showEditor = true }
                     }
                     ForEach(active) { reward in
                         NavigationLink {
@@ -383,7 +411,12 @@ struct RewardListView: View {
                         .swipeActions(edge: .trailing) {
                             Button {
                                 reward.isActive = false
-                                try? appState.store.updateReward(reward)
+                                do {
+                                    try appState.store.updateReward(reward)
+                                    appState.toastSuccess("Reward archived")
+                                } catch {
+                                    appState.toastError(error.localizedDescription)
+                                }
                             } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
@@ -407,7 +440,12 @@ struct RewardListView: View {
                             .swipeActions(edge: .trailing) {
                                 Button {
                                     reward.isActive = true
-                                    try? appState.store.updateReward(reward)
+                                    do {
+                                        try appState.store.updateReward(reward)
+                                        appState.toastSuccess("Reward restored")
+                                    } catch {
+                                        appState.toastError(error.localizedDescription)
+                                    }
                                 } label: {
                                     Label("Restore", systemImage: "arrow.uturn.backward")
                                 }
@@ -439,24 +477,48 @@ struct RewardEditorView: View {
     @State private var cost = 25
     @State private var icon = "gift.fill"
     @State private var didLoad = false
+    @State private var didPickIconManually = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                TextField("Name", text: $name)
-                TextField("Description", text: $description, axis: .vertical)
-                Stepper("Cost: \(cost) ⭐", value: $cost, in: 5...500, step: 5)
-                Text("Reward claims are always sent to a parent for approval before points are spent.")
-                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                    KiddoFormSection(title: "Details", icon: "gift") {
+                        KiddoTextField(label: "Name", placeholder: "e.g. Extra screen time", text: $name)
+                        KiddoTextArea(label: "Description", placeholder: "What do they get?", text: $description)
+                    }
+
+                    KiddoFormSection(title: "Cost", icon: "star.fill") {
+                        KiddoPointsStepper(label: "Stars needed", value: $cost, range: 5...500, step: 5)
+                        Text("Reward claims always go to a parent for approval before points are spent.")
+                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    }
+
+                    KiddoFormSection(title: "Icon", icon: "square.grid.2x2") {
+                        KiddoIconPicker(
+                            categories: KiddoIconCatalog.rewardCategories,
+                            selection: $icon,
+                            onPick: { didPickIconManually = true }
+                        )
+                    }
+                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .navigationTitle(reward == nil ? "New reward" : "Edit reward")
             .onAppear(perform: loadRewardIfEditing)
+            .onChange(of: name) { _, newValue in
+                if !didPickIconManually {
+                    icon = KiddoIconCatalog.suggestedRewardIcon(for: newValue)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(name.isEmpty)
+                        .fontWeight(.semibold)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -488,6 +550,7 @@ struct RewardEditorView: View {
                     eligibleChildIds: []
                 )
             }
+            appState.toastSuccess(reward == nil ? "Reward created" : "Reward updated")
             dismiss()
         } catch {
             appState.presentError(error)
@@ -543,7 +606,7 @@ struct FamilyView: View {
                         } label: {
                             Group {
                                 if let photoData = appState.currentFamily?.photoData,
-                                   let uiImage = UIImage(data: photoData) {
+                                   let uiImage = KiddoImageCache.image(from: photoData) {
                                     Image(uiImage: uiImage)
                                         .resizable()
                                         .scaledToFill()
@@ -569,7 +632,12 @@ struct FamilyView: View {
                         }
                         if appState.currentFamily?.photoData != nil {
                             Button(role: .destructive) {
-                                try? appState.store.updateFamilyPhoto(nil)
+                                do {
+                                    try appState.store.updateFamilyPhoto(nil)
+                                    appState.toastSuccess("Family photo removed")
+                                } catch {
+                                    appState.toastError(error.localizedDescription)
+                                }
                             } label: {
                                 Text("Remove photo")
                                     .font(.system(size: 13))
@@ -593,6 +661,7 @@ struct FamilyView: View {
                         Button {
                             if let code = appState.currentFamily?.familyCode {
                                 UIPasteboard.general.string = code
+                                appState.toastSuccess("Family code copied")
                             }
                         } label: {
                             Image(systemName: "doc.on.doc")
@@ -694,6 +763,7 @@ struct FamilyView: View {
                             Text(mode.label).tag(mode)
                         }
                     }
+                    ThemeAppearancePicker()
                 }
                 Section {
                     Button("Sign out", role: .destructive) {
@@ -739,7 +809,12 @@ struct FamilyView: View {
             ) {
                 Button("Remove child", role: .destructive) {
                     if let child = childPendingRemoval {
-                        try? appState.store.removeChild(child.id)
+                        do {
+                            try appState.store.removeChild(child.id)
+                            appState.toastSuccess("\(child.name) removed")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
                     }
                     childPendingRemoval = nil
                 }
@@ -775,18 +850,30 @@ struct FamilyNameEditor: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                TextField("Family name", text: $name)
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                    KiddoFormSection(title: "Name", icon: "house") {
+                        KiddoTextField(label: "Family name", placeholder: "Our family", text: $name)
+                    }
+                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .navigationTitle("Family name")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        try? appState.store.updateFamilyName(name)
+                        do {
+                            try appState.store.updateFamilyName(name)
+                            appState.toastSuccess("Family name updated")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
                         dismiss()
                     }
-                    .disabled(name.isEmpty)
+                    .fontWeight(.semibold)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
@@ -798,28 +885,30 @@ struct FamilyNameEditor: View {
 struct PINEditorRow: View {
     @Environment(AppState.self) private var appState
     @State private var pin = ""
-    @State private var statusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                SecureField("4–6 digits", text: $pin)
-                    .keyboardType(.numberPad)
+            HStack(alignment: .bottom, spacing: 12) {
+                KiddoTextField(
+                    label: "Kids Station PIN",
+                    placeholder: "4–6 digits",
+                    text: $pin,
+                    caption: "Kids enter this once on the shared iPad.",
+                    keyboard: .numberPad,
+                    isSecure: true
+                )
                 Button("Save") {
                     do {
                         try appState.store.updateKidsPIN(pin)
                         pin = ""
-                        statusMessage = "PIN updated ✓"
+                        appState.toastSuccess("PIN updated")
                     } catch {
-                        statusMessage = error.localizedDescription
+                        appState.toastError(error.localizedDescription)
                     }
                 }
+                .fontWeight(.semibold)
                 .disabled(pin.count < 4)
-            }
-            if let statusMessage {
-                Text(statusMessage)
-                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                .padding(.bottom, 2)
             }
         }
         .onChange(of: pin) { _, newValue in
@@ -844,59 +933,71 @@ struct ChildEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                TextField("Name", text: $name)
-                Section("Photo") {
-                    HStack(spacing: 12) {
-                        ChildAvatarView(avatar: avatar, size: 64, photoData: photoData)
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                showPhotoPicker = true
-                            } label: {
-                                Label("Choose photo", systemImage: "photo")
-                            }
-                            if photoData != nil {
-                                Button(role: .destructive) {
-                                    photoData = nil
+            ScrollView {
+                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                    KiddoFormSection(title: "Profile", icon: "person.fill") {
+                        KiddoTextField(label: "Name", placeholder: "Child's name", text: $name)
+                    }
+
+                    KiddoFormSection(title: "Photo", icon: "photo") {
+                        HStack(spacing: 12) {
+                            ChildAvatarView(avatar: avatar, size: 64, photoData: photoData)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Button {
+                                    showPhotoPicker = true
                                 } label: {
-                                    Label("Remove photo", systemImage: "trash")
+                                    Label("Choose photo", systemImage: "photo")
                                 }
-                                .font(.system(size: 13))
-                            }
-                        }
-                    }
-                }
-                Section("Avatar") {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 56))]) {
-                        ForEach(Array(ChildAvatar.presets.enumerated()), id: \.offset) { _, preset in
-                            Button {
-                                avatar = preset
-                            } label: {
-                                ChildAvatarView(avatar: preset, size: 56)
-                                    .overlay {
-                                        if avatar == preset {
-                                            Circle().stroke(KiddoTasksDesignTokens.Colors.primary, lineWidth: 3)
-                                        }
+                                if photoData != nil {
+                                    Button(role: .destructive) {
+                                        photoData = nil
+                                    } label: {
+                                        Label("Remove photo", systemImage: "trash")
                                     }
+                                    .font(.system(size: 13))
+                                }
                             }
-                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    KiddoFormSection(title: "Avatar", icon: "face.smiling") {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 56))]) {
+                            ForEach(Array(ChildAvatar.presets.enumerated()), id: \.offset) { _, preset in
+                                Button {
+                                    avatar = preset
+                                    Haptic.light()
+                                } label: {
+                                    ChildAvatarView(avatar: preset, size: 56)
+                                        .overlay {
+                                            if avatar == preset {
+                                                Circle().stroke(KiddoTasksDesignTokens.Colors.primary, lineWidth: 3)
+                                            }
+                                        }
+                                }
+                                .buttonStyle(KiddoPressStyle())
+                            }
+                        }
+                    }
+
+                    KiddoFormSection(title: "Birthday", icon: "gift") {
+                        Toggle("Add birthday", isOn: $hasBirthday.animation())
+                        if hasBirthday {
+                            DatePicker("Birthday", selection: $birthday, displayedComponents: .date)
+                                .datePickerStyle(.compact)
                         }
                     }
                 }
-                Section("Birthday (optional)") {
-                    Toggle("Add birthday", isOn: $hasBirthday.animation())
-                    if hasBirthday {
-                        DatePicker("Birthday", selection: $birthday, displayedComponents: .date)
-                    }
-                }
+                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .navigationTitle(child == nil ? "New child" : "Edit child")
             .onAppear(perform: loadChildIfEditing)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(name.isEmpty)
+                        .fontWeight(.semibold)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhoto, matching: .images)
@@ -944,6 +1045,7 @@ struct ChildEditorView: View {
                     dateOfBirth: hasBirthday ? birthday : nil
                 )
             }
+            appState.toastSuccess(child == nil ? "\(name) added" : "Profile updated")
             dismiss()
         } catch {
             appState.presentError(error)
@@ -959,8 +1061,10 @@ struct ActivityView: View {
             List {
                 let transactions = appState.store.transactions
                 if transactions.isEmpty {
-                    Text("No activity yet. Completions and rewards will appear here.")
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    EmptyListHint(
+                        emoji: "📖",
+                        title: "No activity yet. Completions and rewards will appear here."
+                    )
                 }
                 ForEach(transactions.reversed()) { tx in
                     HStack(spacing: 12) {
@@ -996,6 +1100,23 @@ struct ActivityView: View {
                 }
             }
             .navigationTitle("History")
+        }
+    }
+}
+
+// MARK: - Theme appearance
+
+struct ThemeAppearancePicker: View {
+    @Environment(ThemeStore.self) private var theme
+
+    var body: some View {
+        Picker("Appearance", selection: Binding(
+            get: { theme.appearance },
+            set: { theme.appearance = $0 }
+        )) {
+            ForEach(KiddoAppearance.allCases) { mode in
+                Text(mode.label).tag(mode)
+            }
         }
     }
 }

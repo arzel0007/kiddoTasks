@@ -59,7 +59,7 @@ struct FamilyBrandHeader<Trailing: View>: View {
     var body: some View {
         HStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
             Group {
-                if let familyPhotoData, let uiImage = UIImage(data: familyPhotoData) {
+                if let familyPhotoData, let uiImage = KiddoImageCache.image(from: familyPhotoData) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
