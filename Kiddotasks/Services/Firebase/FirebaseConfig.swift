@@ -75,6 +75,7 @@ enum FirebaseError: LocalizedError {
     case invalidCredentials
     case alreadyExists
     case childNotFound
+    case invalidFamilyCode
 
     var errorDescription: String? {
         switch self {
@@ -104,6 +105,8 @@ enum FirebaseError: LocalizedError {
             return "This account already exists"
         case .childNotFound:
             return "Child not found"
+        case .invalidFamilyCode:
+            return "Family code not found. Check the code on the other parent's Family tab."
         }
     }
 }

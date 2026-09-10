@@ -12,7 +12,10 @@ final class Family: Identifiable, Codable {
     var settings: FamilySettings
     let createdAt: Date
     var updatedAt: Date
-    
+    /// Server-authoritative write time stamped by `pushFamilySnapshot`.
+    /// Used so a stale pull cannot overwrite fresher local work.
+    var serverUpdatedAt: Date?
+
     enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -22,8 +25,9 @@ final class Family: Identifiable, Codable {
         case settings
         case createdAt
         case updatedAt
+        case serverUpdatedAt
     }
-    
+
     init(
         id: String = UUID().uuidString,
         name: String,
@@ -32,7 +36,8 @@ final class Family: Identifiable, Codable {
         photoData: Data? = nil,
         settings: FamilySettings = .default,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        serverUpdatedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -42,6 +47,7 @@ final class Family: Identifiable, Codable {
         self.settings = settings
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.serverUpdatedAt = serverUpdatedAt
     }
 }
 

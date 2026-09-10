@@ -22,6 +22,7 @@ struct FamilySnapshot: Codable {
 final class LocalFamilyDataStore {
     private static let storageKey = "kiddotasks.family.snapshot.v1"
     private static let sessionKey = "kiddotasks.session.parentId"
+    private static let syncMetaKey = "kiddotasks.family.syncMeta.v1"
 
     var family: Family?
     var parent: Parent?
@@ -34,7 +35,35 @@ final class LocalFamilyDataStore {
     var achievements: [Achievement] = []
     var dataRevision: Int = 0
 
+    /// IDs deleted locally that still need to be deleted in the cloud.
+    private(set) var removedChildren: Set<String> = []
+    private(set) var removedTasks: Set<String> = []
+    private(set) var removedCompletions: Set<String> = []
+    private(set) var removedRewards: Set<String> = []
+    private(set) var removedClaims: Set<String> = []
+    private(set) var removedTransactions: Set<String> = []
+    private(set) var removedAchievements: Set<String> = []
+
+    /// True when local mutations exist that have not been acknowledged by a
+    /// successful cloud push. Persisted so a relaunch still protects the work.
+    private(set) var hasPendingPush: Bool = false
+
+    /// Highest server write time seen from the cloud (conflict gate).
+    var lastSeenServerUpdatedAt: Date?
+
     var isAuthenticated: Bool { parent != nil }
+
+    var pendingRemovals: (children: [String], tasks: [String], completions: [String], rewards: [String], claims: [String], transactions: [String], achievements: [String]) {
+        (
+            Array(removedChildren),
+            Array(removedTasks),
+            Array(removedCompletions),
+            Array(removedRewards),
+            Array(removedClaims),
+            Array(removedTransactions),
+            Array(removedAchievements)
+        )
+    }
 
     /// Called after every successful local mutation (after the snapshot is
     /// persisted). The cloud sync engine uses this to push changes upward.
@@ -45,6 +74,7 @@ final class LocalFamilyDataStore {
     private var callbacksSuspended = false
 
     init() {
+        restoreSyncMeta()
         restoreSession()
     }
 
@@ -175,24 +205,33 @@ final class LocalFamilyDataStore {
     // MARK: - Reset all data (requirement #10)
 
     /// Wipe everything and start fresh.
-    /// - Parameter retainKids: When true, kids' profiles (name, avatar, photo,
-    ///   date of birth) are preserved in a new empty family with zeroed points.
+    /// - Parameter retainKids: When true, kids' profiles are preserved in the
+    ///   SAME family (same familyId) with zeroed points so cloud identity and
+    ///   pushes keep working. Old document IDs are tombstoned for cloud delete.
     func resetAllData(retainKids: Bool = false) {
         let kidsToRetain = retainKids ? children : []
+        let currentFamilyId = family?.id
+        let currentFamilyCode = family?.familyCode
+        let currentFamilyName = family?.name
+
+        removedChildren.formUnion(children.map(\.id))
+        removedTasks.formUnion(tasks.map(\.id))
+        removedCompletions.formUnion(completions.map(\.id))
+        removedRewards.formUnion(rewards.map(\.id))
+        removedClaims.formUnion(claims.map(\.id))
+        removedTransactions.formUnion(transactions.map(\.id))
+        removedAchievements.formUnion(achievements.map(\.id))
+        hasPendingPush = true
 
         deleteAllLocalData()
-        family = nil
-        parent = nil
-        children = []
-        tasks = []
-        completions = []
-        rewards = []
-        claims = []
-        transactions = []
-        achievements = []
 
-        if retainKids && !kidsToRetain.isEmpty {
-            createNewFamilyWithRetainedKids(kidsToRetain)
+        if retainKids, let familyId = currentFamilyId, !kidsToRetain.isEmpty {
+            recreateFamilyWithRetainedKids(
+                kidsToRetain,
+                familyId: familyId,
+                familyCode: currentFamilyCode,
+                familyName: currentFamilyName
+            )
         }
     }
 
@@ -208,16 +247,40 @@ final class LocalFamilyDataStore {
         claims = []
         transactions = []
         achievements = []
+        dataRevision = 0
+        // Tombstones and pendingPush intentionally survive a local wipe so
+        // deletes still propagate after reset. Call clearSyncMeta for a full wipe.
+        persistSyncMeta()
     }
 
-    /// Creates a fresh family and parent, then re-adds previously existing kids
-    /// as new Child instances (familyId is immutable, so copies are required).
-    /// All retained kids start with zero active and total points.
-    private func createNewFamilyWithRetainedKids(_ kids: [Child]) {
-        let familyId = UUID().uuidString
-        let parentId = UUID().uuidString
+    /// Clears tombstones + pending-push + session (full account reset).
+    func clearSyncMeta() {
+        removedChildren = []
+        removedTasks = []
+        removedCompletions = []
+        removedRewards = []
+        removedClaims = []
+        removedTransactions = []
+        removedAchievements = []
+        hasPendingPush = false
+        lastSeenServerUpdatedAt = nil
+        UserDefaults.standard.removeObject(forKey: Self.syncMetaKey)
+    }
 
-        let newFamily = Family(id: familyId, name: "My Family", memberIds: [parentId])
+    /// Rebuilds the same family after a reset and re-adds previously existing kids.
+    private func recreateFamilyWithRetainedKids(
+        _ kids: [Child],
+        familyId: String,
+        familyCode: String?,
+        familyName: String?
+    ) {
+        let parentId = UUID().uuidString
+        let newFamily = Family(
+            id: familyId,
+            name: familyName ?? "My Family",
+            memberIds: [parentId],
+            familyCode: familyCode ?? LocalFamilyDataStore.generateFamilyCode()
+        )
         let newParent = Parent(
             id: parentId,
             email: "",
@@ -271,9 +334,52 @@ final class LocalFamilyDataStore {
     func applyRemote(_ snapshot: FamilySnapshot) {
         callbacksSuspended = true
         defer { callbacksSuspended = false }
+        let existingHash = loadSnapshot()?.passwordHash ?? ""
         apply(snapshot)
-        persist(passwordHash: "")
+        if let remoteStamp = snapshot.family.serverUpdatedAt {
+            lastSeenServerUpdatedAt = remoteStamp
+        }
+        // Local now matches the cloud; clear pending-push and tombstones that
+        // the server no longer has (ids absent from the remote snapshot stay
+        // tombstoned only if still present remotely — server already deleted).
+        hasPendingPush = false
+        let remoteChildIDs = Set(snapshot.children.map(\.id))
+        removedChildren.formIntersection(remoteChildIDs)
+        removedTasks.formIntersection(Set(snapshot.tasks.map(\.id)))
+        removedCompletions.formIntersection(Set(snapshot.completions.map(\.id)))
+        removedRewards.formIntersection(Set(snapshot.rewards.map(\.id)))
+        removedClaims.formIntersection(Set(snapshot.claims.map(\.id)))
+        removedTransactions.formIntersection(Set(snapshot.transactions.map(\.id)))
+        removedAchievements.formIntersection(Set(snapshot.achievements.map(\.id)))
+        persist(passwordHash: existingHash)
+        persistSyncMeta()
         UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
+    }
+
+    /// Called after a successful cloud push so the engine can retry safely.
+    func markPushAcknowledged() {
+        hasPendingPush = false
+        persistSyncMeta()
+    }
+
+    /// Tombstone IDs confirmed deleted by the server.
+    func acknowledgeRemovals(
+        children: [String] = [],
+        tasks: [String] = [],
+        completions: [String] = [],
+        rewards: [String] = [],
+        claims: [String] = [],
+        transactions: [String] = [],
+        achievements: [String] = []
+    ) {
+        removedChildren.subtract(children)
+        removedTasks.subtract(tasks)
+        removedCompletions.subtract(completions)
+        removedRewards.subtract(rewards)
+        removedClaims.subtract(claims)
+        removedTransactions.subtract(transactions)
+        removedAchievements.subtract(achievements)
+        persistSyncMeta()
     }
 
     /// Seeds a brand-new local family after Firebase account creation and the
@@ -341,6 +447,7 @@ final class LocalFamilyDataStore {
             throw FirebaseError.invalidChild
         }
         children.remove(at: index)
+        removedChildren.insert(childId)
         family.memberIds.removeAll { $0 == childId }
         family.updatedAt = Date()
         persistKeepingPassword()
@@ -413,6 +520,7 @@ final class LocalFamilyDataStore {
             throw FirebaseError.invalidTask
         }
         tasks.remove(at: index)
+        removedTasks.insert(taskId)
         persistKeepingPassword()
     }
 
@@ -502,6 +610,27 @@ final class LocalFamilyDataStore {
         reward.version += 1
         reward.updatedAt = Date()
         rewards[index] = reward
+        persistKeepingPassword()
+    }
+
+    /// Soft-deactivates a reward (kept for history; synced as an update).
+    func deactivateReward(_ rewardId: String) throws {
+        guard let reward = rewards.first(where: { $0.id == rewardId }) else {
+            throw FirebaseError.invalidReward
+        }
+        reward.isActive = false
+        reward.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    /// Permanently deletes a reward. The ID is tombstoned so the cloud delete
+    /// propagates and the reward cannot resurrect on the next pull.
+    func deleteReward(_ rewardId: String) throws {
+        guard let index = rewards.firstIndex(where: { $0.id == rewardId }) else {
+            throw FirebaseError.invalidReward
+        }
+        rewards.remove(at: index)
+        removedRewards.insert(rewardId)
         persistKeepingPassword()
     }
 
@@ -893,7 +1022,11 @@ final class LocalFamilyDataStore {
         }
         dataRevision += 1
         if !callbacksSuspended {
+            hasPendingPush = true
+            persistSyncMeta()
             onLocalChanges?()
+        } else {
+            persistSyncMeta()
         }
     }
 
@@ -905,13 +1038,58 @@ final class LocalFamilyDataStore {
     private func apply(_ snapshot: FamilySnapshot) {
         family = snapshot.family
         parent = snapshot.parent
-        children = snapshot.children
-        tasks = snapshot.tasks
-        completions = snapshot.completions
-        rewards = snapshot.rewards
-        claims = snapshot.claims
-        transactions = snapshot.transactions
-        achievements = snapshot.achievements
+        // Tombstoned IDs must never reappear from a pull (local deletes win
+        // until the server confirms them).
+        children = snapshot.children.filter { !removedChildren.contains($0.id) }
+        tasks = snapshot.tasks.filter { !removedTasks.contains($0.id) }
+        completions = snapshot.completions.filter { !removedCompletions.contains($0.id) }
+        rewards = snapshot.rewards.filter { !removedRewards.contains($0.id) }
+        claims = snapshot.claims.filter { !removedClaims.contains($0.id) }
+        transactions = snapshot.transactions.filter { !removedTransactions.contains($0.id) }
+        achievements = snapshot.achievements.filter { !removedAchievements.contains($0.id) }
+    }
+
+    private struct SyncMeta: Codable {
+        var removedChildren: [String] = []
+        var removedTasks: [String] = []
+        var removedCompletions: [String] = []
+        var removedRewards: [String] = []
+        var removedClaims: [String] = []
+        var removedTransactions: [String] = []
+        var removedAchievements: [String] = []
+        var hasPendingPush: Bool = false
+        var lastSeenServerUpdatedAt: Date?
+    }
+
+    private func persistSyncMeta() {
+        let meta = SyncMeta(
+            removedChildren: Array(removedChildren),
+            removedTasks: Array(removedTasks),
+            removedCompletions: Array(removedCompletions),
+            removedRewards: Array(removedRewards),
+            removedClaims: Array(removedClaims),
+            removedTransactions: Array(removedTransactions),
+            removedAchievements: Array(removedAchievements),
+            hasPendingPush: hasPendingPush,
+            lastSeenServerUpdatedAt: lastSeenServerUpdatedAt
+        )
+        if let data = try? JSONEncoder().encode(meta) {
+            UserDefaults.standard.set(data, forKey: Self.syncMetaKey)
+        }
+    }
+
+    private func restoreSyncMeta() {
+        guard let data = UserDefaults.standard.data(forKey: Self.syncMetaKey),
+              let meta = try? JSONDecoder().decode(SyncMeta.self, from: data) else { return }
+        removedChildren = Set(meta.removedChildren)
+        removedTasks = Set(meta.removedTasks)
+        removedCompletions = Set(meta.removedCompletions)
+        removedRewards = Set(meta.removedRewards)
+        removedClaims = Set(meta.removedClaims)
+        removedTransactions = Set(meta.removedTransactions)
+        removedAchievements = Set(meta.removedAchievements)
+        hasPendingPush = meta.hasPendingPush
+        lastSeenServerUpdatedAt = meta.lastSeenServerUpdatedAt
     }
 
     private func restoreSession() {

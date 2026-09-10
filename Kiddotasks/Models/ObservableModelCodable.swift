@@ -12,8 +12,32 @@ extension Child {
 }
 
 extension Family {
-    convenience init(from decoder: Decoder) throws { let c = try decoder.container(keyedBy: CodingKeys.self); self.init(id: try c.decode(String.self, forKey: .id), name: try c.decode(String.self, forKey: .name), memberIds: try c.decode([String].self, forKey: .memberIds), settings: try c.decode(FamilySettings.self, forKey: .settings), createdAt: try c.decode(Date.self, forKey: .createdAt), updatedAt: try c.decode(Date.self, forKey: .updatedAt)) }
-    func encode(to encoder: Encoder) throws { var c = encoder.container(keyedBy: CodingKeys.self); try c.encode(id, forKey: .id); try c.encode(name, forKey: .name); try c.encode(memberIds, forKey: .memberIds); try c.encode(settings, forKey: .settings); try c.encode(createdAt, forKey: .createdAt); try c.encode(updatedAt, forKey: .updatedAt) }
+    convenience init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id),
+            name: try c.decode(String.self, forKey: .name),
+            memberIds: try c.decode([String].self, forKey: .memberIds),
+            familyCode: try c.decodeIfPresent(String.self, forKey: .familyCode) ?? LocalFamilyDataStore.generateFamilyCode(),
+            photoData: try c.decodeIfPresent(Data.self, forKey: .photoData),
+            settings: try c.decode(FamilySettings.self, forKey: .settings),
+            createdAt: try c.decode(Date.self, forKey: .createdAt),
+            updatedAt: try c.decode(Date.self, forKey: .updatedAt),
+            serverUpdatedAt: try c.decodeIfPresent(Date.self, forKey: .serverUpdatedAt)
+        )
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(memberIds, forKey: .memberIds)
+        try c.encode(familyCode, forKey: .familyCode)
+        try c.encodeIfPresent(photoData, forKey: .photoData)
+        try c.encode(settings, forKey: .settings)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encodeIfPresent(serverUpdatedAt, forKey: .serverUpdatedAt)
+    }
 }
 
 extension KiddoTask {

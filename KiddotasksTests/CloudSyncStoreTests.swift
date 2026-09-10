@@ -8,11 +8,15 @@ final class CloudSyncStoreTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        LocalFamilyDataStore().deleteAllLocalData()
+        let store = LocalFamilyDataStore()
+        store.clearSyncMeta()
+        store.deleteAllLocalData()
     }
 
     override func tearDown() {
-        LocalFamilyDataStore().deleteAllLocalData()
+        let store = LocalFamilyDataStore()
+        store.clearSyncMeta()
+        store.deleteAllLocalData()
         super.tearDown()
     }
 
@@ -65,13 +69,12 @@ final class CloudSyncStoreTests: XCTestCase {
         XCTAssertEqual(store.family?.id, "fam-cloud")
         XCTAssertEqual(store.parent?.id, "uid-123")
         XCTAssertEqual(store.parent?.email, "pat@example.com")
-        // Parent is the first member; starter children are appended by seeding.
+        // Parent only — kids are added by the parent after signup (no defaults).
         XCTAssertTrue(store.family?.memberIds.first == "uid-123")
-        XCTAssertEqual(store.family?.memberIds.count, 3, "parent + two starter children")
+        XCTAssertEqual(store.family?.memberIds.count, 1, "parent only; no default kids")
         XCTAssertTrue(store.isAuthenticated)
-        // Starter content is seeded so the first cloud push has data.
-        XCTAssertFalse(store.children.isEmpty)
-        XCTAssertFalse(store.tasks.isEmpty)
+        XCTAssertTrue(store.children.isEmpty, "no default child profiles")
+        XCTAssertFalse(store.tasks.isEmpty, "starter tasks are still seeded")
         // Seeding must NOT echo back through the change hook.
         XCTAssertFalse(changeFired, "bootstrap seeding should not trigger a push")
     }

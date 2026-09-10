@@ -14,11 +14,12 @@ enum CloudSyncStatus: Equatable {
     case signedOut
     case signedIn
     case syncing
+    case pending
     case error(String)
 
     var isSignedIn: Bool {
         switch self {
-        case .signedIn, .syncing:
+        case .signedIn, .syncing, .pending, .error:
             return true
         default:
             return false
@@ -28,20 +29,11 @@ enum CloudSyncStatus: Equatable {
 
 /// Drives Firebase Authentication + Firestore synchronization for a family.
 ///
-/// When Firebase is configured (`GoogleService-Info.plist` present and the
-/// Firebase SDK linked) this engine is the source of truth:
-///
-///   - **Sign up / sign in** with email + password.
-///   - **Pull** the whole family from Firestore on sign-in, so an existing
-///     parent who switches phones gets their family, tasks, rewards, points and
-///     history back automatically.
-///   - **Push** every local mutation upward (debounced) through the
-///     `pushFamilySnapshot` callable, which writes with server privileges.
-///   - **Refresh** from the cloud when the family doc changes (via a snapshot
-///     listener) and every 20 seconds while signed in.
-///
-/// When Firebase is not configured the engine is a no-op and the app keeps
-/// working in local-first mode, exactly as before.
+/// Invariants that prevent data loss:
+/// 1. Local unpushed work is never overwritten by a cloud pull.
+/// 2. Push failures are visible and retried (never silently dropped).
+/// 3. Local deletes are tombstoned, pushed to the server, then acknowledged.
+/// 4. A co-parent can join via family code with their own email/password.
 @MainActor
 final class CloudSyncEngine {
     private unowned let store: LocalFamilyDataStore
@@ -49,12 +41,15 @@ final class CloudSyncEngine {
     private var familyListener: Any?
     private var refreshTask: Task<Void, Never>?
     private var pendingPush: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
     private var isRefreshing = false
-        private var lastPushedRevision: Int = -1
+    private var isPushing = false
+    private var pushRetryAttempt = 0
     private var lastFetchedFingerprint: String?
-    /// Child IDs that were present the last time we successfully pushed the
-    /// snapshot. Used to compute deletions in `makePushPayload`.
-    private var lastPushedChildIds: Set<String> = []
+
+    /// True when local mutations exist that have not been acknowledged by a
+    /// successful push. Never apply a cloud pull over this state.
+    var hasUnsyncedLocalChanges: Bool { store.hasPendingPush }
 
     /// True when the Firebase SDK is linked AND the app was configured with a
     /// GoogleService-Info.plist at launch.
@@ -84,7 +79,6 @@ final class CloudSyncEngine {
 
     // MARK: - Lifecycle
 
-    /// Wires the store's change hook and restores an existing Auth session.
     func start() {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else {
@@ -107,8 +101,10 @@ final class CloudSyncEngine {
         #endif
     }
 
-    /// Restores a previously signed-in Firebase user, pulling their family from
-    /// the cloud (works when this is a brand-new device).
+    /// Restores a previously signed-in Firebase user.
+    ///
+    /// If local work is still pending a push, it is pushed FIRST so a relaunch
+    /// can never clobber un-synced edits with a stale cloud snapshot.
     func autoRestoreIfPossible() async {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable, let user = Auth.auth().currentUser else {
@@ -116,13 +112,46 @@ final class CloudSyncEngine {
             return
         }
         do {
+            if store.family != nil, hasUnsyncedLocalChanges {
+                status = .pending
+                do {
+                    try await pushSnapshotAndWait()
+                } catch {
+                    // Keep local work; still wire listeners so we can retry later.
+                    startListening()
+                    startPeriodicRefresh()
+                    scheduleRetryPush()
+                    status = .error(error.localizedDescription)
+                    return
+                }
+            }
             let snapshot = try await fetchSnapshot(uid: user.uid, email: user.email ?? "")
+            if hasUnsyncedLocalChanges {
+                // Push reported success but local is dirty again (raced edit).
+                // Keep local; do not apply remote over it.
+                status = .pending
+                startListening()
+                startPeriodicRefresh()
+                return
+            }
             applyFromCloud(snapshot)
             startListening()
             startPeriodicRefresh()
             status = .signedIn
         } catch {
-            // No usable family for this account yet; treat as signed out.
+            // Fetch failed. If we have usable local family data, keep it and
+            // retry instead of signing the parent out (that caused data loss).
+            if store.family != nil {
+                startListening()
+                startPeriodicRefresh()
+                if hasUnsyncedLocalChanges {
+                    scheduleRetryPush()
+                    status = .pending
+                } else {
+                    status = .error(error.localizedDescription)
+                }
+                return
+            }
             try? Auth.auth().signOut()
             status = .signedOut
         }
@@ -131,9 +160,6 @@ final class CloudSyncEngine {
 
     // MARK: - Auth (email + password)
 
-    /// Creates the Firebase account, bootstraps the family server-side, seeds
-    /// the local store with matching IDs, and pushes the starter content.
-    /// Returns the generated Kids Station PIN.
     func signUp(email: String, password: String, familyName: String, parentName: String) async throws -> String {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
@@ -153,8 +179,8 @@ final class CloudSyncEngine {
             throw FirebaseError.operationFailed("Family bootstrap failed")
         }
         let pin = (data["kidsStationPIN"] as? String) ?? "1234"
+        let familyCode = data["familyCode"] as? String
 
-        // Seed local state with the real cloud IDs (parentId == Firebase UID).
         try store.seedLocalFamilyAfterCloudBootstrap(
             familyId: familyId,
             parentId: uid,
@@ -163,11 +189,14 @@ final class CloudSyncEngine {
             email: email
         )
 
-        // Keep the cloud-generated Kids PIN in sync locally.
         store.family?.settings.kidsStationPIN = pin
+        if let familyCode, let family = store.family {
+            family.familyCode = familyCode
+        }
         store.family?.updatedAt = Date()
 
         try await pushSnapshotAndWait()
+        store.markPushAcknowledged()
         startListening()
         startPeriodicRefresh()
         status = .signedIn
@@ -177,8 +206,8 @@ final class CloudSyncEngine {
         #endif
     }
 
-    /// Signs in an existing account and pulls the family down from Firestore
-    /// — this is what makes "existing user on a new device" work.
+    /// Signs in an existing account. Pushes any dirty local work first, then
+    /// pulls the family — so switching devices never discards unpushed edits.
     func signIn(email: String, password: String) async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
@@ -190,7 +219,19 @@ final class CloudSyncEngine {
         guard let uid = Auth.auth().currentUser?.uid else {
             throw FirebaseError.notAuthenticated
         }
+
+        if store.family != nil, hasUnsyncedLocalChanges {
+            try await pushSnapshotAndWait()
+        }
+
         let snapshot = try await fetchSnapshot(uid: uid, email: email)
+        if hasUnsyncedLocalChanges {
+            // Still dirty — keep local, wire listeners, let retries finish.
+            startListening()
+            startPeriodicRefresh()
+            status = .pending
+            return
+        }
         applyFromCloud(snapshot)
         startListening()
         startPeriodicRefresh()
@@ -200,7 +241,54 @@ final class CloudSyncEngine {
         #endif
     }
 
-    /// Signs out of Firebase Auth and clears the local session.
+    /// Co-parent joins an existing cloud family with their own Firebase account.
+    func joinFamilyWithCode(code: String, email: String, password: String) async throws {
+        #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+
+        // Create the co-parent account if needed, then sign in.
+        do {
+            _ = try await Auth.auth().createUser(withEmail: email, password: password)
+        } catch {
+            // Account may already exist — fall through to sign-in.
+        }
+        do {
+            _ = try await Auth.auth().signIn(withEmail: email, password: password)
+        } catch {
+            throw FirebaseError.invalidCredentials
+        }
+        guard Auth.auth().currentUser != nil else {
+            throw FirebaseError.notAuthenticated
+        }
+
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let result = try await Functions.functions()
+            .httpsCallable("joinFamilyWithCode")
+            .call(["familyCode": normalized])
+        guard let data = result.data as? [String: Any],
+              let familyId = data["familyId"] as? String else {
+            throw FirebaseError.operationFailed("Join failed")
+        }
+
+        // Fresh co-parent join: local store should become the cloud family.
+        // Drop any unrelated local cache so the pull is authoritative.
+        store.clearSyncMeta()
+        store.deleteAllLocalData()
+
+        let snapshot = try await fetchSnapshot(
+            uid: Auth.auth().currentUser?.uid ?? "",
+            email: email
+        )
+        _ = familyId
+        applyFromCloud(snapshot)
+        startListening()
+        startPeriodicRefresh()
+        status = .signedIn
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
     func signOut() {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         if isAvailable {
@@ -215,27 +303,26 @@ final class CloudSyncEngine {
         refreshTask = nil
         pendingPush?.cancel()
         pendingPush = nil
+        retryTask?.cancel()
+        retryTask = nil
         lastFetchedFingerprint = nil
-        lastPushedRevision = -1
-        lastPushedChildIds = []
+        pushRetryAttempt = 0
         isRefreshing = false
+        isPushing = false
         store.signOut()
         status = isAvailable ? .signedOut : .unavailable
     }
 
-    /// Deletes all family data from Firestore. No-op when Firebase is not
-    /// configured (local-only mode). Used by the "Reset all data" flow so a
-    /// subsequent sign-in on any device does not pull the old data back.
     func deleteCloudData() async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { return }
         _ = try await Functions.functions()
             .httpsCallable("deleteFamilyData")
             .call([:])
+        store.clearSyncMeta()
         #endif
     }
 
-    /// Sends a password reset email via Firebase Auth.
     func sendPasswordReset(email: String) async throws {
         #if canImport(FirebaseAuth)
         guard isAvailable else {
@@ -247,24 +334,39 @@ final class CloudSyncEngine {
         #endif
     }
 
-// MARK: - Sync
+    // MARK: - Sync
 
-    /// Pulls the latest family state from the cloud and applies it locally if
-    /// there are no unsynced local changes. Safe to call often.
+    /// Pulls the latest family state when it is safe to apply.
     func refreshFromCloud() async {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable,
               let user = Auth.auth().currentUser,
-              !isRefreshing,
-              store.dataRevision == lastPushedRevision else { return }
+              !isRefreshing else { return }
+        // Never pull over unpushed local work.
+        guard !hasUnsyncedLocalChanges else {
+            scheduleRetryPush()
+            return
+        }
         isRefreshing = true
         defer { isRefreshing = false }
         do {
             let email = user.email ?? store.parent?.email ?? ""
             let snapshot = try await fetchSnapshot(uid: user.uid, email: email)
-            let fingerprint = fingerprint(of: snapshot)
-            guard fingerprint != lastFetchedFingerprint else { return }
+            let incomingFingerprint = fingerprint(of: snapshot)
+            if let last = lastFetchedFingerprint, incomingFingerprint == last {
+                return
+            }
+            // Stale-guard: skip if remote stamp is not newer than what we saw.
+            if let remoteStamp = snapshot.family.serverUpdatedAt,
+               let lastStamp = store.lastSeenServerUpdatedAt,
+               remoteStamp <= lastStamp,
+               store.family != nil {
+                lastFetchedFingerprint = incomingFingerprint
+                return
+            }
+            guard !hasUnsyncedLocalChanges else { return }
             applyFromCloud(snapshot)
+            lastFetchedFingerprint = incomingFingerprint
         } catch {
             // Transient network or rules failure; keep current local state.
         }
@@ -278,9 +380,35 @@ final class CloudSyncEngine {
         pendingPush = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 800_000_000)
             guard !Task.isCancelled, let self else { return }
-            try? await self.pushSnapshotAndWait()
+            await self.performPushWithRetryBudget(attempt: 0)
         }
         #endif
+    }
+
+    private func scheduleRetryPush() {
+        #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
+        retryTask?.cancel()
+        let delays: [UInt64] = [2, 8, 30, 60]
+        let index = min(pushRetryAttempt, delays.count - 1)
+        let nanos = delays[index] * 1_000_000_000
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: nanos)
+            guard !Task.isCancelled, let self else { return }
+            await self.performPushWithRetryBudget(attempt: self.pushRetryAttempt + 1)
+        }
+        #endif
+    }
+
+    private func performPushWithRetryBudget(attempt: Int) async {
+        guard hasUnsyncedLocalChanges else { return }
+        do {
+            try await pushSnapshotAndWait()
+            pushRetryAttempt = 0
+        } catch {
+            pushRetryAttempt = attempt
+            status = .error(error.localizedDescription)
+            scheduleRetryPush()
+        }
     }
 
     /// Pushes the current local snapshot to the cloud right now.
@@ -295,12 +423,16 @@ final class CloudSyncEngine {
         guard isAvailable,
               let user = Auth.auth().currentUser,
               let snapshot = store.currentSnapshot() else { return }
-        pendingPush?.cancel()
+        guard !isPushing else { return }
+        isPushing = true
+        defer { isPushing = false }
 
+        pendingPush?.cancel()
         status = .syncing
         do {
-            let payload = try makePushPayload(snapshot)
-            _ = try await Functions.functions()
+            let removals = store.pendingRemovals
+            let payload = try makePushPayload(snapshot, removals: removals)
+            let result = try await Functions.functions()
                 .httpsCallable("pushFamilySnapshot")
                 .call(payload)
 
@@ -314,8 +446,32 @@ final class CloudSyncEngine {
                         "lastSignInAt": FieldValue.serverTimestamp(),
                     ])
             }
-            lastPushedRevision = store.dataRevision
-            lastPushedChildIds = Set(snapshot.children.map(\.id))
+
+            // Ack tombstones the server confirmed.
+            if let data = result.data as? [String: Any],
+               let deleted = data["deleted"] as? [String: Any] {
+                store.acknowledgeRemovals(
+                    children: deleted["children"] as? [String] ?? [],
+                    tasks: deleted["tasks"] as? [String] ?? [],
+                    completions: deleted["completions"] as? [String] ?? [],
+                    rewards: deleted["rewards"] as? [String] ?? [],
+                    claims: deleted["claims"] as? [String] ?? [],
+                    transactions: deleted["transactions"] as? [String] ?? [],
+                    achievements: deleted["achievements"] as? [String] ?? []
+                )
+            } else {
+                store.acknowledgeRemovals(
+                    children: removals.children,
+                    tasks: removals.tasks,
+                    completions: removals.completions,
+                    rewards: removals.rewards,
+                    claims: removals.claims,
+                    transactions: removals.transactions,
+                    achievements: removals.achievements
+                )
+            }
+
+            store.markPushAcknowledged()
             status = .signedIn
         } catch {
             status = .error(error.localizedDescription)
@@ -325,20 +481,11 @@ final class CloudSyncEngine {
     }
 
     private func applyFromCloud(_ snapshot: FamilySnapshot) {
-        // Capture the store state BEFORE applying the cloud pull, so the diff
-        // below compares the incoming snapshot against what this device
-        // already showed. Self-made changes are already in `previous`, so
-        // they never banner back; the very first pull (previous == nil) is
-        // silent by design.
+        let incomingFingerprint = fingerprint(of: snapshot)
         let previous = store.currentSnapshot()
         store.applyRemote(snapshot)
-        lastFetchedFingerprint = fingerprint(of: snapshot)
-        // Keep the push watermark in step so scheduled refreshes aren't blocked.
-        lastPushedRevision = store.dataRevision
+        lastFetchedFingerprint = incomingFingerprint
 
-        // Free-tier notification fallback: banner locally for genuinely
-        // remote changes (kid actions on another device). Mirrors the
-        // server-side push triggers; activates fully once APNs is set up.
         guard let previous else { return }
         let childNames = Dictionary(
             uniqueKeysWithValues: snapshot.children.map { ($0.id, $0.name) }
@@ -361,7 +508,8 @@ final class CloudSyncEngine {
             enabled: snapshot.family.settings.enableNotifications
         )
     }
-// MARK: - Cloud reads
+
+    // MARK: - Cloud reads
 
     private func fetchSnapshot(uid: String, email: String) async throws -> FamilySnapshot {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
@@ -446,10 +594,11 @@ final class CloudSyncEngine {
             .collection(collection)
             .whereField("familyId", isEqualTo: familyId)
             .getDocuments()
-        return try snapshot.documents.compactMap { doc in
+        // Skip undecodable docs instead of failing the entire pull.
+        return snapshot.documents.compactMap { doc in
             var data = doc.data()
             data["id"] = doc.documentID
-            return try decodeJSON(type, from: data)
+            return try? decodeJSON(type, from: data)
         }
         #else
         return []
@@ -458,7 +607,10 @@ final class CloudSyncEngine {
 
     // MARK: - Serialization helpers
 
-        private func makePushPayload(_ snapshot: FamilySnapshot) throws -> [String: Any] {
+    private func makePushPayload(
+        _ snapshot: FamilySnapshot,
+        removals: (children: [String], tasks: [String], completions: [String], rewards: [String], claims: [String], transactions: [String], achievements: [String])
+    ) throws -> [String: Any] {
         #if canImport(FirebaseFirestore)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -467,11 +619,6 @@ final class CloudSyncEngine {
             let data = try encoder.encode(value)
             return try JSONSerialization.jsonObject(with: data)
         }
-
-        let childIds = snapshot.children.map(\.id)
-        // Child IDs that were tracked locally last push but are no longer present.
-        // The server uses these to delete orphaned child (sub)documents.
-        let removedChildren = lastPushedChildIds.subtracting(childIds)
 
         return [
             "familyId": snapshot.family.id,
@@ -483,16 +630,19 @@ final class CloudSyncEngine {
             "claims": try enc(snapshot.claims),
             "transactions": try enc(snapshot.transactions),
             "achievements": try enc(snapshot.achievements),
-            "removedChildren": Array(removedChildren),
+            "removedChildren": removals.children,
+            "removedTasks": removals.tasks,
+            "removedCompletions": removals.completions,
+            "removedRewards": removals.rewards,
+            "removedClaims": removals.claims,
+            "removedTransactions": removals.transactions,
+            "removedAchievements": removals.achievements,
         ]
         #else
         throw FirebaseError.authNotAvailable
         #endif
     }
-/// Decodes a model from raw Firestore data by round-tripping through JSON.
-    /// Dates come back as ISO-8601 strings; Firestore timestamps are converted
-    /// first. Explicit field-by-field mapping is avoided so adding a field to a
-    /// model doesn't require new mapping code.
+
     private func decodeJSON<T: Decodable>(_ type: T.Type, from dict: [String: Any]) throws -> T {
         #if canImport(FirebaseFirestore)
         let clean = dict.mapValues { value in jsonSafe(value) }
@@ -530,9 +680,6 @@ final class CloudSyncEngine {
         case is NSNull, is Void:
             return NSNull()
         case let data as Data:
-            // Firestore stores `Data` as a binary blob. Round-trip it through a
-            // base64 string so `JSONDecoder` (which decodes base64 back into
-            // `Data`) preserves photo bytes instead of stringifying them.
             return data.base64EncodedString()
         case let data as NSData:
             return data.base64EncodedString()
@@ -544,7 +691,8 @@ final class CloudSyncEngine {
         #endif
     }
 
-    /// A stable fingerprint of a snapshot used to detect remote changes.
+    /// Fingerprint of the incoming cloud snapshot (computed before local apply
+    /// mutates shared model instances).
     private func fingerprint(of snapshot: FamilySnapshot) -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

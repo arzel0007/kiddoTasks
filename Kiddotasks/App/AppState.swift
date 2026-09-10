@@ -163,6 +163,8 @@ final class AppState {
     }
 
     /// Join an existing family using a shared family code.
+    /// Cloud path: co-parent creates their own Firebase account and attaches
+    /// to the existing family. Local fallback only when Firebase is absent.
     func joinWithCode(
         code: String,
         email: String,
@@ -171,11 +173,27 @@ final class AppState {
     ) {
         authenticationError = nil
         Task { @MainActor in
-            do {
-                try store.joinFamily(withCode: code, email: email, password: password)
-                completion?()
-            } catch {
-                authenticationError = friendlyAuthError(error)
+            if cloudSync.isAvailable {
+                do {
+                    isLoading = true
+                    defer { isLoading = false }
+                    try await cloudSync.joinFamilyWithCode(
+                        code: code,
+                        email: email,
+                        password: password
+                    )
+                    completion?()
+                    await registerForPushWhenCloudEnabled()
+                } catch {
+                    authenticationError = friendlyAuthError(error)
+                }
+            } else {
+                do {
+                    try store.joinFamily(withCode: code, email: email, password: password)
+                    completion?()
+                } catch {
+                    authenticationError = friendlyAuthError(error)
+                }
             }
         }
     }

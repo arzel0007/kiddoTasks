@@ -182,8 +182,14 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
     
+    // MARK: - Family codes (co-parent join index)
+    // Maintained only by Cloud Functions (Admin SDK). Clients never access this.
+    match /familyCodes/{code} {
+      allow read, write: if false;
+    }
+
     // MARK: - Device Tokens (push notifications)
-    
+
     // The FCM token registry is managed exclusively by Cloud Functions
     // (registerDeviceToken / unregisterDeviceToken). Clients never read or
     // write this collection directly — a token can only be registered by its

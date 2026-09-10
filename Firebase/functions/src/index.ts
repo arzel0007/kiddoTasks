@@ -24,11 +24,13 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
   const familyRef = db.collection("families").doc();
   const now = admin.firestore.FieldValue.serverTimestamp();
   const kidsStationPIN = generateKidsPIN();
+  const familyCode = generateFamilyCode();
 
   await db.runTransaction(async (tx) => {
     tx.set(familyRef, {
       name: familyName,
       members: [uid],
+      familyCode,
       settings: {
         pointDisplaySymbol: "⭐",
         enableNotifications: true,
@@ -39,6 +41,7 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
       },
       createdAt: now,
       updatedAt: now,
+      serverUpdatedAt: now,
     });
     tx.set(db.collection("parents").doc(uid), {
       email,
@@ -48,9 +51,74 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
       createdAt: now,
       lastSignInAt: now,
     });
+    // Index for co-parent join-by-code lookups.
+    tx.set(db.collection("familyCodes").doc(familyCode), {
+      familyId: familyRef.id,
+      createdAt: now,
+    });
   });
 
-  return { familyId: familyRef.id, parentId: uid, kidsStationPIN };
+  return { familyId: familyRef.id, parentId: uid, kidsStationPIN, familyCode };
+});
+
+/**
+ * Co-parent join: authenticates a second parent and attaches them to an
+ * existing family identified by the shared family code. The caller must have
+ * their own Firebase Auth account (created client-side before this call).
+ */
+export const joinFamilyWithCode = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+  }
+  const uid = context.auth.uid;
+  const familyCode = String(data?.familyCode || "").trim().toUpperCase();
+  if (!familyCode) {
+    throw new functions.https.HttpsError("invalid-argument", "familyCode is required");
+  }
+
+  const codeDoc = await db.collection("familyCodes").doc(familyCode).get();
+  if (!codeDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Family code not found");
+  }
+  const familyId = codeDoc.data()?.familyId;
+  if (!familyId || typeof familyId !== "string") {
+    throw new functions.https.HttpsError("not-found", "Family not found for code");
+  }
+
+  const familyDoc = await db.collection("families").doc(familyId).get();
+  if (!familyDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Family not found");
+  }
+
+  const existingParent = await db.collection("parents").doc(uid).get();
+  if (existingParent.exists && existingParent.data()?.familyId === familyId) {
+    return { familyId, parentId: uid, alreadyMember: true };
+  }
+  if (existingParent.exists) {
+    throw new functions.https.HttpsError("already-exists", "Account already belongs to another family");
+  }
+
+  const email = String(context.auth.token.email || "");
+  const displayName = String(data?.displayName || "Parent");
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  await db.runTransaction(async (tx) => {
+    tx.set(db.collection("parents").doc(uid), {
+      email,
+      displayName,
+      familyId,
+      role: "parent",
+      createdAt: now,
+      lastSignInAt: now,
+    });
+    tx.update(db.collection("families").doc(familyId), {
+      members: admin.firestore.FieldValue.arrayUnion(uid),
+      updatedAt: now,
+      serverUpdatedAt: now,
+    });
+  });
+
+  return { familyId, parentId: uid, alreadyMember: false };
 });
 
 export const createChildProfile = functions.https.onCall(async (data, context) => {
@@ -517,43 +585,107 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError("permission-denied", "Not authorized for this family");
   }
 
-  const batch = db.batch();
   const now = admin.firestore.FieldValue.serverTimestamp();
+  const deleted: Record<string, string[]> = {
+    children: [],
+    tasks: [],
+    completions: [],
+    rewards: [],
+    claims: [],
+    transactions: [],
+    achievements: [],
+  };
 
-  const upsert = (collection: string, items: any[]) => {
+  const collectionMap: Record<string, string> = {
+    children: "children",
+    tasks: "tasks",
+    completions: "taskCompletions",
+    rewards: "rewards",
+    claims: "rewardClaims",
+    transactions: "pointTransactions",
+    achievements: "achievements",
+  };
+
+  // Delete tombstoned docs (family-scoped). Chunk commits under the 500-op limit.
+  let batch = db.batch();
+  let batchCount = 0;
+  const flushBatch = async () => {
+    if (batchCount > 0) {
+      await batch.commit();
+      batch = db.batch();
+      batchCount = 0;
+    }
+  };
+
+  for (const [key, collection] of Object.entries(collectionMap)) {
+    const ids = data?.[`removed${key.charAt(0).toUpperCase()}${key.slice(1)}`]
+      ?? (key === "children" ? data?.removedChildren : undefined)
+      ?? [];
+    const idList: string[] = Array.isArray(ids) ? ids.map(String) : [];
+    for (const id of idList) {
+      if (!id) continue;
+      const ref = db.collection(collection).doc(id);
+      const existing = await ref.get();
+      if (existing.exists && existing.data()?.familyId === familyId) {
+        batch.delete(ref);
+        batchCount += 1;
+        deleted[key].push(id);
+        if (batchCount >= 400) {
+          await flushBatch();
+        }
+      }
+    }
+  }
+
+  const upsert = async (collection: string, items: any[]) => {
     for (const item of items || []) {
       if (!item || typeof item.id !== "string") continue;
-      // Security: never write a document that claims a different family, and
-      // stamp our (validated) familyId so client payloads can't escalate.
       if (typeof item.familyId === "string" && item.familyId !== familyId) continue;
       batch.set(
         db.collection(collection).doc(item.id),
         toFirestoreValue({ ...item, familyId }),
         { merge: true }
       );
+      batchCount += 1;
+      if (batchCount >= 400) {
+        await flushBatch();
+      }
     }
   };
 
-  // The iOS model encodes `memberIds` as `members`, matching the schema that
-  // `bootstrapFamily` uses. Merge so we never wipe server-managed fields.
   if (data?.family && typeof data.family.id === "string") {
+    const familyPayload = toFirestoreValue(data.family);
     batch.set(
       db.collection("families").doc(familyId),
-      { ...toFirestoreValue(data.family), updatedAt: now },
+      { ...familyPayload, updatedAt: now, serverUpdatedAt: now },
       { merge: true }
     );
+    batchCount += 1;
+
+    // Keep familyCode index in sync for co-parent join.
+    const code = typeof data.family.familyCode === "string"
+      ? String(data.family.familyCode).trim().toUpperCase()
+      : "";
+    if (code) {
+      batch.set(
+        db.collection("familyCodes").doc(code),
+        { familyId, updatedAt: now },
+        { merge: true }
+      );
+      batchCount += 1;
+    }
   }
 
-  upsert("children", data?.children);
-  upsert("tasks", data?.tasks);
-  upsert("taskCompletions", data?.completions);
-  upsert("rewards", data?.rewards);
-  upsert("rewardClaims", data?.claims);
-  upsert("pointTransactions", data?.transactions);
-  upsert("achievements", data?.achievements);
+  await upsert("children", data?.children);
+  await upsert("tasks", data?.tasks);
+  await upsert("taskCompletions", data?.completions);
+  await upsert("rewards", data?.rewards);
+  await upsert("rewardClaims", data?.claims);
+  await upsert("pointTransactions", data?.transactions);
+  await upsert("achievements", data?.achievements);
 
-  await batch.commit();
-  return { ok: true, familyId };
+  await flushBatch();
+  return { ok: true, familyId, deleted };
 });
 
 /**
@@ -705,6 +837,16 @@ export const generateRecurringTasks = functions.pubsub
  */
 function generateKidsPIN(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+/** Human-friendly co-parent join code, e.g. KDO-4F7X. */
+function generateFamilyCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  for (let i = 0; i < 4; i++) {
+    suffix += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+  }
+  return `KDO-${suffix}`;
 }
 
 /**
