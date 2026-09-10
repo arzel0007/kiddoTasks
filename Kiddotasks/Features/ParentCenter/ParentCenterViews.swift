@@ -753,6 +753,20 @@ struct FamilyView: View {
                             }
                         }
                     ))
+                    Toggle("Basketball mini-game", isOn: Binding(
+                        get: { appState.currentFamily?.settings.enableMiniGames ?? true },
+                        set: { isEnabled in
+                            do {
+                                try appState.store.updateMiniGamesEnabled(isEnabled)
+                                appState.toastSuccess(isEnabled ? "Play tab enabled" : "Play tab hidden")
+                            } catch {
+                                appState.toastError(error.localizedDescription)
+                            }
+                        }
+                    ))
+                    Text("Shows a Play tab in Kids Space for the basketball challenge.")
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
                 Section("This device") {
                     Picker("Interface", selection: Binding(

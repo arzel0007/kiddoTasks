@@ -208,6 +208,11 @@ struct KidsStationView: View {
             AchievementsView()
                 .tabItem { Label("Badges", systemImage: "medal.fill") }
                 .tag(2)
+            if appState.currentFamily?.settings.enableMiniGames ?? true {
+                BasketballGameView()
+                    .tabItem { Label("Play", systemImage: "basketball.fill") }
+                    .tag(3)
+            }
         }
         .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.accent)
         .onChange(of: selectedTab) { _, _ in

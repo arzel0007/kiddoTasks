@@ -749,6 +749,13 @@ final class LocalFamilyDataStore {
         persistKeepingPassword()
     }
 
+    func updateMiniGamesEnabled(_ isEnabled: Bool) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.enableMiniGames = isEnabled
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
     // MARK: - Dashboard aggregations
 
     struct TodayTotals {

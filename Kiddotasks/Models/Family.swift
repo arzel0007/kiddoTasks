@@ -64,6 +64,47 @@ struct FamilySettings: Codable {
     var requireApprovalByDefault: Bool = true
     var weekStartsOn: Int = 1 // 1 = Monday
     var kidsStationPIN: String = "1234"
+    /// When true, Kids Space shows the Play tab (basketball mini-game).
+    var enableMiniGames: Bool = true
 
     static let `default` = FamilySettings()
+
+    enum CodingKeys: String, CodingKey {
+        case pointDisplaySymbol
+        case enableNotifications
+        case celebrationAnimationsEnabled
+        case requireApprovalByDefault
+        case weekStartsOn
+        case kidsStationPIN
+        case enableMiniGames
+    }
+
+    init(
+        pointDisplaySymbol: String = "⭐",
+        enableNotifications: Bool = true,
+        celebrationAnimationsEnabled: Bool = true,
+        requireApprovalByDefault: Bool = true,
+        weekStartsOn: Int = 1,
+        kidsStationPIN: String = "1234",
+        enableMiniGames: Bool = true
+    ) {
+        self.pointDisplaySymbol = pointDisplaySymbol
+        self.enableNotifications = enableNotifications
+        self.celebrationAnimationsEnabled = celebrationAnimationsEnabled
+        self.requireApprovalByDefault = requireApprovalByDefault
+        self.weekStartsOn = weekStartsOn
+        self.kidsStationPIN = kidsStationPIN
+        self.enableMiniGames = enableMiniGames
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        pointDisplaySymbol = try c.decodeIfPresent(String.self, forKey: .pointDisplaySymbol) ?? "⭐"
+        enableNotifications = try c.decodeIfPresent(Bool.self, forKey: .enableNotifications) ?? true
+        celebrationAnimationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .celebrationAnimationsEnabled) ?? true
+        requireApprovalByDefault = try c.decodeIfPresent(Bool.self, forKey: .requireApprovalByDefault) ?? true
+        weekStartsOn = try c.decodeIfPresent(Int.self, forKey: .weekStartsOn) ?? 1
+        kidsStationPIN = try c.decodeIfPresent(String.self, forKey: .kidsStationPIN) ?? "1234"
+        enableMiniGames = try c.decodeIfPresent(Bool.self, forKey: .enableMiniGames) ?? true
+    }
 }
