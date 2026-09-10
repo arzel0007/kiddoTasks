@@ -9,9 +9,22 @@ enum ImageCompressor {
     static let quality: CGFloat = 0.6
 
     /// Compress a UIImage to JPEG data, scaling down if needed.
+    /// Fixes orientation so HEIC/camera photos encode as upright JPEG.
     static func compress(_ image: UIImage) -> Data? {
-        let resized = resize(image, to: maxDimension)
+        let oriented = normalized(image)
+        let resized = resize(oriented, to: maxDimension)
         return resized.jpegData(compressionQuality: quality)
+    }
+
+    private static func normalized(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: image.size, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
     }
 
     /// Resize an image so its longest edge equals `maxDimension`, preserving aspect ratio.
@@ -21,7 +34,6 @@ enum ImageCompressor {
 
         let longest = max(size.width, size.height)
         guard longest > maxDimension else {
-            // Already small enough — just return as-is
             return image
         }
 
@@ -34,3 +46,4 @@ enum ImageCompressor {
         }
     }
 }
+

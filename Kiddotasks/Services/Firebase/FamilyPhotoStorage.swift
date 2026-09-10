@@ -14,13 +14,19 @@ enum FamilyPhotoStorage {
     enum PhotoStorageError: LocalizedError {
         case notConfigured
         case notSignedIn
+        case emptyData
         case uploadFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .notConfigured: return "Cloud storage isn't available right now."
-            case .notSignedIn: return "Sign in to sync photos."
-            case .uploadFailed(let message): return "Couldn't upload photo. \(message)"
+            case .notConfigured:
+                return "Cloud storage isn’t available on this build."
+            case .notSignedIn:
+                return "Sign in to sync photos to the cloud."
+            case .emptyData:
+                return "That image couldn’t be prepared for upload."
+            case .uploadFailed(let message):
+                return "Couldn’t upload photo. \(message)"
             }
         }
     }
@@ -38,6 +44,7 @@ enum FamilyPhotoStorage {
     }
 
     /// Uploads JPEG data under `families/{familyId}/...` and returns a download URL.
+    /// `itemId` must be the **stable** child/family id (not a throwaway UUID).
     static func uploadPhoto(
         familyId: String,
         kind: Kind,
@@ -48,29 +55,32 @@ enum FamilyPhotoStorage {
         guard Auth.auth().currentUser != nil else {
             throw PhotoStorageError.notSignedIn
         }
+        guard !data.isEmpty else {
+            throw PhotoStorageError.emptyData
+        }
+        guard !familyId.isEmpty, !itemId.isEmpty else {
+            throw PhotoStorageError.uploadFailed("Missing family or item id.")
+        }
+
         let path = "families/\(familyId)/\(kind.folder)/\(itemId).jpg"
         let ref = Storage.storage().reference(withPath: path)
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
 
         do {
-            _ = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<StorageMetadata, Error>) in
-                ref.putData(data, metadata: metadata) { metadata, error in
-                    if let error {
-                        cont.resume(throwing: PhotoStorageError.uploadFailed(error.localizedDescription))
-                    } else if let metadata {
-                        cont.resume(returning: metadata)
-                    } else {
-                        cont.resume(throwing: PhotoStorageError.uploadFailed("No metadata"))
-                    }
-                }
-            }
-            let url = try await ref.downloadURL()
-            return url.absoluteString
-        } catch let error as PhotoStorageError {
-            throw error
+            _ = try await ref.putDataAsync(data, metadata: metadata)
         } catch {
-            throw PhotoStorageError.uploadFailed(error.localizedDescription)
+            print("[Photo] putData failed path=\(path) \(error.localizedDescription)")
+            throw PhotoStorageError.uploadFailed(friendlyStorageMessage(error))
+        }
+
+        do {
+            let url = try await ref.downloadURL()
+            print("[Photo] uploaded \(path) → \(url.absoluteString.prefix(80))…")
+            return url.absoluteString
+        } catch {
+            print("[Photo] downloadURL failed: \(error.localizedDescription)")
+            throw PhotoStorageError.uploadFailed(friendlyStorageMessage(error))
         }
         #else
         throw PhotoStorageError.notConfigured
@@ -87,6 +97,28 @@ enum FamilyPhotoStorage {
             }
         }
         #endif
+    }
+
+    /// Maps common Storage failures to parent-readable copy.
+    private static func friendlyStorageMessage(_ error: Error) -> String {
+        let ns = error as NSError
+        let text = ns.localizedDescription.lowercased()
+        if text.contains("bucket") || text.contains("object-not-found") && text.contains("bucket") {
+            return "Storage isn’t set up in Firebase yet. Enable Storage in the console, then deploy rules."
+        }
+        // StorageErrorObjectNotFound / missing bucket often surfaces as -13010 etc.
+        if ns.domain.contains("FIRStorageErrorDomain") {
+            if text.contains("does not exist") || text.contains("no bucket") {
+                return "Firebase Storage bucket is missing. Enable Storage in the Firebase console."
+            }
+            if text.contains("unauthorized") || text.contains("permission") {
+                return "Storage rules blocked the upload. Deploy Firebase/storage.rules."
+            }
+        }
+        if text.contains("network") || text.contains("offline") {
+            return "Network error while uploading. Try again when you’re online."
+        }
+        return error.localizedDescription
     }
 }
 
@@ -119,6 +151,7 @@ final class RemotePhotoLoader {
                 }
             } catch {
                 // Leave placeholder; avatar emoji still shows.
+                print("[Photo] remote load failed: \(error.localizedDescription)")
             }
         }
     }

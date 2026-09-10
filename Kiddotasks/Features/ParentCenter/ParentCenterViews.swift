@@ -843,24 +843,35 @@ struct FamilyView: View {
             .photosPicker(isPresented: $showFamilyPhotoPicker, selection: $pickedFamilyPhoto, matching: .images)
             .onChange(of: pickedFamilyPhoto) { _, newValue in
                 Task { @MainActor in
-                    guard let item = newValue,
-                          let data = try? await item.loadTransferable(type: Data.self),
-                          let uiImage = UIImage(data: data) else { return }
-                    let compressed = ImageCompressor.compress(uiImage)
-                    do {
-                        var photoURL: String? = appState.currentFamily?.photoURL
-                        if let compressed, appState.isCloudEnabled, let familyId = appState.currentFamily?.id {
+                    guard let item = newValue else { return }
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let uiImage = UIImage(data: data) else {
+                        appState.toastError("Couldn’t read that photo. Try another image.")
+                        return
+                    }
+                    guard let compressed = ImageCompressor.compress(uiImage) else {
+                        appState.toastError("Couldn’t prepare the photo for upload.")
+                        return
+                    }
+                    // Always save locally first.
+                    try? appState.store.updateFamilyPhoto(compressed)
+                    var photoURL: String? = appState.currentFamily?.photoURL
+                    if appState.isCloudEnabled, let familyId = appState.currentFamily?.id {
+                        do {
                             photoURL = try await FamilyPhotoStorage.uploadPhoto(
                                 familyId: familyId,
                                 kind: .family,
                                 itemId: familyId,
                                 data: compressed
                             )
+                            try appState.store.updateFamilyPhoto(compressed, photoURL: photoURL)
+                            appState.toastSuccess("Family photo updated")
+                        } catch {
+                            print("[Photo] family upload failed: \(error.localizedDescription)")
+                            appState.toastError(error.localizedDescription)
                         }
-                        try appState.store.updateFamilyPhoto(compressed, photoURL: photoURL)
+                    } else {
                         appState.toastSuccess("Family photo updated")
-                    } catch {
-                        appState.toastError(error.localizedDescription)
                     }
                 }
             }
@@ -1074,11 +1085,21 @@ struct ChildEditorView: View {
             .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhoto, matching: .images)
             .onChange(of: pickedPhoto) { _, newValue in
                 Task {
-                    if let item = newValue,
-                       let data = try? await item.loadTransferable(type: Data.self),
-                       let uiImage = UIImage(data: data) {
+                    guard let item = newValue else { return }
+                    do {
+                        let data = try await item.loadTransferable(type: Data.self)
+                        guard let data, let uiImage = UIImage(data: data) else {
+                            await MainActor.run {
+                                appState.toastError("Couldn’t read that photo.")
+                            }
+                            return
+                        }
                         await MainActor.run {
                             photoData = ImageCompressor.compress(uiImage)
+                        }
+                    } catch {
+                        await MainActor.run {
+                            appState.toastError("Couldn’t load photo: \(error.localizedDescription)")
                         }
                     }
                 }
@@ -1103,35 +1124,57 @@ struct ChildEditorView: View {
     private func save() {
         Task { @MainActor in
             do {
-                var photoURL = child?.photoURL
                 let familyId = appState.currentFamily?.id
-                let itemId = child?.id ?? UUID().uuidString
-
-                // Upload to Storage when cloud is on so snapshots stay small.
-                if let photoData, appState.isCloudEnabled, let familyId {
-                    photoURL = try await FamilyPhotoStorage.uploadPhoto(
-                        familyId: familyId,
-                        kind: .child,
-                        itemId: itemId,
-                        data: photoData
-                    )
-                }
 
                 if let existing = child {
+                    // Upload using the **existing** child id so the Storage path matches.
+                    var photoURL = existing.photoURL
+                    if let photoData, appState.isCloudEnabled, let familyId {
+                        do {
+                            photoURL = try await FamilyPhotoStorage.uploadPhoto(
+                                familyId: familyId,
+                                kind: .child,
+                                itemId: existing.id,
+                                data: photoData
+                            )
+                        } catch {
+                            // Keep local photo; cloud can retry later / other device.
+                            print("[Photo] child upload failed (local kept): \(error.localizedDescription)")
+                            appState.toastError(error.localizedDescription)
+                            photoURL = existing.photoURL
+                        }
+                    }
                     existing.name = name
                     existing.avatar = avatar
                     existing.photoData = photoData
-                    existing.photoURL = photoURL
+                    if photoData == nil { existing.photoURL = nil }
+                    else { existing.photoURL = photoURL }
                     existing.dateOfBirth = hasBirthday ? birthday : nil
                     try appState.store.updateChild(existing)
                 } else {
-                    try appState.store.addChild(
+                    // Create first so we have a stable id, then upload under that id.
+                    let created = try appState.store.addChild(
                         name: name,
                         avatar: avatar,
                         photoData: photoData,
-                        photoURL: photoURL,
+                        photoURL: nil,
                         dateOfBirth: hasBirthday ? birthday : nil
                     )
+                    if let photoData, appState.isCloudEnabled, let familyId {
+                        do {
+                            let url = try await FamilyPhotoStorage.uploadPhoto(
+                                familyId: familyId,
+                                kind: .child,
+                                itemId: created.id,
+                                data: photoData
+                            )
+                            created.photoURL = url
+                            try appState.store.updateChild(created)
+                        } catch {
+                            print("[Photo] child upload failed (local kept): \(error.localizedDescription)")
+                            appState.toastError(error.localizedDescription)
+                        }
+                    }
                 }
                 appState.toastSuccess(child == nil ? "\(name) added" : "Profile updated")
                 dismiss()
