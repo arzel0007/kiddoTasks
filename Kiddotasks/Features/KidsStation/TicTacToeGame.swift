@@ -65,18 +65,24 @@ struct TicTacToeView: View {
     @State private var matchOver = false
     @State private var startedAt = Date()
 
-    private var p1: GamePlayer { players[0] }
-    private var p2: GamePlayer { players.count > 1 ? players[1] : players[0] }
+    private var p1: GamePlayer {
+        players.first ?? GamePlayer(displayName: "Player 1", colorHex: "#3978A8", symbol: "✕")
+    }
+    private var p2: GamePlayer {
+        players.count > 1
+            ? players[1]
+            : GamePlayer(displayName: "Player 2", colorHex: "#3F8B70", symbol: "○")
+    }
     private var currentName: String { engine.isXTurn ? p1.displayName : p2.displayName }
     private var currentColor: String { engine.isXTurn ? p1.colorHex : p2.colorHex }
 
     var body: some View {
         ZStack {
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 header
-                boardView
                 statusLine
-                Spacer()
+                boardView
+                Spacer(minLength: 8)
                 if engine.outcome != .none {
                     PrimaryButton(title: "Next round") {
                         if engine.xScore + engine.oScore >= 3 {
@@ -85,10 +91,10 @@ struct TicTacToeView: View {
                             engine.resetBoard()
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                 }
                 SecondaryButton(title: "End game") { finishMatch() }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 12)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -151,59 +157,81 @@ struct TicTacToeView: View {
 
     private var header: some View {
         HStack {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Tic-Tac-Toe")
                     .font(KiddoTasksDesignTokens.Typography.headingMedium)
-                Text("\(p1.displayName) \(engine.xScore) · \(p2.displayName) \(engine.oScore)")
+                Text("Best of 3 rounds")
                     .font(KiddoTasksDesignTokens.Typography.captionLarge)
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
             Spacer()
             if engine.outcome == .none {
-                HStack(spacing: 6) {
-                    Circle().fill(Color(hex: currentColor)).frame(width: 12, height: 12)
+                HStack(spacing: 8) {
+                    Circle().fill(Color(hex: currentColor)).frame(width: 14, height: 14)
                     Text(currentName)
                         .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                        .lineLimit(1)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.9)))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.92)))
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 20)
+        .padding(.top, 16)
     }
 
+    /// Full-width square board sized from available space (not a tiny fixed grid).
     private var boardView: some View {
-        VStack(spacing: 10) {
-            ForEach(0..<3, id: \.self) { r in
-                HStack(spacing: 10) {
-                    ForEach(0..<3, id: \.self) { c in
-                        Button {
-                            engine.tap(row: r, col: c)
-                            if requirePassDevice, engine.outcome == .none {
-                                showPass = true
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let gap: CGFloat = 10
+            let cell = (side - gap * 2) / 3
+
+            VStack(spacing: gap) {
+                ForEach(0..<3, id: \.self) { r in
+                    HStack(spacing: gap) {
+                        ForEach(0..<3, id: \.self) { c in
+                            Button {
+                                engine.tap(row: r, col: c)
+                                if requirePassDevice, engine.outcome == .none {
+                                    showPass = true
+                                }
+                            } label: {
+                                Text(mark(engine.board[r][c]))
+                                    .font(.system(size: max(36, cell * 0.42), weight: .bold, design: .rounded))
+                                    .frame(width: cell, height: cell)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: max(14, cell * 0.16), style: .continuous)
+                                            .fill(KiddoTasksDesignTokens.Colors.surfaceCard)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: max(14, cell * 0.16), style: .continuous)
+                                            .strokeBorder(
+                                                engine.board[r][c] == .empty
+                                                    ? Color.clear
+                                                    : (engine.board[r][c] == .x
+                                                        ? Color(hex: p1.colorHex).opacity(0.35)
+                                                        : Color(hex: p2.colorHex).opacity(0.35)),
+                                                lineWidth: 2
+                                            )
+                                    )
+                                    .foregroundStyle(engine.board[r][c] == .x
+                                        ? Color(hex: p1.colorHex)
+                                        : Color(hex: p2.colorHex))
                             }
-                        } label: {
-                            Text(mark(engine.board[r][c]))
-                                .font(.system(size: 36, weight: .bold))
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(1, contentMode: .fit)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(KiddoTasksDesignTokens.Colors.surfaceCard)
-                                )
-                                .foregroundStyle(engine.board[r][c] == .x
-                                    ? Color(hex: p1.colorHex)
-                                    : Color(hex: p2.colorHex))
+                            .buttonStyle(KiddoPressStyle())
+                            .disabled(engine.outcome != .none || engine.board[r][c] != .empty)
                         }
-                        .buttonStyle(KiddoPressStyle())
-                        .disabled(engine.outcome != .none || engine.board[r][c] != .empty)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(20)
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
     }
 
     private func mark(_ c: TicTacToeEngine.Cell) -> String {
@@ -215,10 +243,16 @@ struct TicTacToeView: View {
     }
 
     private var statusLine: some View {
-        Text(statusText)
-            .font(KiddoTasksDesignTokens.Typography.bodyLarge)
-            .fontWeight(.semibold)
-            .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+        VStack(spacing: 4) {
+            Text(statusText)
+                .font(KiddoTasksDesignTokens.Typography.bodyLarge)
+                .fontWeight(.semibold)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+            Text("\(p1.displayName) \(engine.xScore) · \(p2.displayName) \(engine.oScore)")
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+        }
+        .padding(.horizontal, 20)
     }
 
     private var statusText: String {

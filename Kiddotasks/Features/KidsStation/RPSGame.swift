@@ -86,8 +86,14 @@ struct RPSView: View {
     @State private var startedAt = Date()
     @State private var showPass = false
 
-    private var p1: GamePlayer { players[0] }
-    private var p2: GamePlayer { players[1] }
+    private var p1: GamePlayer {
+        players.first ?? GamePlayer(displayName: "Player 1", colorHex: "#3978A8")
+    }
+    private var p2: GamePlayer {
+        players.count > 1
+            ? players[1]
+            : GamePlayer(displayName: "Player 2", colorHex: "#D59A3A")
+    }
 
     var body: some View {
         ZStack {
@@ -165,9 +171,10 @@ struct RPSView: View {
     }
 
     private var pickPanel: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Text(isPickingP1 ? "\(p1.displayName)'s pick" : "\(p2.displayName)'s pick")
-                .font(KiddoTasksDesignTokens.Typography.titleMedium)
+                .font(KiddoTasksDesignTokens.Typography.titleLarge)
+                .multilineTextAlignment(.center)
             HStack(spacing: 12) {
                 ForEach(RPSMove.allCases) { move in
                     Button {
@@ -181,26 +188,51 @@ struct RPSView: View {
                             showResult = true
                         }
                     } label: {
-                        VStack(spacing: 6) {
-                            Text(move.glyph).font(.system(size: 36))
+                        VStack(spacing: 10) {
+                            Text(move.glyph).font(.system(size: 48))
                             Text(move.title)
-                                .font(.caption.weight(.semibold))
+                                .font(KiddoTasksDesignTokens.Typography.titleSmall)
                         }
-                        .frame(width: 88, height: 100)
-                        .background(RoundedRectangle(cornerRadius: 18).fill(KiddoTasksDesignTokens.Colors.surfaceCard))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 128)
+                        .background(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(KiddoTasksDesignTokens.Colors.surfaceCard)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .strokeBorder(KiddoTasksDesignTokens.Colors.borderSubtle, lineWidth: 1.5)
+                        )
                     }
                     .buttonStyle(ExtraBouncyPressStyle())
                 }
             }
+            .padding(.horizontal, 16)
         }
     }
 
     private var resultPanel: some View {
-        VStack(spacing: 16) {
-            Text(engine.p1Move?.glyph ?? "❓").font(.system(size: 48))
+        VStack(spacing: 20) {
+            HStack(spacing: 20) {
+                VStack(spacing: 8) {
+                    Text(engine.p1Move?.glyph ?? "❓").font(.system(size: 56))
+                    Text(p1.displayName)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                }
+                Text("vs")
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                VStack(spacing: 8) {
+                    Text(engine.p2Move?.glyph ?? "❓").font(.system(size: 56))
+                    Text(p2.displayName)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                }
+            }
             Text(engine.roundMessage ?? "")
                 .font(KiddoTasksDesignTokens.Typography.titleMedium)
-            Text(engine.p2Move?.glyph ?? "❓").font(.system(size: 48))
+                .multilineTextAlignment(.center)
             if engine.isOver {
                 PrimaryButton(title: "See results") { finish() }
                     .padding(.horizontal, 40)
@@ -213,6 +245,7 @@ struct RPSView: View {
                 .padding(.horizontal, 40)
             }
         }
+        .padding(.horizontal, 16)
     }
 
     private func finish() {

@@ -95,30 +95,10 @@ struct MemoryGameView: View {
         ZStack {
             VStack(spacing: 12) {
                 header
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 10)], spacing: 10) {
-                    ForEach(Array(engine.cards.enumerated()), id: \.element.id) { index, card in
-                        Button {
-                            engine.flip(at: index)
-                        } label: {
-                            Text(card.isFaceUp || card.isMatched ? card.glyph : "?")
-                                .font(.system(size: 28))
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(0.8, contentMode: .fit)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .fill(card.isMatched
-                                            ? KiddoTasksDesignTokens.Colors.successLight
-                                            : KiddoTasksDesignTokens.Colors.surfaceCard)
-                                )
-                                .opacity(card.isMatched ? 0.7 : 1)
-                        }
-                        .buttonStyle(KiddoPressStyle())
-                    }
-                }
-                .padding(16)
-                Spacer()
+                boardView
+                Spacer(minLength: 8)
                 SecondaryButton(title: "End game") { finish() }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 12)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -154,20 +134,77 @@ struct MemoryGameView: View {
         }
     }
 
+    private var boardView: some View {
+        GeometryReader { geo in
+            let spacing: CGFloat = 10
+            let cols = geo.size.width < 320 ? 3 : 4
+            let cardW = (geo.size.width - spacing * CGFloat(cols - 1)) / CGFloat(cols)
+            let cardH = max(cardW * 1.15, 72)
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.fixed(cardW), spacing: spacing), count: cols),
+                spacing: spacing
+            ) {
+                ForEach(Array(engine.cards.enumerated()), id: \.element.id) { index, card in
+                    Button {
+                        engine.flip(at: index)
+                    } label: {
+                        Text(card.isFaceUp || card.isMatched ? card.glyph : "?")
+                            .font(.system(size: max(28, cardW * 0.42)))
+                            .frame(width: cardW, height: cardH)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(card.isMatched
+                                        ? KiddoTasksDesignTokens.Colors.successLight
+                                        : KiddoTasksDesignTokens.Colors.surfaceCard)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(
+                                        card.isFaceUp && !card.isMatched
+                                            ? KiddoTasksDesignTokens.Colors.primary.opacity(0.35)
+                                            : Color.clear,
+                                        lineWidth: 2
+                                    )
+                            )
+                            .scaleEffect(card.isFaceUp && !card.isMatched ? 1.02 : 1)
+                            .opacity(card.isMatched ? 0.72 : 1)
+                            .animation(.spring(response: 0.28, dampingFraction: 0.78), value: card.isFaceUp)
+                            .animation(.easeOut(duration: 0.2), value: card.isMatched)
+                    }
+                    .buttonStyle(KiddoPressStyle())
+                    .disabled(engine.isBusy && !card.isFaceUp)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .frame(maxWidth: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 16)
+    }
+
     private var header: some View {
         VStack(spacing: 4) {
             Text("Memory")
                 .font(KiddoTasksDesignTokens.Typography.headingMedium)
             if !engine.playerNames.isEmpty {
-                Text("\(engine.playerNames[engine.currentPlayerIndex])'s turn")
-                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(KiddoTasksDesignTokens.Colors.primary)
+                        .frame(width: 10, height: 10)
+                    Text("\(engine.playerNames[engine.currentPlayerIndex])'s turn")
+                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                }
             }
             Text(engine.playerNames.map { "\($0): \(engine.scores[$0] ?? 0)" }.joined(separator: " · "))
                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .padding(.top, 16)
+        .padding(.top, 12)
+        .padding(.horizontal, 16)
     }
 
     private func resultPlayers() -> [GamePlayer] {

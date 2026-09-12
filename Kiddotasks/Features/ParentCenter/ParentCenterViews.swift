@@ -810,12 +810,12 @@ struct FamilyView: View {
                             }
                         }
                     ))
-                    Toggle("Basketball mini-game", isOn: Binding(
+                    Toggle("Mini-games hub", isOn: Binding(
                         get: { appState.currentFamily?.settings.enableMiniGames ?? true },
                         set: { isEnabled in
                             do {
                                 try appState.store.updateMiniGamesEnabled(isEnabled)
-                                appState.toastSuccess(isEnabled ? "Play tab enabled" : "Play tab hidden")
+                                appState.toastSuccess(isEnabled ? "Games hub enabled" : "Games hub hidden")
                             } catch {
                                 appState.toastError(error.localizedDescription)
                             }
@@ -839,7 +839,7 @@ struct FamilyView: View {
                             .font(KiddoTasksDesignTokens.Typography.captionLarge)
                             .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                     }
-                    Text("Shows the Games hub in Kids Space (basketball, tic-tac-toe, and more).")
+                    Text("Shows basketball, tic-tac-toe, rock-paper-scissors, and memory in Kids Space.")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }

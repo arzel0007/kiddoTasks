@@ -154,11 +154,17 @@ struct GamePlayerSetupView: View {
 
 // MARK: - Games hub
 
+/// Bundle so the cover cannot open with empty players (race with separate @State).
+private struct GameLaunch: Identifiable {
+    let id = UUID()
+    let game: MiniGameID
+    let players: [GamePlayer]
+}
+
 struct GamesHubView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedGame: MiniGameID?
-    @State private var startGame: MiniGameID?
-    @State private var pendingPlayers: [GamePlayer] = []
+    @State private var launch: GameLaunch?
 
     var body: some View {
         NavigationStack {
@@ -188,8 +194,7 @@ struct GamesHubView: View {
                         Button {
                             // Basketball has its own in-game player menu — skip setup sheet.
                             if game == .basketball {
-                                startGame = .basketball
-                                pendingPlayers = []
+                                launch = GameLaunch(game: .basketball, players: [])
                             } else {
                                 selectedGame = game
                             }
@@ -228,22 +233,19 @@ struct GamesHubView: View {
             .sheet(item: $selectedGame) { game in
                 GamePlayerSetupView(game: game) { players in
                     selectedGame = nil
-                    // Present the full-screen game only after the sheet has
-                    // finished dismissing — same-runloop sheet→cover races
-                    // silently fail (game "doesn't launch").
-                    let playersCopy = players
+                    // Present after the sheet finishes dismissing (same-runloop race).
+                    // Players ride inside GameLaunch so the cover never sees [].
+                    let payload = GameLaunch(game: game, players: players)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        pendingPlayers = playersCopy
-                        startGame = game
+                        launch = payload
                     }
                 } onCancel: {
                     selectedGame = nil
                 }
             }
-            .fullScreenCover(item: $startGame) { game in
-                MiniGameHostView(game: game, players: pendingPlayers) {
-                    startGame = nil
-                    pendingPlayers = []
+            .fullScreenCover(item: $launch) { item in
+                MiniGameHostView(game: item.game, players: item.players) {
+                    launch = nil
                 }
             }
         }
@@ -294,15 +296,28 @@ struct MiniGameHostView: View {
     let players: [GamePlayer]
     let onExit: () -> Void
 
+    /// Never crash on empty roster — fall back to guest seats.
+    private var safePlayers: [GamePlayer] {
+        if !players.isEmpty { return players }
+        let needed = max(2, game.minPlayers)
+        return (0..<needed).map { i in
+            GamePlayer(
+                displayName: "Player \(i + 1)",
+                colorHex: ["#3978A8", "#3F8B70", "#D59A3A", "#D97868"][i % 4],
+                symbol: ["✕", "○", "△", "□"][i % 4]
+            )
+        }
+    }
+
     var body: some View {
         Group {
             switch game {
             case .tictactoe:
-                TicTacToeView(players: players, requirePassDevice: true, onExit: onExit)
+                TicTacToeView(players: safePlayers, requirePassDevice: true, onExit: onExit)
             case .rps:
-                RPSView(players: players, requirePassDevice: true, onExit: onExit)
+                RPSView(players: safePlayers, requirePassDevice: true, onExit: onExit)
             case .memory:
-                MemoryGameView(players: players, requirePassDevice: false, onExit: onExit)
+                MemoryGameView(players: safePlayers, requirePassDevice: false, onExit: onExit)
             case .basketball:
                 BasketballGameView(onExit: onExit)
             }
