@@ -1224,61 +1224,219 @@ struct ChildEditorView: View {
 struct ActivityView: View {
     @Environment(AppState.self) private var appState
 
+    private enum Filter: String, CaseIterable, Identifiable {
+        case all = "All"
+        case games = "Games"
+        case points = "Points"
+        var id: String { rawValue }
+    }
+
+    @State private var filter: Filter = .all
+
     private func childName(_ id: String) -> String {
         appState.child(id: id)?.name ?? "Child"
+    }
+
+    private var gameIconName: String {
+        "gamecontroller.fill"
     }
 
     var body: some View {
         NavigationStack {
             List {
+                Picker("Filter", selection: $filter) {
+                    ForEach(Filter.allCases) { f in
+                        Text(f.rawValue).tag(f)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color.clear)
+
                 let transactions = appState.store.transactions.sorted {
                     $0.createdAt > $1.createdAt
                 }
-                if transactions.isEmpty {
-                    EmptyListHint(
-                        emoji: "📖",
-                        title: "No activity yet. Completions and rewards will appear here."
-                    )
-                }
-                ForEach(transactions) { tx in
-                    HStack(spacing: 12) {
-                        Image(systemName: tx.type.icon)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background {
-                                Circle().fill(
-                                    tx.amount >= 0
-                                        ? KiddoTasksDesignTokens.Colors.success
-                                        : KiddoTasksDesignTokens.Colors.error
-                                )
-                            }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(childName(tx.childId))
-                                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                                .fontWeight(.semibold)
-                            Text(tx.description)
+                let games = GameStatsStore.shared.records
+                let showGames = filter != .points
+                let showPoints = filter != .games
+
+                if showGames {
+                    Section {
+                        if games.isEmpty {
+                            Text("No games yet — kids can play from Games in Kids Space.")
                                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                            Text("\(tx.type.displayName) · \(tx.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(KiddoTasksDesignTokens.Typography.captionSmall)
-                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                         }
-                        Spacer()
-                        Text(tx.amount > 0 ? "+\(tx.amount)" : "\(tx.amount)")
-                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
-                            .monospacedDigit()
-                            .foregroundStyle(
-                                tx.amount > 0
-                                    ? KiddoTasksDesignTokens.Colors.success
-                                    : KiddoTasksDesignTokens.Colors.error
-                            )
+                        ForEach(games) { match in
+                            GameHistoryRow(match: match)
+                        }
+                    } header: {
+                        Text("Mini-games")
+                    } footer: {
+                        if !games.isEmpty {
+                            Text("Shows players, scores, winner, and time for each finished match.")
+                        }
                     }
-                    .padding(.vertical, 2)
+                }
+
+                if showPoints {
+                    Section("Stars & rewards") {
+                        if transactions.isEmpty && (!showGames || games.isEmpty) {
+                            EmptyListHint(
+                                emoji: "📖",
+                                title: "No activity yet. Completions, rewards, and games will appear here."
+                            )
+                        } else if transactions.isEmpty {
+                            Text("No point activity yet.")
+                                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        }
+                        ForEach(transactions) { tx in
+                            HStack(spacing: 12) {
+                                Image(systemName: tx.type.icon)
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 34, height: 34)
+                                    .background {
+                                        Circle().fill(
+                                            tx.amount >= 0
+                                                ? KiddoTasksDesignTokens.Colors.success
+                                                : KiddoTasksDesignTokens.Colors.error
+                                        )
+                                    }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(childName(tx.childId))
+                                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                                        .fontWeight(.semibold)
+                                    Text(tx.description)
+                                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                                    Text("\(tx.type.displayName) · \(tx.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                                }
+                                Spacer()
+                                Text(tx.amount > 0 ? "+\(tx.amount)" : "\(tx.amount)")
+                                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                                    .monospacedDigit()
+                                    .foregroundStyle(
+                                        tx.amount > 0
+                                            ? KiddoTasksDesignTokens.Colors.success
+                                            : KiddoTasksDesignTokens.Colors.error
+                                    )
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
                 }
             }
             .navigationTitle("History")
         }
+    }
+}
+
+/// One finished mini-game: who played, scores, winner, when.
+private struct GameHistoryRow: View {
+    @Environment(AppState.self) private var appState
+    let match: GameMatchRecord
+
+    private var accent: Color {
+        Color(hex: MiniGameID(rawValue: match.gameId)?.accentHex ?? "#3978A8")
+    }
+
+    private var isTie: Bool {
+        match.winnerNames.count > 1
+    }
+
+    private var winnerLabel: String? {
+        guard !match.winnerNames.isEmpty else { return nil }
+        if isTie { return "Tie" }
+        return match.winnerNames[0]
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: MiniGameID(rawValue: match.gameId)?.symbol ?? "gamecontroller.fill")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background { Circle().fill(accent) }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(match.displayTitle)
+                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                        .fontWeight(.semibold)
+                    Spacer(minLength: 8)
+                    if let winnerLabel {
+                        Text(winnerLabel)
+                            .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                            .fontWeight(.bold)
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(KiddoTasksDesignTokens.Colors.successLight))
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.success)
+                    }
+                }
+
+                // Avatars when players are linked kids, otherwise plain names.
+                HStack(spacing: -6) {
+                    ForEach(match.players.prefix(4)) { player in
+                        if let childId = player.childId, let child = appState.child(id: childId) {
+                            ChildAvatarView(
+                                avatar: child.avatar,
+                                size: 22,
+                                photoData: child.photoData,
+                                photoURL: child.photoURL
+                            )
+                            .overlay(Circle().strokeBorder(KiddoTasksDesignTokens.Colors.surfaceCard, lineWidth: 1.5))
+                        } else {
+                            Text(String(player.displayName.prefix(1)))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(Color(hex: player.colorHex))
+                                .frame(width: 22, height: 22)
+                                .background(Circle().fill(Color(hex: player.colorHex).opacity(0.2)))
+                                .overlay(Circle().strokeBorder(KiddoTasksDesignTokens.Colors.surfaceCard, lineWidth: 1.5))
+                        }
+                    }
+                    if match.players.count > 4 {
+                        Text("+\(match.players.count - 4)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(KiddoTasksDesignTokens.Colors.surface))
+                    }
+                    Text(match.playerNames)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        .lineLimit(1)
+                        .padding(.leading, 10)
+                }
+                .padding(.top, 2)
+
+                if !match.scoreLine.isEmpty {
+                    Text(match.scoreLine)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                }
+
+                HStack(spacing: 6) {
+                    Text(match.playedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                    if !match.durationLine.isEmpty {
+                        Text("·")
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                        Text(match.durationLine)
+                            .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 

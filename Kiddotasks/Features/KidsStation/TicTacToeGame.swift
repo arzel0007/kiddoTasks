@@ -60,6 +60,7 @@ struct TicTacToeView: View {
     var requirePassDevice = true
     let onExit: () -> Void
 
+    @Environment(AppState.self) private var appState
     @State private var engine = TicTacToeEngine()
     @State private var showPass = false
     @State private var matchOver = false
@@ -150,7 +151,8 @@ struct TicTacToeView: View {
             gameId: .tictactoe,
             players: resultPlayers(),
             winnerIds: winnerIds,
-            durationSeconds: Int(Date().timeIntervalSince(startedAt))
+            durationSeconds: Int(Date().timeIntervalSince(startedAt)),
+            notifyParents: appState.currentFamily?.settings.enableNotifications ?? true
         )
         matchOver = true
     }

@@ -85,6 +85,7 @@ struct MemoryGameView: View {
     var requirePassDevice = false
     let onExit: () -> Void
 
+    @Environment(AppState.self) private var appState
     @State private var engine = MemoryGameEngine()
     @State private var matchOver = false
     @State private var startedAt = Date()
@@ -230,7 +231,8 @@ struct MemoryGameView: View {
             gameId: .memory,
             players: resultPlayers(),
             winnerIds: winnerIds(),
-            durationSeconds: Int(Date().timeIntervalSince(startedAt))
+            durationSeconds: Int(Date().timeIntervalSince(startedAt)),
+            notifyParents: appState.currentFamily?.settings.enableNotifications ?? true
         )
         matchOver = true
     }

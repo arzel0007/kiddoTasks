@@ -96,17 +96,41 @@ struct GamePlayer: Identifiable, Equatable, Codable {
 struct GameMatchRecord: Codable, Identifiable, Equatable {
     let id: String
     let gameId: String
+    /// Optional for older UserDefaults payloads; prefer `displayTitle`.
+    let gameTitle: String?
     let playedAt: Date
     let players: [GamePlayer]
     let winnerNames: [String]
     let durationSeconds: Int
 
+    var displayTitle: String {
+        if let gameTitle, !gameTitle.isEmpty { return gameTitle }
+        return MiniGameID(rawValue: gameId)?.title ?? "Game"
+    }
+
     var headline: String {
-        guard let first = winnerNames.first else { return "Finished" }
+        guard let first = winnerNames.first else { return scoreLine.isEmpty ? "Finished" : scoreLine }
         if winnerNames.count > 1 {
             return "Tie: \(winnerNames.joined(separator: " & "))"
         }
         return "\(first) won"
+    }
+
+    /// "Alex 3 · Sam 1" — empty scores omitted.
+    var scoreLine: String {
+        players
+            .map { "\($0.displayName) \($0.score)" }
+            .joined(separator: " · ")
+    }
+
+    var playerNames: String {
+        players.map(\.displayName).joined(separator: ", ")
+    }
+
+    var durationLine: String {
+        guard durationSeconds > 0 else { return "" }
+        if durationSeconds < 60 { return "\(durationSeconds)s" }
+        return "\(durationSeconds / 60)m \(durationSeconds % 60)s"
     }
 }
 
@@ -122,11 +146,20 @@ final class GameStatsStore {
         load()
     }
 
-    func record(gameId: MiniGameID, players: [GamePlayer], winnerIds: [String], durationSeconds: Int) {
+    /// Records a finished match and optionally banners the parent.
+    @discardableResult
+    func record(
+        gameId: MiniGameID,
+        players: [GamePlayer],
+        winnerIds: [String],
+        durationSeconds: Int,
+        notifyParents: Bool = true
+    ) -> GameMatchRecord {
         let winnerNames = players.filter { winnerIds.contains($0.id) }.map(\.displayName)
         let record = GameMatchRecord(
             id: UUID().uuidString,
             gameId: gameId.rawValue,
+            gameTitle: gameId.title,
             playedAt: Date(),
             players: players,
             winnerNames: winnerNames,
@@ -135,6 +168,40 @@ final class GameStatsStore {
         records.insert(record, at: 0)
         if records.count > 100 { records = Array(records.prefix(100)) }
         save()
+
+        if notifyParents {
+            let event = FamilyChangeEvent(
+                kind: .miniGamePlayed,
+                childName: parentFacingWho(record),
+                detail: gameId.title,
+                extra: matchSummary(for: record)
+            )
+            LocalFamilyNotifier.notify([event], enabled: true)
+        }
+        return record
+    }
+
+    /// Who the parent should see first — prefer linked kids, else first player.
+    private func parentFacingWho(_ record: GameMatchRecord) -> String {
+        let names = record.players.map(\.displayName)
+        if names.isEmpty { return "A kid" }
+        if names.count == 1 { return names[0] }
+        return names.prefix(2).joined(separator: " & ")
+            + (names.count > 2 ? " +\(names.count - 2)" : "")
+    }
+
+    /// Short parent-facing summary: scores + who won.
+    private func matchSummary(for record: GameMatchRecord) -> String {
+        var parts: [String] = []
+        if !record.scoreLine.isEmpty { parts.append(record.scoreLine) }
+        if record.winnerNames.isEmpty {
+            if record.players.count > 1 { parts.append("no winner") }
+        } else if record.winnerNames.count > 1 {
+            parts.append("tie: \(record.winnerNames.joined(separator: " & "))")
+        } else if let winner = record.winnerNames.first {
+            parts.append("\(winner) won")
+        }
+        return parts.joined(separator: " · ")
     }
 
     var recent: [GameMatchRecord] { Array(records.prefix(5)) }

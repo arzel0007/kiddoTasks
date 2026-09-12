@@ -13,6 +13,7 @@ struct BasketballGameView: View {
     @State private var showPlayerPicker = false
     @State private var pickingSlot = 1
     @State private var physicsTask: Task<Void, Never>?
+    @State private var recordedGameOver = false
 
     private var children: [Child] { appState.familyChildren }
     private var currentChild: Child? {
@@ -64,12 +65,74 @@ struct BasketballGameView: View {
             physicsTask = nil
         }
         .onChange(of: engine.phase) { _, phase in
-            if phase == .gameOver, engine.mode == .solo {
-                let best = max(engine.bestSoloScore, engine.stats1.score)
-                engine.bestSoloScore = best
-                UserDefaults.standard.set(best, forKey: "kiddo.bball.best")
+            if phase == .gameOver {
+                if engine.mode == .solo {
+                    let best = max(engine.bestSoloScore, engine.stats1.score)
+                    engine.bestSoloScore = best
+                    UserDefaults.standard.set(best, forKey: "kiddo.bball.best")
+                }
+                recordBasketballMatch()
             }
         }
+    }
+
+    /// Writes basketball into the shared match log + parent history once per game.
+    private func recordBasketballMatch() {
+        guard !recordedGameOver else { return }
+        recordedGameOver = true
+
+        let p1 = GamePlayer(
+            id: engine.player1.childId ?? "bball-p1",
+            displayName: engine.player1.name,
+            childId: engine.player1.childId,
+            colorHex: engine.player1.accentHex,
+            score: engine.stats1.score
+        )
+        let p2 = GamePlayer(
+            id: engine.player2.childId ?? "bball-p2",
+            displayName: engine.player2.name,
+            childId: engine.player2.childId,
+            colorHex: engine.player2.accentHex,
+            score: engine.stats2.score
+        )
+
+        let players: [GamePlayer]
+        let winnerIds: [String]
+        switch engine.mode {
+        case .solo:
+            players = [p1]
+            winnerIds = engine.stats1.score > 0 ? [p1.id] : []
+        case .versus:
+            players = [p1, p2]
+            if engine.stats1.score > engine.stats2.score {
+                winnerIds = [p1.id]
+            } else if engine.stats2.score > engine.stats1.score {
+                winnerIds = [p2.id]
+            } else {
+                winnerIds = []
+            }
+        case .tournament:
+            players = [p1, p2]
+            winnerIds = []
+        }
+
+        // Approximate elapsed from remaining clock (solo 60s / versus 45s turns).
+        let totalRemaining: Double
+        switch engine.mode {
+        case .solo:
+            totalRemaining = engine.soloTimeRemaining
+        case .versus, .tournament:
+            totalRemaining = engine.p1TimeRemaining + engine.p2TimeRemaining
+        }
+        let elapsed = max(0, Int((engine.mode == .solo ? 60 : 90) - totalRemaining))
+
+        GameStatsStore.shared.record(
+            gameId: .basketball,
+            players: players,
+            winnerIds: winnerIds,
+            durationSeconds: elapsed,
+            notifyParents: appState.currentFamily?.settings.enableNotifications ?? true
+        )
     }
 
     private func leaveGame() {
@@ -122,6 +185,7 @@ struct BasketballGameView: View {
 
                 PrimaryButton(title: "1 Player", color: KiddoTasksDesignTokens.Colors.primary) {
                     applyParentTimeLimit()
+                    recordedGameOver = false
                     engine.startSolo(child: currentChild)
                 }
 
@@ -189,6 +253,7 @@ struct BasketballGameView: View {
             }
 
             PrimaryButton(title: "Start game") {
+                recordedGameOver = false
                 engine.startVersus(p1: engine.player1, p2: engine.player2)
             }
             .padding(.horizontal)
@@ -525,6 +590,7 @@ struct BasketballGameView: View {
                 }
 
                 PrimaryButton(title: "Play again") {
+                    recordedGameOver = false
                     if engine.mode == .solo {
                         engine.startSolo(child: currentChild)
                     } else {

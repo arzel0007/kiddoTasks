@@ -277,7 +277,7 @@ struct GamesHubView: View {
                     }
                 }
                 ForEach(store.recent) { rec in
-                    Text("• \(rec.headline) · \(rec.gameId)")
+                    Text("• \(rec.headline) · \(rec.displayTitle)")
                         .font(KiddoTasksDesignTokens.Typography.captionSmall)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                 }

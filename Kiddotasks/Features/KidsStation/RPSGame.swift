@@ -79,6 +79,7 @@ struct RPSView: View {
     var requirePassDevice = true
     let onExit: () -> Void
 
+    @Environment(AppState.self) private var appState
     @State private var engine = RPSEngine()
     @State private var isPickingP1 = true
     @State private var showResult = false
@@ -253,7 +254,8 @@ struct RPSView: View {
             gameId: .rps,
             players: resultPlayers(),
             winnerIds: winnerIds(),
-            durationSeconds: Int(Date().timeIntervalSince(startedAt))
+            durationSeconds: Int(Date().timeIntervalSince(startedAt)),
+            notifyParents: appState.currentFamily?.settings.enableNotifications ?? true
         )
         matchOver = true
     }

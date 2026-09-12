@@ -13,6 +13,7 @@ struct FamilyChangeEvent: Equatable {
         case rewardApproved
         case rewardRejected
         case pointsAdjusted       // manual adjust / bonus / reversal
+        case miniGamePlayed       // kid finished a mini-game match
     }
 
     let kind: Kind
@@ -30,6 +31,7 @@ struct FamilyChangeEvent: Equatable {
         case .rewardApproved: return "Reward approved 🎉"
         case .rewardRejected: return "Reward not approved"
         case .pointsAdjusted: return "Points updated"
+        case .miniGamePlayed: return "Mini-game finished"
         }
     }
 
@@ -51,6 +53,12 @@ struct FamilyChangeEvent: Equatable {
             return "“\(detail)” was not approved" + (extra.map { " — \($0)" } ?? "")
         case .pointsAdjusted:
             return detail
+        case .miniGamePlayed:
+            // childName = who played (may be "Alex & Sam"); detail = game; extra = scores + winner
+            if let extra, !extra.isEmpty {
+                return "\(childName) played \(detail) — \(extra)"
+            }
+            return "\(childName) played \(detail)"
         }
     }
 }
