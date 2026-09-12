@@ -428,6 +428,16 @@ final class LocalFamilyDataStore {
         dateOfBirth: Date?
     ) throws -> Child {
         guard let family, let parent else { throw FirebaseError.notAuthenticated }
+        let premium = family.settings.plan != "free"
+        guard KiddoPlan.canAddChild(
+            currentCount: children.count,
+            email: parent.email,
+            isPremium: premium
+        ) else {
+            throw FirebaseError.operationFailed(
+                KiddoPlan.upgradePrompt(for: .moreKids)
+            )
+        }
         let child = Child(
             name: name,
             familyId: family.id,
@@ -480,6 +490,16 @@ final class LocalFamilyDataStore {
         recurrence: TaskRecurrence
     ) throws -> KiddoTask {
         guard let family, let parent else { throw FirebaseError.notAuthenticated }
+        let premium = family.settings.plan != "free"
+        guard KiddoPlan.canAddTask(
+            currentCount: tasks.count,
+            email: parent.email,
+            isPremium: premium
+        ) else {
+            throw FirebaseError.operationFailed(
+                KiddoPlan.upgradePrompt(for: .moreTasks)
+            )
+        }
         let task = KiddoTask(
             familyId: family.id,
             name: name,
@@ -759,6 +779,22 @@ final class LocalFamilyDataStore {
     func updateBasketballMaxMinutes(_ minutes: Int) throws {
         guard let family else { throw FirebaseError.notAuthenticated }
         family.settings.basketballMaxMinutes = max(0, minutes)
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    func updateAllowanceMode(_ mode: AllowanceMode, flatDailyAmount: Double) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.allowanceMode = mode
+        family.settings.flatDailyAmount = max(0, flatDailyAmount)
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    func updateWeekBonusTitle(_ title: String) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        family.settings.weekBonusTitle = trimmed.isEmpty ? "Full week!" : trimmed
         family.updatedAt = Date()
         persistKeepingPassword()
     }

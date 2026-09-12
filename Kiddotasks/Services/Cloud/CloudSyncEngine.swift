@@ -165,9 +165,11 @@ final class CloudSyncEngine {
         guard isAvailable else { throw FirebaseError.authNotAvailable }
 
         let uid: String
+        let createdUser: FirebaseAuth.User?
         do {
             let authResult = try await Auth.auth().createUser(withEmail: email, password: password)
             uid = authResult.user.uid
+            createdUser = authResult.user
         } catch {
             // Account already exists (common after Reset all data, which wipes
             // family docs but leaves the Firebase Auth user). Recover by signing
@@ -177,6 +179,12 @@ final class CloudSyncEngine {
                 return store.family?.settings.kidsStationPIN ?? "1234"
             }
             throw error
+        }
+
+        // Email confirmation (anti-spam / security). Parent still gets a local
+        // family immediately; cloud features stay available after they confirm.
+        if let createdUser, !createdUser.isEmailVerified {
+            try? await createdUser.sendEmailVerification()
         }
 
         let callResult = try await Functions.functions()
@@ -234,8 +242,15 @@ final class CloudSyncEngine {
             print("[Auth] Firebase Auth failed: \(error.localizedDescription)")
             throw FirebaseError.invalidCredentials
         }
-        guard let uid = Auth.auth().currentUser?.uid else {
+        guard let user = Auth.auth().currentUser else {
             throw FirebaseError.notAuthenticated
+        }
+        let uid = user.uid
+
+        // Require confirmed email before entering Parent Center (anti-spam).
+        if !user.isEmailVerified {
+            try? await user.sendEmailVerification()
+            throw FirebaseError.emailNotVerified
         }
 
         // Keep unpushed local work when we have a family; never block restore

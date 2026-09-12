@@ -6,12 +6,14 @@ import { useEffect, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { firebaseAuth, firebaseFunctions, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { BrandLogo } from "@/components/brand-logo";
+import { canJoinWithCode, isOwnerEmail, PREMIUM_PRICE } from "@/lib/entitlements";
 
 export default function WelcomePage() {
   const router = useRouter();
@@ -26,6 +28,22 @@ export default function WelcomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(isFirebaseConfigured);
+  /** Non-null when we need the user to click the email confirmation link. */
+  const [pendingVerifyEmail, setPendingVerifyEmail] = useState<string | null>(null);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+
+  function gmailUrl(addr: string) {
+    return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(addr)}`;
+  }
+
+  async function sendVerification(user: { email?: string | null }) {
+    try {
+      await sendEmailVerification(user as never);
+      setResendNote("Confirmation email sent.");
+    } catch {
+      setResendNote("Couldn’t send email — try again.");
+    }
+  }
 
   // Already signed in? Don't show the login form — go to Parent Center.
   useEffect(() => {
@@ -34,26 +52,25 @@ export default function WelcomePage() {
       return;
     }
     const auth = firebaseAuth();
+    const enterApp = async (user: { uid: string; email?: string | null; emailVerified: boolean }) => {
+      if (!user.emailVerified) {
+        setPendingVerifyEmail(user.email ?? "");
+        setCheckingSession(false);
+        return;
+      }
+      try {
+        await loadFamily(user.uid);
+        router.replace("/parent/today");
+      } catch {
+        setCheckingSession(false);
+      }
+    };
     if (auth.currentUser) {
-      void (async () => {
-        try {
-          await loadFamily(auth.currentUser!.uid);
-          router.replace("/parent/today");
-        } catch {
-          setCheckingSession(false);
-        }
-      })();
+      void enterApp(auth.currentUser);
     }
     const unsub = onAuthStateChanged(auth, (user) => {
       if (user) {
-        void (async () => {
-          try {
-            await loadFamily(user.uid);
-            router.replace("/parent/today");
-          } catch {
-            setCheckingSession(false);
-          }
-        })();
+        void enterApp(user);
       } else {
         // Wait a beat — session restore can emit null first.
         setTimeout(() => {
@@ -72,27 +89,51 @@ export default function WelcomePage() {
     }
     setBusy(true);
     setError(null);
+    setResendNote(null);
     try {
       const auth = firebaseAuth();
       if (mode === "signup") {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await sendVerification(cred.user);
         const bootstrap = httpsCallable(firebaseFunctions(), "bootstrapFamily");
         await bootstrap({
           familyName,
           displayName: parentName,
           email,
         });
-        await loadFamily(cred.user.uid);
+        setPendingVerifyEmail(email);
+        return;
       } else if (mode === "signin") {
         const cred = await signInWithEmailAndPassword(auth, email, password);
+        if (!cred.user.emailVerified) {
+          await sendVerification(cred.user);
+          setPendingVerifyEmail(cred.user.email ?? email);
+          return;
+        }
         await loadFamily(cred.user.uid);
       } else if (mode === "join") {
-        // Co-parent: create/sign-in then joinFamilyWithCode
+        // Co-parent join is Premium (founder email always allowed).
+        const joinAllowed = canJoinWithCode(
+          email || firebaseAuth().currentUser?.email,
+          useFamilyStore.getState().entitlements.plan !== "free"
+        );
+        if (!joinAllowed) {
+          setError(
+            `Joining another parent’s family with a code is Premium (${PREMIUM_PRICE.display}). See Plans.`
+          );
+          setBusy(false);
+          return;
+        }
         let cred;
         try {
           cred = await createUserWithEmailAndPassword(auth, email, password);
         } catch {
           cred = await signInWithEmailAndPassword(auth, email, password);
+        }
+        if (!cred.user.emailVerified) {
+          await sendVerification(cred.user);
+          setPendingVerifyEmail(cred.user.email ?? email);
+          return;
         }
         const join = httpsCallable(firebaseFunctions(), "joinFamilyWithCode");
         await join({ familyCode: familyCode.trim().toUpperCase() });
@@ -132,6 +173,99 @@ export default function WelcomePage() {
     }
   }
 
+  if (pendingVerifyEmail) {
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-6 py-12">
+        <div className="card text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-light text-3xl">
+            ✉️
+          </div>
+          <h1 className="text-2xl font-bold">Check your email</h1>
+          <p className="mt-2 text-sm text-ink-secondary">
+            We sent a confirmation link to:
+          </p>
+          <p className="mt-3 rounded-xl bg-surface px-4 py-3 font-semibold">
+            {pendingVerifyEmail}
+          </p>
+          <a
+            className="btn-primary mt-5"
+            href={gmailUrl(pendingVerifyEmail)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open email
+          </a>
+          <ol className="mt-5 list-decimal space-y-1 pl-5 text-left text-sm text-ink-secondary">
+            <li>Open your inbox</li>
+            <li>Find the message from Kiddotasks</li>
+            <li>Click the confirmation link</li>
+            <li>Come back and sign in</li>
+          </ol>
+          <button
+            type="button"
+            className="btn-secondary mt-4"
+            disabled={busy}
+            onClick={async () => {
+              const u = firebaseAuth().currentUser;
+              if (u) {
+                setBusy(true);
+                await sendVerification(u);
+                setBusy(false);
+              } else {
+                setResendNote("Sign in again to resend the email.");
+              }
+            }}
+          >
+            Resend confirmation email
+          </button>
+          {resendNote && (
+            <p className="mt-2 text-xs text-ink-secondary">{resendNote}</p>
+          )}
+          <button
+            type="button"
+            className="btn-primary mt-4"
+            disabled={busy}
+            onClick={async () => {
+              const u = firebaseAuth().currentUser;
+              if (!u) {
+                setPendingVerifyEmail(null);
+                return;
+              }
+              setBusy(true);
+              try {
+                await u.reload();
+                const fresh = firebaseAuth().currentUser;
+                if (fresh?.emailVerified) {
+                  await loadFamily(fresh.uid);
+                  router.replace("/parent/today");
+                } else {
+                  setResendNote("Not confirmed yet — open the link in your email first.");
+                }
+              } catch {
+                setResendNote("Couldn’t refresh — try again.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            I confirmed — continue
+          </button>
+          <button
+            type="button"
+            className="mt-4 text-sm font-semibold text-primary"
+            onClick={async () => {
+              await firebaseAuth().signOut();
+              setPendingVerifyEmail(null);
+              setResendNote(null);
+            }}
+          >
+            ← Back to sign in
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   if (checkingSession) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6">
@@ -149,7 +283,44 @@ export default function WelcomePage() {
         </div>
         <h1 className="text-3xl font-bold">Kiddotasks</h1>
         <p className="mt-2 text-ink-secondary">Missions for kids. Support for parents.</p>
+        <p className="mt-2 text-sm text-ink-tertiary">
+          No kid emails · No bank account · PIN login · Free plan that stays free
+        </p>
       </div>
+
+      <section className="card">
+        <h2 className="mb-3 text-center font-bold">How it works</h2>
+        <div className="grid gap-3 text-center sm:grid-cols-3">
+          {[
+            ["1", "Add your family", "Kids, avatars, PIN"],
+            ["2", "Assign missions", "Daily or weekly"],
+            ["3", "Celebrate", "Stars, rewards, games"],
+          ].map(([n, title, sub]) => (
+            <div key={n} className="rounded-xl bg-surface p-3">
+              <p className="text-lg font-bold text-primary">{n}</p>
+              <p className="text-sm font-semibold">{title}</p>
+              <p className="text-xs text-ink-secondary">{sub}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2 className="mb-3 text-center font-bold">Built for real families</h2>
+        <ul className="space-y-2 text-sm text-ink-secondary">
+          <li>✓ No kid email or bank account — family PIN only</li>
+          <li>✓ Free plan that stays free (1 kid · 20 chores)</li>
+          <li>✓ Premium ₱199/mo when you need co-parents or more kids</li>
+          <li>✓ Web + iOS share the same family</li>
+        </ul>
+        <p className="mt-4 text-center text-xs text-ink-tertiary">
+          <Link href="/how-to" className="underline">How it works</Link>
+          {" · "}
+          <Link href="/pricing" className="underline">Pricing</Link>
+          {" · "}
+          <Link href="/blog/summer-missions" className="underline">Summer guide</Link>
+        </p>
+      </section>
 
       <div className="card space-y-4">
         {!isFirebaseConfigured && (

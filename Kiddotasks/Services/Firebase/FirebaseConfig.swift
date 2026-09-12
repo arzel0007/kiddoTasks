@@ -76,6 +76,7 @@ enum FirebaseError: LocalizedError {
     case alreadyExists
     case childNotFound
     case invalidFamilyCode
+    case emailNotVerified
 
     var errorDescription: String? {
         switch self {
@@ -107,6 +108,8 @@ enum FirebaseError: LocalizedError {
             return "Child not found"
         case .invalidFamilyCode:
             return "Family code not found. Check the code on the other parent's Family tab."
+        case .emailNotVerified:
+            return "Confirm your email first. We sent a link to your inbox."
         }
     }
 }

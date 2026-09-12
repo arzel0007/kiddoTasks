@@ -20,6 +20,7 @@ import type {
   TaskCompletion,
   Entitlements,
 } from "./types";
+import { isOwnerEmail } from "./entitlements";
 
 type FamilyState = {
   loading: boolean;
@@ -33,6 +34,7 @@ type FamilyState = {
   claims: RewardClaim[];
   transactions: PointTransaction[];
   entitlements: Entitlements;
+  parentEmail: string | null;
   kidsMode: boolean;
   setKidsMode: (on: boolean) => void;
   reset: () => void;
@@ -65,6 +67,7 @@ export const useFamilyStore = create<FamilyState>((set) => ({
   claims: [],
   transactions: [],
   entitlements: emptyEntitlements,
+  parentEmail: null,
   kidsMode: false,
 
   setKidsMode: (on) => set({ kidsMode: on }),
@@ -75,6 +78,7 @@ export const useFamilyStore = create<FamilyState>((set) => ({
       error: null,
       family: null,
       parentUid: null,
+      parentEmail: null,
       children: [],
       tasks: [],
       completions: [],
@@ -90,6 +94,7 @@ export const useFamilyStore = create<FamilyState>((set) => ({
       loading: false,
       error: null,
       parentUid: null,
+      parentEmail: null,
       kidsMode: true,
       ...payload,
     }),
@@ -107,6 +112,7 @@ export const useFamilyStore = create<FamilyState>((set) => ({
         set({ loading: false, family: null, error: "No family for this account." });
         return;
       }
+      const parentEmail = (parentSnap.data()?.email as string) ?? null;
       const familyId = parentSnap.data()?.familyId as string;
       const familySnap = await getDoc(doc(db, "families", familyId));
       if (!familySnap.exists()) {
@@ -114,6 +120,11 @@ export const useFamilyStore = create<FamilyState>((set) => ({
         return;
       }
       const family = { id: familySnap.id, ...(familySnap.data() as Omit<Family, "id">) };
+      const plan = (family.settings?.plan as string) || "free";
+      const entitlements: Entitlements = {
+        plan: plan === "plus" || plan === "pro" ? (plan as Entitlements["plan"]) : "free",
+        status: plan === "free" ? "none" : "active",
+      };
 
       const load = async <T extends { id: string }>(name: string): Promise<T[]> => {
         const snap = await getDocs(
@@ -135,12 +146,14 @@ export const useFamilyStore = create<FamilyState>((set) => ({
       set({
         loading: false,
         family,
+        parentEmail,
         children,
         tasks,
         completions,
         rewards,
         claims,
         transactions,
+        entitlements,
         error: null,
       });
     } catch (e) {
@@ -154,9 +167,12 @@ export const useFamilyStore = create<FamilyState>((set) => ({
 
 export function useEntitlements() {
   const entitlements = useFamilyStore((s) => s.entitlements);
+  const parentEmail = useFamilyStore((s) => s.parentEmail);
+  const isOwner = isOwnerEmail(parentEmail);
   return {
     ...entitlements,
-    isPlus: entitlements.plan === "plus" || entitlements.plan === "pro",
-    isPro: entitlements.plan === "pro",
+    isOwner,
+    isPlus: isOwner || entitlements.plan === "plus" || entitlements.plan === "pro",
+    isPro: isOwner || entitlements.plan === "pro",
   };
 }

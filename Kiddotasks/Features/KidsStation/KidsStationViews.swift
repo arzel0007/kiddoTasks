@@ -258,6 +258,7 @@ struct MissionsView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedTask: KiddoTask?
     @State private var celebration: KiddoTask?
+    @State private var showWeekBonus = false
 
     var child: Child? {
         guard let selected = appState.currentChildProfile else { return nil }
@@ -345,6 +346,26 @@ struct MissionsView: View {
             }
             .fullScreenCover(item: $celebration) { task in
                 CelebrationView(task: task) { celebration = nil }
+            }
+            .sheet(isPresented: $showWeekBonus) {
+                WeekBonusCelebrationView(
+                    childName: child?.name ?? "You",
+                    title: appState.currentFamily?.settings.weekBonusTitle ?? "Full week!"
+                ) {
+                    showWeekBonus = false
+                }
+            }
+            .onAppear {
+                guard let child else { return }
+                let status = WeekBonus.status(
+                    child: child,
+                    completions: appState.store.completions,
+                    tasks: appState.store.tasks,
+                    settings: appState.currentFamily?.settings ?? .default
+                )
+                if WeekBonus.shouldCelebrate(status: status, alreadyCelebratedThisWeek: false) {
+                    showWeekBonus = true
+                }
             }
         }
     }

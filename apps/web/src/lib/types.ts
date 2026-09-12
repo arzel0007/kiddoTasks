@@ -9,6 +9,10 @@ export type FamilySettings = {
   kidsStationPIN: string;
   enableMiniGames: boolean;
   basketballMaxMinutes: number;
+  allowanceMode?: "STARS_ONLY" | "FLAT_DAILY" | "PER_CHORE";
+  flatDailyAmount?: number;
+  weekBonusTitle?: string;
+  plan?: string;
 };
 
 export type Family = {
@@ -107,7 +111,5 @@ export type Entitlements = {
   currentPeriodEnd?: string | null;
 };
 
-export const FREE_LIMITS = {
-  maxChildren: 2,
-  historyDays: 7,
-};
+// FREE_LIMITS moved to entitlements.ts (single source of truth).
+

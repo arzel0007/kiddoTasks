@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useFamilyStore, useEntitlements } from "@/lib/family-store";
-import { FREE_LIMITS } from "@/lib/types";
+import { FREE_LIMITS } from "@/lib/entitlements";
 import { SkeletonListRow } from "@/components/skeleton";
 
 /** Firestore may store Timestamp, Date, string, or seconds. */

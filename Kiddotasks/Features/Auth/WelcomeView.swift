@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(FirebaseAuth)
+import FirebaseAuth
+#endif
 
 struct WelcomeView: View {
     @Environment(AppState.self) private var appState
@@ -84,6 +87,7 @@ struct SignUpView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var showPinAlert = false
+    @State private var pendingVerificationEmail: String?
 
     var body: some View {
         NavigationStack {
@@ -142,7 +146,10 @@ struct SignUpView: View {
                             email: email,
                             password: password
                         ) {
-                            if appState.familyBootstrapPIN != nil {
+                            // Cloud signup: show “check your email” next.
+                            if appState.isCloudEnabled {
+                                pendingVerificationEmail = email
+                            } else if appState.familyBootstrapPIN != nil {
                                 showPinAlert = true
                             } else {
                                 dismiss()
@@ -170,8 +177,81 @@ struct SignUpView: View {
             } message: {
                 Text("Shared family PIN: \(appState.familyBootstrapPIN ?? "")\nKids use it once to start a session on the shared iPad.")
             }
+            .sheet(item: $pendingVerificationEmail) { addr in
+                EmailVerificationView(email: addr) {
+                    pendingVerificationEmail = nil
+                    dismiss()
+                }
+            }
         }
     }
+}
+
+/// Post-signup: confirm email before Parent Center (mirrors ChoreStar-style flow).
+struct EmailVerificationView: View {
+    let email: String
+    let onDone: () -> Void
+    @State private var note: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Spacer()
+                Text("✉️").font(.system(size: 48))
+                Text("Check your email")
+                    .font(KiddoTasksDesignTokens.Typography.displaySmall)
+                Text("We sent a confirmation link to")
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                Text(email)
+                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(KiddoTasksDesignTokens.Colors.surface))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("1. Open your inbox")
+                    Text("2. Find the message from Kiddotasks")
+                    Text("3. Tap the confirmation link")
+                    Text("4. Come back and sign in")
+                }
+                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let note {
+                    Text(note)
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.success)
+                }
+                Spacer()
+                SecondaryButton(title: "Resend confirmation email") {
+                    Task {
+                        // User is signed in from signup; resend via Auth.
+                        #if canImport(FirebaseAuth)
+                        if let user = Auth.auth().currentUser {
+                            try? await user.sendEmailVerification()
+                            note = "Confirmation email sent."
+                        }
+                        #endif
+                    }
+                }
+                PrimaryButton(title: "I confirmed — sign in") {
+                    #if canImport(FirebaseAuth)
+                    Task {
+                        try? await Auth.auth().currentUser?.reload()
+                    }
+                    #endif
+                    onDone()
+                }
+            }
+            .padding(24)
+            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .navigationTitle("Verify email")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+extension String: @retroactive Identifiable {
+    public var id: String { self }
 }
 
 struct SignInView: View {

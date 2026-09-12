@@ -123,9 +123,38 @@ struct TodayDashboardView: View {
 
     private var birthdayBanner: some View {
         let birthdays = BirthdayReminder.upcomingBirthdays(children: appState.familyChildren)
+        let weekBonuses = appState.familyChildren.compactMap { child -> WeekBonus.Status? in
+            let s = WeekBonus.status(
+                child: child,
+                completions: appState.store.completions,
+                tasks: appState.store.tasks,
+                settings: appState.store.family?.settings ?? .default
+            )
+            return s.isComplete ? s : nil
+        }
         return Group {
-            if !birthdays.isEmpty {
+            if !birthdays.isEmpty || !weekBonuses.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
+                    ForEach(weekBonuses, id: \.childId) { bonus in
+                        HStack(spacing: 12) {
+                            Text("🏆")
+                                .font(.system(size: 22))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(bonus.title) — \(bonus.childName)")
+                                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                                    .fontWeight(.semibold)
+                                Text("Completed missions every day this week")
+                                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(KiddoTasksDesignTokens.Colors.successLight)
+                        }
+                    }
                     ForEach(birthdays) { b in
                         HStack(spacing: 12) {
                             Text("🎂")

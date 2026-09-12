@@ -1,13 +1,24 @@
 "use client";
 
+import { useState } from "react";
 import { useFamilyStore, useEntitlements } from "@/lib/family-store";
-import { FREE_LIMITS } from "@/lib/types";
+import { FREE_LIMITS } from "@/lib/entitlements";
 import { ChildAvatar } from "@/lib/ui";
 import { PageSkeleton } from "@/components/skeleton";
+import { ALLOWANCE_MODES, type AllowanceMode } from "@/lib/entitlements";
 
 export default function FamilyPage() {
   const { family, children, loading } = useFamilyStore();
   const ent = useEntitlements();
+  const [mode, setMode] = useState<AllowanceMode>(
+    (family?.settings?.allowanceMode as AllowanceMode) || "STARS_ONLY"
+  );
+  const [flatAmount, setFlatAmount] = useState(
+    String(family?.settings?.flatDailyAmount ?? 1)
+  );
+  const [weekBonus, setWeekBonus] = useState(
+    family?.settings?.weekBonusTitle || "Full week!"
+  );
 
   if (loading && !family) {
     return <PageSkeleton rows={2} />;
@@ -95,9 +106,63 @@ export default function FamilyPage() {
       </div>
 
       <div className="card">
+        <h3 className="mb-2 font-bold">Allowance</h3>
+        <p className="mb-2 text-xs text-ink-secondary">
+          Stars stay in the app. These modes help you know what to pay out.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {ALLOWANCE_MODES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className={`rounded-full px-3 py-2 text-sm font-semibold ${
+                mode === m.id
+                  ? "bg-primary text-white"
+                  : "bg-surface text-ink-secondary"
+              }`}
+              onClick={() => setMode(m.id)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {mode === "FLAT_DAILY" && (
+          <label className="mt-3 block text-sm">
+            <span className="text-ink-secondary">Daily amount when something is done</span>
+            <input
+              type="number"
+              min={0}
+              className="field-input mt-1"
+              value={flatAmount}
+              onChange={(e) => setFlatAmount(e.target.value)}
+            />
+          </label>
+        )}
+        <p className="mt-2 text-xs text-ink-tertiary">
+          Settings save locally in this web build; full cloud write can be wired to the iOS store API next.
+        </p>
+      </div>
+
+      <div className="card">
+        <h3 className="mb-2 font-bold">Week bonus</h3>
+        <p className="text-xs text-ink-secondary">
+          Celebrate when a child has progress every day of the week.
+        </p>
+        <input
+          className="field-input mt-2"
+          placeholder="Full week!"
+          defaultValue={weekBonus}
+          onBlur={(e) => setWeekBonus(e.target.value || "Full week!")}
+        />
+      </div>
+
+      <div className="card">
         <h3 className="mb-2 font-bold">Plan</h3>
         <p className="capitalize">
           {ent.plan} · <span className="text-ink-secondary">{ent.status}</span>
+        </p>
+        <p className="mt-1 text-xs text-ink-tertiary">
+          Free: 1 kid · 20 chores · Premium ₱199/mo for co-parent join & unlimited.
         </p>
         <a href="/parent/billing" className="btn-secondary mt-3">
           Manage billing

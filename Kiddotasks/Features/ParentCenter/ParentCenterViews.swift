@@ -754,6 +754,41 @@ struct FamilyView: View {
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }
+                Section("Allowance & week bonus") {
+                    let mode = appState.currentFamily?.settings.allowanceMode ?? .starsOnly
+                    let daily = Int(appState.currentFamily?.settings.flatDailyAmount ?? 1)
+                    Picker("Allowance", selection: Binding(
+                        get: { mode },
+                        set: { newMode in
+                            try? appState.store.updateAllowanceMode(newMode, flatDailyAmount: Double(daily))
+                        }
+                    )) {
+                        Text("Stars only").tag(AllowanceMode.starsOnly)
+                        Text("Flat daily").tag(AllowanceMode.flatDaily)
+                        Text("Per chore").tag(AllowanceMode.perChore)
+                    }
+                    if mode == .flatDaily {
+                        Stepper("Daily rate: \(daily)", value: Binding(
+                            get: { daily },
+                            set: { v in
+                                try? appState.store.updateAllowanceMode(.flatDaily, flatDailyAmount: Double(v))
+                            }
+                        ), in: 1...50)
+                    }
+                    KiddoTextField(
+                        label: "Week bonus title",
+                        placeholder: "Full week!",
+                        text: Binding(
+                            get: { appState.currentFamily?.settings.weekBonusTitle ?? "Full week!" },
+                            set: { title in
+                                try? appState.store.updateWeekBonusTitle(title)
+                            }
+                        )
+                    )
+                    Text("Stars stay in-app. Allowance modes help you know what to pay in cash.")
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                }
                 Section("Notifications & fun") {
                     Toggle("Family notifications", isOn: Binding(
                         get: { appState.currentFamily?.settings.enableNotifications ?? true },

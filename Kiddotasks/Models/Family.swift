@@ -68,6 +68,14 @@ struct FamilySettings: Codable {
     var enableMiniGames: Bool = true
     /// Max minutes for basketball per session (0 = unlimited / default game length).
     var basketballMaxMinutes: Int = 0
+    /// How family tallies allowance-style rewards (in addition to stars).
+    var allowanceMode: AllowanceMode = .starsOnly
+    /// Currency units paid for a day with any approved completion (flatDaily).
+    var flatDailyAmount: Double = 1
+    /// Bonus message when a child completes every due chore for a full week.
+    var weekBonusTitle: String = "Full week!"
+    /// Plan for this family (free | plus). Stripe can upgrade this later.
+    var plan: String = "free"
 
     static let `default` = FamilySettings()
 
@@ -80,6 +88,10 @@ struct FamilySettings: Codable {
         case kidsStationPIN
         case enableMiniGames
         case basketballMaxMinutes
+        case allowanceMode
+        case flatDailyAmount
+        case weekBonusTitle
+        case plan
     }
 
     init(
@@ -90,7 +102,11 @@ struct FamilySettings: Codable {
         weekStartsOn: Int = 1,
         kidsStationPIN: String = "1234",
         enableMiniGames: Bool = true,
-        basketballMaxMinutes: Int = 0
+        basketballMaxMinutes: Int = 0,
+        allowanceMode: AllowanceMode = .starsOnly,
+        flatDailyAmount: Double = 1,
+        weekBonusTitle: String = "Full week!",
+        plan: String = "free"
     ) {
         self.pointDisplaySymbol = pointDisplaySymbol
         self.enableNotifications = enableNotifications
@@ -100,6 +116,10 @@ struct FamilySettings: Codable {
         self.kidsStationPIN = kidsStationPIN
         self.enableMiniGames = enableMiniGames
         self.basketballMaxMinutes = basketballMaxMinutes
+        self.allowanceMode = allowanceMode
+        self.flatDailyAmount = flatDailyAmount
+        self.weekBonusTitle = weekBonusTitle
+        self.plan = plan
     }
 
     init(from decoder: Decoder) throws {
@@ -112,5 +132,9 @@ struct FamilySettings: Codable {
         kidsStationPIN = try c.decodeIfPresent(String.self, forKey: .kidsStationPIN) ?? "1234"
         enableMiniGames = try c.decodeIfPresent(Bool.self, forKey: .enableMiniGames) ?? true
         basketballMaxMinutes = try c.decodeIfPresent(Int.self, forKey: .basketballMaxMinutes) ?? 0
+        allowanceMode = try c.decodeIfPresent(AllowanceMode.self, forKey: .allowanceMode) ?? .starsOnly
+        flatDailyAmount = try c.decodeIfPresent(Double.self, forKey: .flatDailyAmount) ?? 1
+        weekBonusTitle = try c.decodeIfPresent(String.self, forKey: .weekBonusTitle) ?? "Full week!"
+        plan = try c.decodeIfPresent(String.self, forKey: .plan) ?? "free"
     }
 }
