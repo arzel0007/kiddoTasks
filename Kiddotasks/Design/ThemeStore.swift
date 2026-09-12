@@ -46,11 +46,11 @@ final class ThemeStore {
 // MARK: - Semantic surfaces
 
 extension KiddoTasksDesignTokens.Colors {
-    /// Dynamic card / elevated surface. Flat fill — no gradients.
+    /// Dynamic card / elevated surface. Cool steel-blue tinted, flat fill.
     static var surfaceCard: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1)
+                ? UIColor(red: 0.11, green: 0.15, blue: 0.20, alpha: 1)
                 : UIColor.white
         })
     }
@@ -59,8 +59,8 @@ extension KiddoTasksDesignTokens.Colors {
     static var surfaceElevated: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.16, green: 0.16, blue: 0.18, alpha: 1)
-                : UIColor(red: 0.976, green: 0.976, blue: 0.980, alpha: 1)
+                ? UIColor(red: 0.15, green: 0.19, blue: 0.24, alpha: 1)
+                : UIColor(red: 0.941, green: 0.953, blue: 0.965, alpha: 1) // #F0F3F6
         })
     }
 
@@ -68,8 +68,8 @@ extension KiddoTasksDesignTokens.Colors {
     static var borderSubtle: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(white: 1, alpha: 0.10)
-                : UIColor(red: 0.933, green: 0.933, blue: 0.937, alpha: 1)
+                ? UIColor(red: 0.58, green: 0.69, blue: 0.78, alpha: 0.16)
+                : UIColor(red: 0.851, green: 0.882, blue: 0.910, alpha: 1) // #D9E1E8
         })
     }
 

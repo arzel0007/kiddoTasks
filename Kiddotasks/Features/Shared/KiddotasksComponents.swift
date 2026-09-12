@@ -370,7 +370,7 @@ struct PointsBadge: View {
         .foregroundStyle(.white)
         .padding(.horizontal, compact ? 8 : 12)
         .padding(.vertical, compact ? 4 : 6)
-        .background(Capsule().fill(Color(hex: "#F59E0B")))
+        .background(Capsule().fill(KiddoTasksDesignTokens.Colors.reward))
     }
 }
 
@@ -490,35 +490,48 @@ struct SectionCard<Content: View>: View {
     }
 }
 
-/// A compact metric tile for the Today dashboard.
+/// Metric tile — white surface + semantic icon accent (Calm Adventure).
 struct StatTile: View {
     let value: Int
     let label: String
     let icon: String
     let color: Color
+    var tinted: Bool = false
     var shadowColor: Color? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white.opacity(0.9))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(color)
+                    .frame(width: 32, height: 32)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(color.opacity(0.12))
+                    }
+                Spacer(minLength: 0)
+            }
             Text("\(value)")
-                .font(KiddoTasksDesignTokens.Typography.displaySmall)
-                .foregroundStyle(.white)
+                .font(.system(size: 26, weight: .bold, design: .default))
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
-                .font(KiddoTasksDesignTokens.Typography.taskLabel)
-                .foregroundStyle(.white.opacity(0.92))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .lineLimit(2, reservesSpace: true)
         }
-        .padding(KiddoTasksDesignTokens.Spacing.small)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.large, style: .continuous)
-                .fill(color)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(tinted ? color.opacity(0.08) : KiddoTasksDesignTokens.Colors.surfaceCard)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(KiddoTasksDesignTokens.Colors.border, lineWidth: 1)
         }
     }
 }
@@ -556,10 +569,10 @@ struct MissionCard: View {
                     .font(KiddoTasksDesignTokens.Typography.titleSmall)
                     .monospacedDigit()
             }
-            .foregroundStyle(Color(hex: "#B45309"))
+            .foregroundStyle(Color(hex: "#365F8C"))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Capsule().fill(Color(hex: "#FEF3C7")))
+            .background(Capsule().fill(Color(hex: "#E8EEF4")))
         }
         .padding(KiddoTasksDesignTokens.Spacing.medium)
         .background(KiddoTasksDesignTokens.Colors.surfaceCard)
@@ -647,10 +660,10 @@ struct RewardShopCard: View {
                         .monospacedDigit()
                 }
                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                .foregroundStyle(Color(hex: "#B45309"))
+                .foregroundStyle(Color(hex: "#365F8C"))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(Color(hex: "#FEF3C7")))
+                .background(Capsule().fill(Color(hex: "#E8EEF4")))
                 Spacer()
                 if reward.canAfford(with: points) {
                     Text("Get")

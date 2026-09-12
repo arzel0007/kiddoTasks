@@ -14,30 +14,38 @@ enum KiddoIconCatalog {
         Category(id: "home", title: "Home", symbols: [
             "bed.double.fill", "sparkles", "trash.fill", "washer.fill",
             "shower.fill", "sofa.fill", "house.fill", "window.awning.fill",
-            "lightbulb.fill", "fanblades.fill"
+            "lightbulb.fill", "fanblades.fill", "bubbles.and.sparkles.fill",
+            "refrigerator.fill", "oven.fill", "sink.fill", "toilet.fill"
         ]),
         Category(id: "kitchen", title: "Kitchen", symbols: [
             "fork.knife", "cup.and.saucer.fill", "takeoutbag.and.cup.and.straw.fill",
-            "carrot.fill", "birthday.cake.fill", "refrigerator.fill"
+            "carrot.fill", "birthday.cake.fill", "refrigerator.fill", "wineglass.fill",
+            "mug.fill", "frying.pan.fill", "carrot"
         ]),
         Category(id: "school", title: "School", symbols: [
             "book.fill", "pencil.and.outline", "backpack.fill", "graduationcap.fill",
-            "ruler.fill", "paperclip", "doc.text.fill", "calculator.fill"
+            "ruler.fill", "paperclip", "doc.text.fill", "calculator.fill",
+            "pencil.tip", "highlighter", "paperplane.fill", "globe"
         ]),
         Category(id: "health", title: "Health", symbols: [
             "mouth.fill", "figure.run", "heart.fill", "cross.case.fill",
-            "bed.double.circle.fill", "leaf.fill", "drop.fill"
+            "bed.double.circle.fill", "leaf.fill", "drop.fill", "bandage.fill",
+            "stethoscope", "eye.fill", "hand.raised.fill", "figure.walk"
         ]),
         Category(id: "play", title: "Play", symbols: [
             "gamecontroller.fill", "music.note", "sportscourt.fill", "figure.play",
-            "paintpalette.fill", "theatermasks.fill", "party.popper.fill", "dice.fill"
+            "paintpalette.fill", "theatermasks.fill", "party.popper.fill", "dice.fill",
+            "guitars.fill", "camera.fill", "puzzlepiece.fill", "basketball.fill"
         ]),
         Category(id: "pets", title: "Pets", symbols: [
-            "pawprint.fill", "tortoise.fill", "fish.fill", "bird.fill"
+            "pawprint.fill", "tortoise.fill", "fish.fill", "bird.fill",
+            "cat.fill", "dog.fill", "ladybug.fill", "ant.fill"
         ]),
         Category(id: "chores", title: "Chores", symbols: [
             "cart.fill", "hammer.fill", "wrench.and.screwdriver.fill",
-            "shippingbox.fill", "leaf.arrow.triangle.circlepath", "sparkles"
+            "shippingbox.fill", "leaf.arrow.triangle.circlepath", "sparkles",
+            "broom.fill", "paintbrush.fill", "folder.fill", "archivebox.fill",
+            "car.fill", "key.fill"
         ]),
     ]
 
@@ -81,20 +89,27 @@ enum KiddoIconCatalog {
         let lower = name.lowercased()
         let mapping: [(keywords: [String], icon: String)] = [
             (["bed", "sleep", "tidy room", "make bed"], "bed.double.fill"),
-            (["dish", "kitchen", "plate", "food", "cook", "meal", "table"], "fork.knife"),
+            (["dish", "kitchen", "plate", "food", "cook", "meal", "table", "sink"], "fork.knife"),
             (["trash", "garbage", "bin"], "trash.fill"),
-            (["read", "book", "study", "homework", "school"], "book.fill"),
-            (["run", "exercise", "sport", "walk", "bike"], "figure.run"),
-            (["teeth", "brush", "shower", "bath", "wash"], "mouth.fill"),
-            (["laundry", "clothes", "fold", "dress", "wash"], "washer.fill"),
-            (["pet", "dog", "cat", "feed"], "pawprint.fill"),
-            (["garden", "plant", "water", "leaf"], "leaf.fill"),
-            (["vacuum", "sweep", "mop", "dust", "clean"], "sparkles"),
-            (["shop", "grocery", "buy"], "cart.fill"),
-            (["write", "draw", "art", "craft"], "pencil.and.outline"),
-            (["music", "piano", "practice"], "music.note"),
-            (["fix", "repair", "tool"], "hammer.fill"),
-            (["love", "help", "care"], "heart.fill"),
+            (["read", "book", "study", "homework", "school", "homework"], "book.fill"),
+            (["run", "exercise", "sport", "walk", "bike", "gym"], "figure.run"),
+            (["teeth", "brush", "shower", "bath", "wash", "hair"], "mouth.fill"),
+            (["laundry", "clothes", "fold", "dress", "washer"], "washer.fill"),
+            (["pet", "dog", "cat", "feed", "puppy", "kitten"], "pawprint.fill"),
+            (["garden", "plant", "water", "leaf", "flower", "yard"], "leaf.fill"),
+            (["vacuum", "sweep", "mop", "dust", "clean", "tidy", "broom"], "sparkles"),
+            (["shop", "grocery", "buy", "store", "cart"], "cart.fill"),
+            (["write", "draw", "art", "craft", "paint"], "pencil.and.outline"),
+            (["music", "piano", "practice", "guitar", "sing"], "music.note"),
+            (["fix", "repair", "tool", "hammer", "build"], "hammer.fill"),
+            (["love", "help", "care", "kind"], "heart.fill"),
+            (["lunch", "breakfast", "dinner", "cook", "bake"], "frying.pan.fill"),
+            (["car", "drive", "wash car"], "car.fill"),
+            (["email", "mail", "letter"], "paperplane.fill"),
+            (["screen", "phone", "ipad", "device"], "iphone"),
+            (["plan", "calendar", "schedule"], "calendar"),
+            (["folder", "desk", "organize"], "folder.fill"),
+            (["key", "lock", "door"], "key.fill"),
         ]
         for (keywords, icon) in mapping {
             for keyword in keywords where lower.contains(keyword) {

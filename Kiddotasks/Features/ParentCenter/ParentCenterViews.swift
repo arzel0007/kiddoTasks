@@ -1189,17 +1189,23 @@ struct ChildEditorView: View {
 struct ActivityView: View {
     @Environment(AppState.self) private var appState
 
+    private func childName(_ id: String) -> String {
+        appState.child(id: id)?.name ?? "Child"
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                let transactions = appState.store.transactions
+                let transactions = appState.store.transactions.sorted {
+                    $0.createdAt > $1.createdAt
+                }
                 if transactions.isEmpty {
                     EmptyListHint(
                         emoji: "📖",
                         title: "No activity yet. Completions and rewards will appear here."
                     )
                 }
-                ForEach(transactions.reversed()) { tx in
+                ForEach(transactions) { tx in
                     HStack(spacing: 12) {
                         Image(systemName: tx.type.icon)
                             .font(.system(size: 15, weight: .bold))
@@ -1213,11 +1219,15 @@ struct ActivityView: View {
                                 )
                             }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(tx.description)
+                            Text(childName(tx.childId))
                                 .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                            Text(tx.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .fontWeight(.semibold)
+                            Text(tx.description)
                                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            Text("\(tx.type.displayName) · \(tx.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                                .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                         }
                         Spacer()
                         Text(tx.amount > 0 ? "+\(tx.amount)" : "\(tx.amount)")

@@ -5,32 +5,40 @@ struct KiddoTasksDesignTokens {
     // MARK: - Colors
     
     struct Colors {
-        // Brand colors
-        static let primary = Color(red: 0.388, green: 0.408, blue: 0.949)           // #6366F1 Indigo
-        static let accent = Color(red: 0.922, green: 0.286, blue: 0.604)             // #EC4899 Pink
-        static let success = Color(red: 0.063, green: 0.725, blue: 0.510)            // #10B981 Green
-        static let warning = Color(red: 0.961, green: 0.620, blue: 0.059)            // #F59E0B Amber
-        static let error = Color(red: 0.957, green: 0.267, blue: 0.267)              // #EF4444 Red
-        
-        // Kids-friendly backgrounds
-        static let kidsBackground1 = Color(red: 0.996, green: 0.949, blue: 0.781)   // #FEF3C7 Yellow
-        static let kidsBackground2 = Color(red: 0.878, green: 0.949, blue: 0.996)   // #E0F2FE Blue
-        static let kidsBackground3 = Color(red: 0.862, green: 0.978, blue: 0.945)   // #DCF9F1 Teal
-        static let kidsBackground4 = Color(red: 0.993, green: 0.906, blue: 0.953)   // #FCE7F3 Pink
-        
-        // Neutral colors
-        static let text = Color(red: 0.121, green: 0.165, blue: 0.204)               // #1F2937 Gray-800
-        static let textSecondary = Color(red: 0.420, green: 0.451, blue: 0.502)     // #6B7280 Gray-500
-        static let textTertiary = Color(red: 0.690, green: 0.706, blue: 0.718)      // #B0B4BE Gray-400
-        static let background = Color(red: 1.0, green: 1.0, blue: 1.0)               // #FFFFFF White
-        static let surface = Color(red: 0.976, green: 0.976, blue: 0.980)            // #F9FAFB Gray-50
-        static let border = Color(red: 0.933, green: 0.933, blue: 0.937)             // #EDEDED Gray-100
-        
-        // Status colors
-        static let taskPending = Color(red: 0.961, green: 0.620, blue: 0.059)        // Amber
-        static let taskCompleted = Color(red: 0.063, green: 0.725, blue: 0.510)      // Green
-        static let taskApproved = Color(red: 0.063, green: 0.725, blue: 0.510)       // Green
-        static let taskRejected = Color(red: 0.957, green: 0.267, blue: 0.267)       // Red
+        // Brand — CALM ADVENTURE
+        static let primary = Color(hex: "#3978A8")
+        static let primaryDeep = Color(hex: "#285B82")
+        static let primaryLight = Color(hex: "#E7F1F8")
+        static let primaryMuted = Color(hex: "#6F9FBD")
+        static let accent = Color(hex: "#6F9FBD")
+        static let success = Color(hex: "#3F8B70")
+        static let successLight = Color(hex: "#E8F4EF")
+        static let warning = Color(hex: "#D59A3A")   // reward
+        static let reward = Color(hex: "#D59A3A")
+        static let rewardLight = Color(hex: "#FBF3E3")
+        static let error = Color(hex: "#D97868")
+        static let attention = Color(hex: "#D97868")
+        static let attentionLight = Color(hex: "#FBECEA")
+
+        // Kids backgrounds (cool, restrained)
+        static let kidsBackground1 = Color(hex: "#F6F8FA")
+        static let kidsBackground2 = Color(hex: "#E7F1F8")
+        static let kidsBackground3 = Color(hex: "#E8F4EF")
+        static let kidsBackground4 = Color(hex: "#F0F3F6")
+
+        // Neutrals
+        static let text = Color(hex: "#24364B")
+        static let textSecondary = Color(hex: "#647487")
+        static let textTertiary = Color(hex: "#8B99A8")
+        static let background = Color(hex: "#FFFFFF")
+        static let surface = Color(hex: "#F0F3F6")
+        static let border = Color(hex: "#D9E1E8")
+
+        // Status
+        static let taskPending = Color(hex: "#D59A3A")
+        static let taskCompleted = Color(hex: "#3F8B70")
+        static let taskApproved = Color(hex: "#3F8B70")
+        static let taskRejected = Color(hex: "#D97868")
     }
     
     // MARK: - Typography
@@ -83,9 +91,10 @@ struct KiddoTasksDesignTokens {
     // MARK: - Corner Radius
     
     struct CornerRadius {
-        static let small: CGFloat = 8
-        static let medium: CGFloat = 12
-        static let large: CGFloat = 16
+        static let xs: CGFloat = 6
+        static let small: CGFloat = 10
+        static let medium: CGFloat = 14
+        static let large: CGFloat = 18
         static let extraLarge: CGFloat = 24
         static let full: CGFloat = 999
     }
@@ -201,17 +210,32 @@ extension KiddoTasksDesignTokens {
     /// Flat page background colors that adapt to light/dark mode. Kids screens
     /// stay vivid; the parent side stays calm.
     struct PageBackgrounds {
-        /// Calm cool base for player select / badges (not the old loud yellow).
-        /// Child accent washes layer on top for identity.
+        /// Cool steel-blue mist for player select / badges.
         static let kidsPlayground = Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.08, green: 0.09, blue: 0.12, alpha: 1)
-                : UIColor(red: 0.94, green: 0.955, blue: 0.975, alpha: 1)
+                ? UIColor(red: 0.07, green: 0.09, blue: 0.12, alpha: 1)
+                : UIColor(red: 0.93, green: 0.95, blue: 0.97, alpha: 1)
         })
-        static let kidsMissionSky = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.05, green: 0.10, blue: 0.20, alpha: 1) : UIColor(red: 0.878, green: 0.949, blue: 0.996, alpha: 1) })
-        static let kidsRewardPop = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.20, green: 0.08, blue: 0.15, alpha: 1) : UIColor(red: 0.993, green: 0.906, blue: 0.953, alpha: 1) })
-        static let parentPage = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1) : UIColor(red: 0.976, green: 0.976, blue: 0.980, alpha: 1) })
-        static let welcome = Color(UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 1) : UIColor.white })
+        static let kidsMissionSky = Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.06, green: 0.09, blue: 0.13, alpha: 1)
+                : UIColor(red: 0.88, green: 0.92, blue: 0.95, alpha: 1)
+        })
+        static let kidsRewardPop = Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.08, green: 0.10, blue: 0.13, alpha: 1)
+                : UIColor(red: 0.90, green: 0.93, blue: 0.95, alpha: 1)
+        })
+        static let parentPage = Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.06, green: 0.08, blue: 0.11, alpha: 1)
+                : UIColor(red: 0.965, green: 0.973, blue: 0.980, alpha: 1) // #F6F8FA
+        })
+        static let welcome = Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.06, green: 0.08, blue: 0.11, alpha: 1)
+                : UIColor.white
+        })
     }
 }
 
@@ -219,19 +243,19 @@ extension KiddoTasksDesignTokens {
 
 extension KiddoTasksDesignTokens {
 
-    /// Vivid, playful solid colors for the Kids Station. No gradients.
+    /// Restrained kids accents in the steel-blue family (no loud purple/yellow).
     struct KidsColors {
-        static let sunshine = Color(hex: "#FBBF24")
-        static let bubblegum = Color(hex: "#F472B6")
-        static let ocean = Color(hex: "#38BDF8")
-        static let lime = Color(hex: "#A3E635")
-        static let grape = Color(hex: "#C084FC")
-        static let coral = Color(hex: "#FB923C")
-        static let mint = Color(hex: "#34D399")
-        static let strawberry = Color(hex: "#FB7185")
-        static let sky = Color(hex: "#7DD3FC")
-        static let lavender = Color(hex: "#DDD6FE")
-        static let peach = Color(hex: "#FDBA74")
+        static let sunshine = Color(hex: "#D59A3A")
+        static let bubblegum = Color(hex: "#6F9FBD")
+        static let ocean = Color(hex: "#3978A8")
+        static let lime = Color(hex: "#3F8B70")
+        static let grape = Color(hex: "#6B8A9E")
+        static let coral = Color(hex: "#B87A5A")
+        static let mint = Color(hex: "#3D8B6E")
+        static let strawberry = Color(hex: "#C25A5A")
+        static let sky = Color(hex: "#6A9BC3")
+        static let lavender = Color(hex: "#8FA8BC")
+        static let peach = Color(hex: "#C4A574")
     }
 
     /// Spring animations tuned for playful micro-interactions.
@@ -260,17 +284,17 @@ extension TaskCategory {
     var palette: KiddoThemePalette {
         switch self {
         case .household:
-            return KiddoThemePalette(accent: Color(hex: "#6366F1"))
+            return KiddoThemePalette(accent: Color(hex: "#3978A8"))
         case .learning:
-            return KiddoThemePalette(accent: Color(hex: "#3B82F6"))
+            return KiddoThemePalette(accent: Color(hex: "#6F9FBD"))
         case .health:
-            return KiddoThemePalette(accent: Color(hex: "#10B981"))
+            return KiddoThemePalette(accent: Color(hex: "#3F8B70"))
         case .personal:
-            return KiddoThemePalette(accent: Color(hex: "#F97316"))
+            return KiddoThemePalette(accent: Color(hex: "#D59A3A"))
         case .pets:
-            return KiddoThemePalette(accent: Color(hex: "#A855F7"))
+            return KiddoThemePalette(accent: Color(hex: "#8B99A8"))
         case .other:
-            return KiddoThemePalette(accent: Color(hex: "#06B6D4"))
+            return KiddoThemePalette(accent: Color(hex: "#647487"))
         }
     }
 }

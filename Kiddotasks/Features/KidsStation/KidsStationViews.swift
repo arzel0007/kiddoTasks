@@ -275,6 +275,16 @@ struct MissionsView: View {
             }
             .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let child, BirthdayReminder.upcomingBirthdays(children: [child]).first?.isToday == true {
+                    Text("🎂 Happy birthday, \(child.name)!")
+                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(KiddoTasksDesignTokens.Colors.rewardLight)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Switch") {
@@ -351,10 +361,10 @@ struct TaskDetailView: View {
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 Text("Earn \(task.pointValue) ⭐")
                     .font(KiddoTasksDesignTokens.Typography.titleMedium)
-                    .foregroundStyle(Color(hex: "#B45309"))
+                    .foregroundStyle(Color(hex: "#365F8C"))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(Capsule().fill(Color(hex: "#FEF3C7")))
+                    .background(Capsule().fill(Color(hex: "#E8EEF4")))
 
                 if let existing {
                     Text("Latest submission: \(existing.status.displayName)")
@@ -450,7 +460,7 @@ struct CelebrationView: View {
                 .multilineTextAlignment(.center)
             Text("+\(task.pointValue) ⭐")
                 .font(KiddoTasksDesignTokens.Typography.pointsDisplay)
-                .foregroundStyle(Color(hex: "#B45309"))
+                .foregroundStyle(Color(hex: "#365F8C"))
             Spacer()
             PrimaryButton(title: "Next mission", color: KiddoTasksDesignTokens.Colors.success) { onDone() }
         }

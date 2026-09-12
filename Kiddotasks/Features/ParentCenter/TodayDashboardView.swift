@@ -28,6 +28,7 @@ struct TodayDashboardView: View {
             ScrollView {
                 VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                     header
+                    birthdayBanner
                     statTiles
                     WeeklyStarsCard(series: weeklySeries)
                     childProgress
@@ -118,6 +119,38 @@ struct TodayDashboardView: View {
         weeklySeries = appState.store.weeklyPointsSeries()
     }
 
+    // MARK: Birthday banner
+
+    private var birthdayBanner: some View {
+        let birthdays = BirthdayReminder.upcomingBirthdays(children: appState.familyChildren)
+        return Group {
+            if !birthdays.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(birthdays) { b in
+                        HStack(spacing: 12) {
+                            Text("🎂")
+                                .font(.system(size: 22))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(b.isToday ? "Happy birthday, \(b.name)!" : BirthdayReminder.message(for: b))
+                                    .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                                    .fontWeight(.semibold)
+                                Text(b.isToday ? "Make their day special" : "Coming up soon")
+                                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .background {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(KiddoTasksDesignTokens.Colors.rewardLight)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Header
 
     private var header: some View {
@@ -150,25 +183,27 @@ struct TodayDashboardView: View {
                 value: totals.pendingApprovals,
                 label: "Missions to review",
                 icon: "checkmark.seal.fill",
-                color: Color(hex: "#F97316")
+                color: KiddoTasksDesignTokens.Colors.primary
             )
             StatTile(
                 value: totals.pendingRewardRequests,
                 label: "Reward requests",
                 icon: "gift.fill",
-                color: Color(hex: "#EC4899")
+                color: KiddoTasksDesignTokens.Colors.reward,
+                tinted: true
             )
             StatTile(
                 value: totals.starsEarned,
                 label: "Stars earned today",
                 icon: "star.fill",
-                color: Color(hex: "#F59E0B")
+                color: KiddoTasksDesignTokens.Colors.primaryMuted
             )
             StatTile(
                 value: totals.missionsApproved,
                 label: "Missions done today",
-                icon: "party.popper.fill",
-                color: KiddoTasksDesignTokens.Colors.success
+                icon: "checkmark.circle.fill",
+                color: KiddoTasksDesignTokens.Colors.success,
+                tinted: true
             )
         }
     }
@@ -205,7 +240,7 @@ struct TodayDashboardView: View {
                 ? "Waiting for approval (\(totals.pendingApprovals))"
                 : "Waiting for approval",
             icon: "checkmark.seal.fill",
-            tint: Color(hex: "#F97316")
+            tint: KiddoTasksDesignTokens.Colors.primary
         ) {
             let pending = appState.store.pendingCompletions()
             if pending.isEmpty {
@@ -267,8 +302,8 @@ struct WeeklyStarsCard: View {
     let series: [LocalFamilyDataStore.DailyPoints]
 
     private static let palette: [Color] = [
-        Color(hex: "#6366F1"), Color(hex: "#EC4899"), Color(hex: "#14B8A6"),
-        Color(hex: "#F97316"), Color(hex: "#A855F7"), Color(hex: "#06B6D4")
+        Color(hex: "#3978A8"), Color(hex: "#6F9FBD"), Color(hex: "#3F8B70"),
+        Color(hex: "#D59A3A"), Color(hex: "#8B99A8"), Color(hex: "#285B82")
     ]
 
     private var names: [String] {

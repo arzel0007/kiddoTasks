@@ -34,7 +34,7 @@ struct BasketballPlayer: Equatable {
         self.init(childId: nil, name: name, accentHex: accentHex)
     }
 
-    static let guest = BasketballPlayer(childId: nil, name: "Player", accentHex: "#6366F1")
+    static let guest = BasketballPlayer(childId: nil, name: "Player", accentHex: "#3978A8")
 }
 
 struct BasketballStats: Equatable {
@@ -63,7 +63,7 @@ final class BasketballGameEngine {
 
     // Players
     var player1 = BasketballPlayer.guest
-    var player2 = BasketballPlayer(name: "Player 2", accentHex: "#EC4899")
+    var player2 = BasketballPlayer(name: "Player 2", accentHex: "#6A9BC3")
     var activePlayerIndex = 0
 
     // Stats

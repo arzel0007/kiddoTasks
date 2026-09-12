@@ -25,7 +25,7 @@ struct ChildPlayerTheme {
     }
 
     static func theme(for child: Child?, colorScheme: ColorScheme) -> ChildPlayerTheme {
-        ChildPlayerTheme(colorHex: child?.avatar.colorHex ?? "#FBBF24", colorScheme: colorScheme)
+        ChildPlayerTheme(colorHex: child?.avatar.colorHex ?? "#3978A8", colorScheme: colorScheme)
     }
 }
 

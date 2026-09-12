@@ -100,7 +100,7 @@ struct KiddoTextArea: View {
     }
 }
 
-// MARK: - Points stepper
+// MARK: - Points stepper + free-form input
 
 struct KiddoPointsStepper: View {
     let label: String
@@ -109,37 +109,72 @@ struct KiddoPointsStepper: View {
     var step: Int = 1
     var unit: String = "★"
 
+    @State private var draft: String = ""
+    @FocusState private var isFieldFocused: Bool
+
     var body: some View {
         KiddoFieldContainer(label: label) {
-            HStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+            HStack(spacing: KiddoTasksDesignTokens.Spacing.small) {
                 stepButton(system: "minus") {
-                    if value > range.lowerBound { value = max(range.lowerBound, value - step) }
+                    commitDraft()
+                    value = max(range.lowerBound, value - step)
+                    draft = "\(value)"
                     Haptic.light()
                 }
                 .disabled(value <= range.lowerBound)
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
 
-                HStack(spacing: 6) {
-                    Text("\(value)")
-                        .font(KiddoTasksDesignTokens.Typography.displaySmall)
-                        .monospacedDigit()
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                    Text(unit)
-                        .font(KiddoTasksDesignTokens.Typography.titleMedium)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.warning)
-                }
+                TextField("0", text: $draft)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.center)
+                    .font(KiddoTasksDesignTokens.Typography.displaySmall)
+                    .monospacedDigit()
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                    .focused($isFieldFocused)
+                    .frame(minWidth: 64)
+                    .onChange(of: draft) { _, newValue in
+                        let digits = String(newValue.filter(\.isNumber).prefix(4))
+                        if digits != newValue { draft = digits }
+                    }
+                    .onSubmit(applyTypedValue)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") { applyTypedValue() }
+                        }
+                    }
 
-                Spacer(minLength: 8)
+                Text(unit)
+                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.warning)
+
+                Spacer(minLength: 4)
 
                 stepButton(system: "plus") {
-                    if value < range.upperBound { value = min(range.upperBound, value + step) }
+                    commitDraft()
+                    value = min(range.upperBound, value + step)
+                    draft = "\(value)"
                     Haptic.light()
                 }
                 .disabled(value >= range.upperBound)
             }
             .padding(.vertical, 2)
         }
+        .onAppear { draft = "\(value)" }
+    }
+
+    private func commitDraft() {
+        if let typed = Int(draft) {
+            value = min(max(typed, range.lowerBound), range.upperBound)
+        }
+    }
+
+    private func applyTypedValue() {
+        commitDraft()
+        draft = "\(value)"
+        isFieldFocused = false
+        Haptic.light()
     }
 
     private func stepButton(system: String, action: @escaping () -> Void) -> some View {

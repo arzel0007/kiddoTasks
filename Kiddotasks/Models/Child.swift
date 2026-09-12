@@ -75,19 +75,19 @@ final class Child: Identifiable, Codable {
 /// Child avatar representation
 struct ChildAvatar: Codable, Equatable {
     var emoji: String = "👧"
-    var colorHex: String = "#EC4899"  // Pink
-    
+    var colorHex: String = "#3978A8"  // Primary
+
     static let `default` = ChildAvatar()
-    
+
     static let presets: [ChildAvatar] = [
-        ChildAvatar(emoji: "👧", colorHex: "#EC4899"),  // Pink
-        ChildAvatar(emoji: "👦", colorHex: "#3B82F6"),  // Blue
-        ChildAvatar(emoji: "🦁", colorHex: "#F59E0B"),  // Amber
-        ChildAvatar(emoji: "🐢", colorHex: "#10B981"),  // Green
-        ChildAvatar(emoji: "🦄", colorHex: "#A855F7"),  // Purple
-        ChildAvatar(emoji: "🦋", colorHex: "#06B6D4"),  // Cyan
-        ChildAvatar(emoji: "🐸", colorHex: "#14B8A6"),  // Teal
-        ChildAvatar(emoji: "🦊", colorHex: "#EF4444"),  // Red
+        ChildAvatar(emoji: "👧", colorHex: "#3978A8"),  // Primary
+        ChildAvatar(emoji: "👦", colorHex: "#6F9FBD"),  // Muted
+        ChildAvatar(emoji: "🦁", colorHex: "#D59A3A"),  // Reward gold
+        ChildAvatar(emoji: "🐢", colorHex: "#3F8B70"),  // Success
+        ChildAvatar(emoji: "🦄", colorHex: "#285B82"),  // Deep
+        ChildAvatar(emoji: "🦋", colorHex: "#647487"),  // Secondary ink
+        ChildAvatar(emoji: "🐸", colorHex: "#3F8B70"),  // Success
+        ChildAvatar(emoji: "🦊", colorHex: "#D97868"),  // Attention
     ]
 }
 
