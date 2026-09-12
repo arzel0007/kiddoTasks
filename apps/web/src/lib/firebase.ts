@@ -5,42 +5,19 @@ import { getStorage, FirebaseStorage } from "firebase/storage";
 import { getFunctions, Functions } from "firebase/functions";
 
 /**
- * Defaults from the iOS GoogleService-Info.plist (same Firebase project).
- * NEXT_PUBLIC_* in .env.local overrides these when set.
- * Firebase web API keys are public identifiers — protection is Auth + rules.
+ * Config comes only from NEXT_PUBLIC_FIREBASE_* env (apps/web/.env.local).
+ * Never hardcode API keys in source.
+ *
+ * Copy .env.example → .env.local and fill from:
+ * Firebase Console → Project settings → Your apps → Web → SDK setup
  */
-const FALLBACK_CONFIG = {
-  apiKey: "AIzaSyCqcktIZBBeNy50hWvGvPNRapvnsI8w_KI",
-  authDomain: "kiddotasks-app.firebaseapp.com",
-  projectId: "kiddotasks-app",
-  storageBucket: "kiddotasks-app.firebasestorage.app",
-  messagingSenderId: "521956076622",
-  // Prefer a Web app id from the console when available; iOS id still works
-  // for Auth/Firestore on this project in practice.
-  appId: "1:521956076622:ios:3b8724f467d7bb773f671f",
-};
-
-function resolve(
-  key: keyof typeof FALLBACK_CONFIG,
-  envValue: string | undefined
-): string {
-  const v = envValue?.trim();
-  return v && v.length > 0 ? v : FALLBACK_CONFIG[key];
-}
-
 const firebaseConfig = {
-  apiKey: resolve("apiKey", process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
-  authDomain: resolve("authDomain", process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
-  projectId: resolve("projectId", process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
-  storageBucket: resolve(
-    "storageBucket",
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-  ),
-  messagingSenderId: resolve(
-    "messagingSenderId",
-    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-  ),
-  appId: resolve("appId", process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 export const isFirebaseConfigured = Boolean(
@@ -55,7 +32,6 @@ function ensureApp(): FirebaseApp | null {
   if (typeof window === "undefined") return null;
   if (app) return app;
   if (initTried) {
-    // Retry once after a prior failure (HMR / cold start).
     initTried = false;
   }
   initTried = true;
@@ -77,7 +53,7 @@ export function firebaseApp(): FirebaseApp {
   const instance = ensureApp();
   if (!instance) {
     throw new Error(
-      "Firebase is not configured. Check apps/web/src/lib/firebase.ts FALLBACK_CONFIG."
+      "Firebase is not configured. Copy apps/web/.env.example to .env.local and set NEXT_PUBLIC_FIREBASE_* keys, then restart `npm run dev`."
     );
   }
   return instance;
@@ -96,6 +72,5 @@ export function firebaseStorage(): FirebaseStorage {
 }
 
 export function firebaseFunctions(): Functions {
-  // Callables are deployed us-central1 on this project.
   return getFunctions(firebaseApp(), "us-central1");
 }

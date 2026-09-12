@@ -196,12 +196,21 @@ struct KidsStationView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
     @State private var tabContentID = 0
+
+    init() {
+        // Default to Games when arriving without a child profile.
+        _selectedTab = State(initialValue: 3)
+    }
 
     private var child: Child? {
         guard let selected = appState.currentChildProfile else { return nil }
         return appState.child(id: selected.id)
+    }
+
+    private var miniGamesEnabled: Bool {
+        appState.currentFamily?.settings.enableMiniGames ?? true
     }
 
     var body: some View {
@@ -217,7 +226,7 @@ struct KidsStationView: View {
                     .tabItem { Label("Badges", systemImage: "medal.fill") }
                     .tag(2)
             }
-            if appState.currentFamily?.settings.enableMiniGames ?? true {
+            if miniGamesEnabled {
                 GamesHubView()
                     .tabItem { Label("Games", systemImage: "gamecontroller.fill") }
                     .tag(3)
@@ -225,9 +234,17 @@ struct KidsStationView: View {
         }
         .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary)
         .onAppear {
-            if appState.gamesTabRequested {
+            // Prefer Games when opened without a child / via "Play games together".
+            if child == nil {
                 selectedTab = 3
-                appState.gamesTabRequested = false
+            } else if appState.gamesTabRequested {
+                selectedTab = 3
+            }
+            appState.gamesTabRequested = false
+        }
+        .onChange(of: child?.id) { _, _ in
+            if child != nil && selectedTab == 3 {
+                selectedTab = 0
             }
         }
         .onChange(of: selectedTab) { _, _ in

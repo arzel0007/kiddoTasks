@@ -16,7 +16,7 @@ struct WelcomeView: View {
 
             Text("KiddoTasks")
                 .font(KiddoTasksDesignTokens.Typography.displayLarge)
-            Text("Missions for kids. Control for parents.")
+            Text("Missions for kids. Support for parents.")
                 .font(KiddoTasksDesignTokens.Typography.bodyLarge)
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)

@@ -148,7 +148,7 @@ export default function WelcomePage() {
           <BrandLogo size={80} />
         </div>
         <h1 className="text-3xl font-bold">Kiddotasks</h1>
-        <p className="mt-2 text-ink-secondary">Missions for kids. Control for parents.</p>
+        <p className="mt-2 text-ink-secondary">Missions for kids. Support for parents.</p>
       </div>
 
       <div className="card space-y-4">

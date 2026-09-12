@@ -71,9 +71,12 @@ final class AppState {
 
     var applicationMode: ApplicationMode {
         if !isAuthenticated {
-            // PIN-unlocked kids session on a shared iPad without a parent sign-in UI.
+            // PIN-unlocked kids session (shared iPad / web without parent UI).
             if kidsSessionUnlocked, store.family != nil {
-                return currentChildProfile == nil ? .kidsSelection : .kidsStation
+                if currentChildProfile == nil && !gamesTabRequested {
+                    return .kidsSelection
+                }
+                return .kidsStation
             }
             return .login
         }
@@ -96,10 +99,14 @@ final class AppState {
         }
     }
 
+    /// Opens the shared Games hub without requiring a kid profile.
     func openGamesHub() {
-        gamesTabRequested = true
-        interfaceOverride = .kids
         currentChildProfile = nil
+        gamesTabRequested = true
+        if !isAuthenticated {
+            kidsSessionUnlocked = true
+        }
+        interfaceOverride = .kids
     }
 
     /// Unlocks Kids Station with the family PIN (local cache or cloud callable).

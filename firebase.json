@@ -8,11 +8,26 @@
   "functions": {
     "source": "Firebase/functions"
   },
+  "hosting": {
+    "source": "apps/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/.env.local",
+      "**/.env*.local"
+    ],
+    "frameworksBackend": {
+      "region": "us-central1"
+    }
+  },
   "emulators": {
     "auth": { "port": 9099 },
     "firestore": { "port": 8080 },
     "functions": { "port": 5001 },
     "storage": { "port": 9199 },
+    "hosting": { "port": 5000 },
     "ui": { "enabled": true }
   }
 }

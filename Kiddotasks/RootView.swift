@@ -6,11 +6,15 @@ struct RootView: View {
     @State private var toastCenter = ToastCenter.shared
 
     var body: some View {
-        // NOTE: Do not observe `store.dataRevision` here. Feature screens already
-        // read the store properties they need via @Observable; forcing a full
-        // root re-eval on every persist caused avoidable layout work.
+        // Re-eval when navigation-relevant state changes (Observation + computed mode).
+        let _ = appState.gamesTabRequested
+        let _ = appState.currentChildProfile?.id
+        let _ = appState.interfaceOverride
+        let _ = appState.kidsSessionUnlocked
+        let mode = appState.applicationMode
+
         Group {
-            switch appState.applicationMode {
+            switch mode {
             case .login:
                 WelcomeView()
             case .parentControl:
@@ -19,6 +23,8 @@ struct RootView: View {
                 ChildSelectionView()
             case .kidsStation:
                 KidsStationView()
+                // Identity so TabView resets cleanly when switching profiles.
+                    .id("kids-\(appState.currentChildProfile?.id ?? "games")")
             }
         }
         // No root `.animation`/`.transaction` — those overrode NavigationStack

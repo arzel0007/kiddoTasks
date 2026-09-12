@@ -29,7 +29,7 @@ struct KiddoTasksWordmark: View {
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
             }
             if showsTagline {
-                Text("Missions for kids. Control for parents.")
+                Text("Missions for kids. Support for parents.")
                     .font(KiddoTasksDesignTokens.Typography.bodyMedium)
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
