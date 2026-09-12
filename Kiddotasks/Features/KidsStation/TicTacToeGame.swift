@@ -71,50 +71,58 @@ struct TicTacToeView: View {
     private var currentColor: String { engine.isXTurn ? p1.colorHex : p2.colorHex }
 
     var body: some View {
-        VStack(spacing: 16) {
-            header
-            boardView
-            statusLine
-            Spacer()
-            if engine.outcome != .none {
-                PrimaryButton(title: "Next round") {
-                    if engine.xScore + engine.oScore >= 3 {
-                        finishMatch()
-                    } else {
-                        engine.resetBoard()
+        ZStack {
+            VStack(spacing: 16) {
+                header
+                boardView
+                statusLine
+                Spacer()
+                if engine.outcome != .none {
+                    PrimaryButton(title: "Next round") {
+                        if engine.xScore + engine.oScore >= 3 {
+                            finishMatch()
+                        } else {
+                            engine.resetBoard()
+                        }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
+                SecondaryButton(title: "End game") { finishMatch() }
+                    .padding(.horizontal)
+                    .padding(.bottom, 12)
             }
-            SecondaryButton(title: "End game") { finishMatch() }
-                .padding(.horizontal)
-                .padding(.bottom, 12)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky.ignoresSafeArea())
-        .overlay {
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky.ignoresSafeArea())
+
             if showPass {
                 PassDeviceCard(playerName: passName(), colorHex: passColor()) {
                     showPass = false
                 }
+                .transition(.opacity)
+            }
+
+            // Overlay (not fullScreenCover) — nested covers inside the Games
+            // hub cover freeze / fail to present on iOS.
+            if matchOver {
+                GameResultView(
+                    title: engine.xScore == engine.oScore ? "Great match!" : "Nice game!",
+                    message: "\(p1.displayName) \(engine.xScore) — \(engine.oScore) \(p2.displayName)",
+                    players: resultPlayers(),
+                    winnerIds: engine.xScore == engine.oScore ? [] : (engine.xScore > engine.oScore ? [p1.id] : [p2.id]),
+                    onRematch: {
+                        matchOver = false
+                        engine.xScore = 0
+                        engine.oScore = 0
+                        engine.resetBoard()
+                        startedAt = Date()
+                    },
+                    onExit: onExit
+                )
+                .transition(.opacity)
             }
         }
-        .fullScreenCover(isPresented: $matchOver) {
-            GameResultView(
-                title: engine.xScore == engine.oScore ? "Great match!" : "Nice game!",
-                message: "\(p1.displayName) \(engine.xScore) — \(engine.oScore) \(p2.displayName)",
-                players: resultPlayers(),
-                winnerIds: engine.xScore == engine.oScore ? [] : (engine.xScore > engine.oScore ? [p1.id] : [p2.id]),
-                onRematch: {
-                    matchOver = false
-                    engine.xScore = 0
-                    engine.oScore = 0
-                    engine.resetBoard()
-                    startedAt = Date()
-                },
-                onExit: onExit
-            )
-        }
+        .animation(.easeInOut(duration: 0.2), value: showPass)
+        .animation(.easeInOut(duration: 0.2), value: matchOver)
     }
 
     private func resultPlayers() -> [GamePlayer] {

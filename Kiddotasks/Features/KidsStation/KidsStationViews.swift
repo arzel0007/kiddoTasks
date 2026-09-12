@@ -240,6 +240,8 @@ struct KidsStationView: View {
             } else if appState.gamesTabRequested {
                 selectedTab = 3
             }
+            // One-shot only — do NOT clear gamesModeActive here or RootView
+            // bounces back to the kid picker on the same frame.
             appState.gamesTabRequested = false
         }
         .onChange(of: child?.id) { _, _ in

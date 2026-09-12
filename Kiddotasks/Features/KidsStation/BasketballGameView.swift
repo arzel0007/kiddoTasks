@@ -5,11 +5,14 @@ struct BasketballGameView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dismiss) private var dismiss
+
+    /// Called when the user leaves the game entirely (Games hub exit).
+    var onExit: (() -> Void)? = nil
 
     @State private var engine = BasketballGameEngine()
     @State private var showPlayerPicker = false
     @State private var pickingSlot = 1
+    @State private var physicsTask: Task<Void, Never>?
 
     private var children: [Child] { appState.familyChildren }
     private var currentChild: Child? {
@@ -42,11 +45,8 @@ struct BasketballGameView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    if engine.phase == .playing || engine.phase == .gameOver {
-                        Button("Exit") {
-                            engine.returnToMenu()
-                            dismiss()
-                        }
+                    Button("Close") {
+                        leaveGame()
                     }
                 }
             }
@@ -57,12 +57,40 @@ struct BasketballGameView: View {
         .onAppear {
             engine.bestSoloScore = UserDefaults.standard.integer(forKey: "kiddo.bball.best")
             applyParentTimeLimit()
+            startPhysicsLoop()
+        }
+        .onDisappear {
+            physicsTask?.cancel()
+            physicsTask = nil
         }
         .onChange(of: engine.phase) { _, phase in
             if phase == .gameOver, engine.mode == .solo {
                 let best = max(engine.bestSoloScore, engine.stats1.score)
                 engine.bestSoloScore = best
                 UserDefaults.standard.set(best, forKey: "kiddo.bball.best")
+            }
+        }
+    }
+
+    private func leaveGame() {
+        physicsTask?.cancel()
+        physicsTask = nil
+        engine.returnToMenu()
+        if let onExit {
+            onExit()
+        }
+    }
+
+    /// Physics off the TimelineView callback — mutating @Observable state from
+    /// `.onChange(of: timeline.date)` every frame freezes the main thread.
+    private func startPhysicsLoop() {
+        physicsTask?.cancel()
+        physicsTask = Task { @MainActor in
+            while !Task.isCancelled {
+                if engine.phase == .playing {
+                    engine.step(dt: 1.0 / 60.0)
+                }
+                try? await Task.sleep(nanoseconds: 16_666_667)
             }
         }
     }
@@ -235,16 +263,13 @@ struct BasketballGameView: View {
     private var courtCanvas: some View {
         GeometryReader { geo in
             let size = geo.size
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: engine.phase != .playing && engine.phase != .countdown)) { timeline in
+            // TimelineView drives rendering only — physics runs in startPhysicsLoop().
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: engine.phase != .playing && engine.phase != .countdown)) { _ in
                 Canvas { context, canvasSize in
                     drawCourt(context: &context, size: canvasSize)
                     drawGuide(context: &context, size: canvasSize)
                     drawHoop(context: &context, size: canvasSize)
                     drawBall(context: &context, size: canvasSize, accent: engine.activePlayer.accent)
-                }
-                .onChange(of: timeline.date) { _, _ in
-                    guard engine.phase == .playing else { return }
-                    engine.step(dt: 1.0 / 60.0)
                 }
             }
             .contentShape(Rectangle())
@@ -508,6 +533,11 @@ struct BasketballGameView: View {
                 }
                 SecondaryButton(title: "Back to menu") {
                     engine.returnToMenu()
+                }
+                if onExit != nil {
+                    SecondaryButton(title: "Back to games") {
+                        leaveGame()
+                    }
                 }
             }
             .padding(24)

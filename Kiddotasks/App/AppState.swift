@@ -21,8 +21,11 @@ final class AppState {
     var familyBootstrapPIN: String?
     /// Kids unlocked this session via PIN (may be without a parent UI session).
     var kidsSessionUnlocked = false
-    /// When true, Kids Station opens on the shared Games tab (no child required).
+    /// One-shot: Kids Station should land on the Games tab this appearance.
     var gamesTabRequested = false
+    /// Persistent: user is in shared Games mode without a selected child.
+    /// Stays true until they pick a kid, go back to Parent, or lock the session.
+    var gamesModeActive = false
     /// Where a push notification wants us to go after launch.
     var pendingDeepLink: String?
     /// Set when a notification arrived in foreground/background.
@@ -73,7 +76,7 @@ final class AppState {
         if !isAuthenticated {
             // PIN-unlocked kids session (shared iPad / web without parent UI).
             if kidsSessionUnlocked, store.family != nil {
-                if currentChildProfile == nil && !gamesTabRequested {
+                if currentChildProfile == nil && !gamesModeActive {
                     return .kidsSelection
                 }
                 return .kidsStation
@@ -84,13 +87,13 @@ final class AppState {
         case .parent:
             return .parentControl
         case .kids:
-            if currentChildProfile == nil && !gamesTabRequested {
+            if currentChildProfile == nil && !gamesModeActive {
                 return .kidsSelection
             }
             return .kidsStation
         case .automatic:
             if isIPad {
-                if currentChildProfile == nil && !gamesTabRequested {
+                if currentChildProfile == nil && !gamesModeActive {
                     return .kidsSelection
                 }
                 return .kidsStation
@@ -103,10 +106,24 @@ final class AppState {
     func openGamesHub() {
         currentChildProfile = nil
         gamesTabRequested = true
+        gamesModeActive = true
         if !isAuthenticated {
             kidsSessionUnlocked = true
         }
         interfaceOverride = .kids
+    }
+
+    /// Leaves shared Games mode and returns to Parent Center (or kid picker).
+    func exitGamesMode() {
+        gamesModeActive = false
+        gamesTabRequested = false
+        currentChildProfile = nil
+        if isAuthenticated {
+            interfaceOverride = .parent
+        } else {
+            // PIN session: stay unlocked, show kid picker.
+            interfaceOverride = .kids
+        }
     }
 
     /// Unlocks Kids Station with the family PIN (local cache or cloud callable).
@@ -142,6 +159,8 @@ final class AppState {
     func lockKidsSession() {
         kidsSessionUnlocked = false
         currentChildProfile = nil
+        gamesModeActive = false
+        gamesTabRequested = false
         interfaceOverride = .automatic
     }
 
@@ -173,10 +192,13 @@ final class AppState {
 
     func selectChildProfile(_ child: Child) {
         currentChildProfile = child
+        gamesModeActive = false
+        gamesTabRequested = false
     }
 
     func clearChildProfile() {
         currentChildProfile = nil
+        // Keep gamesModeActive — user may still be browsing Games.
     }
 
     /// Signs up a new family. Uses Firebase when configured (cloud account,
@@ -314,6 +336,8 @@ final class AppState {
 
     func signOut() {
         currentChildProfile = nil
+        gamesModeActive = false
+        gamesTabRequested = false
         interfaceOverride = .automatic
         familyBootstrapPIN = nil
         authenticationError = nil

@@ -38,7 +38,8 @@ final class MemoryGameEngine {
     }
 
     func flip(at index: Int) {
-        guard !isBusy, !cards[index].isFaceUp, !cards[index].isMatched, flippedIndices.count < 2 else { return }
+        guard !isBusy, index >= 0, index < cards.count,
+              !cards[index].isFaceUp, !cards[index].isMatched, flippedIndices.count < 2 else { return }
         cards[index].isFaceUp = true
         flippedIndices.append(index)
         Haptic.light()
@@ -47,9 +48,14 @@ final class MemoryGameEngine {
         isBusy = true
         let first = flippedIndices[0]
         let second = flippedIndices[1]
-        let name = playerNames[currentPlayerIndex]
-        Task {
+        let name = playerNames.indices.contains(currentPlayerIndex) ? playerNames[currentPlayerIndex] : "Player"
+        Task { @MainActor in
             try? await Task.sleep(nanoseconds: 700_000_000)
+            guard first < cards.count, second < cards.count else {
+                flippedIndices = []
+                isBusy = false
+                return
+            }
             if cards[first].pairId == cards[second].pairId {
                 cards[first].isMatched = true
                 cards[second].isMatched = true
@@ -63,8 +69,13 @@ final class MemoryGameEngine {
             }
             flippedIndices = []
             isBusy = false
+            // Bump generation so the view can detect board completion after async match.
+            flipGeneration += 1
         }
     }
+
+    /// Incremented after every flip resolution so views can detect board completion.
+    var flipGeneration = 0
 
     var isComplete: Bool { cards.allSatisfy(\.isMatched) }
 }
@@ -81,54 +92,65 @@ struct MemoryGameView: View {
     private var names: [String] { players.map(\.displayName) }
 
     var body: some View {
-        VStack(spacing: 12) {
-            header
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 10)], spacing: 10) {
-                ForEach(Array(engine.cards.enumerated()), id: \.element.id) { index, card in
-                    Button {
-                        engine.flip(at: index)
-                        if engine.isComplete { finish() }
-                    } label: {
-                        Text(card.isFaceUp || card.isMatched ? card.glyph : "?")
-                            .font(.system(size: 28))
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(0.8, contentMode: .fit)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(card.isMatched
-                                        ? KiddoTasksDesignTokens.Colors.successLight
-                                        : KiddoTasksDesignTokens.Colors.surfaceCard)
-                            )
-                            .opacity(card.isMatched ? 0.7 : 1)
+        ZStack {
+            VStack(spacing: 12) {
+                header
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 10)], spacing: 10) {
+                    ForEach(Array(engine.cards.enumerated()), id: \.element.id) { index, card in
+                        Button {
+                            engine.flip(at: index)
+                        } label: {
+                            Text(card.isFaceUp || card.isMatched ? card.glyph : "?")
+                                .font(.system(size: 28))
+                                .frame(maxWidth: .infinity)
+                                .aspectRatio(0.8, contentMode: .fit)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(card.isMatched
+                                            ? KiddoTasksDesignTokens.Colors.successLight
+                                            : KiddoTasksDesignTokens.Colors.surfaceCard)
+                                )
+                                .opacity(card.isMatched ? 0.7 : 1)
+                        }
+                        .buttonStyle(KiddoPressStyle())
                     }
-                    .buttonStyle(KiddoPressStyle())
                 }
+                .padding(16)
+                Spacer()
+                SecondaryButton(title: "End game") { finish() }
+                    .padding(.horizontal)
+                    .padding(.bottom, 12)
             }
-            .padding(16)
-            Spacer()
-            SecondaryButton(title: "End game") { finish() }
-                .padding(.horizontal)
-                .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky.ignoresSafeArea())
+
+            // Overlay (not fullScreenCover) — nested covers freeze inside Games hub.
+            if matchOver {
+                GameResultView(
+                    title: "Nice memory!",
+                    message: scoresSummary(),
+                    players: resultPlayers(),
+                    winnerIds: winnerIds(),
+                    onRematch: {
+                        matchOver = false
+                        engine.start(playerNames: names)
+                        startedAt = Date()
+                    },
+                    onExit: onExit
+                )
+                .transition(.opacity)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.2), value: matchOver)
         .onAppear {
             engine.start(playerNames: names)
             startedAt = Date()
         }
-        .fullScreenCover(isPresented: $matchOver) {
-            GameResultView(
-                title: "Nice memory!",
-                message: scoresSummary(),
-                players: resultPlayers(),
-                winnerIds: winnerIds(),
-                onRematch: {
-                    matchOver = false
-                    engine.start(playerNames: names)
-                    startedAt = Date()
-                },
-                onExit: onExit
-            )
+        .onChange(of: engine.flipGeneration) { _, _ in
+            // Match resolution is async — only finish once the board is actually complete.
+            if engine.isComplete, !matchOver {
+                finish()
+            }
         }
     }
 

@@ -90,22 +90,23 @@ struct RPSView: View {
     private var p2: GamePlayer { players[1] }
 
     var body: some View {
-        VStack(spacing: 16) {
-            header
-            Spacer()
-            if showResult {
-                resultPanel
-            } else {
-                pickPanel
+        ZStack {
+            VStack(spacing: 16) {
+                header
+                Spacer()
+                if showResult {
+                    resultPanel
+                } else {
+                    pickPanel
+                }
+                Spacer()
+                SecondaryButton(title: "End game") { finish() }
+                    .padding(.horizontal)
+                    .padding(.bottom, 12)
             }
-            Spacer()
-            SecondaryButton(title: "End game") { finish() }
-                .padding(.horizontal)
-                .padding(.bottom, 12)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop.ignoresSafeArea())
-        .overlay {
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop.ignoresSafeArea())
+
             if showPass {
                 PassDeviceCard(
                     playerName: isPickingP1 ? p1.displayName : p2.displayName,
@@ -113,24 +114,30 @@ struct RPSView: View {
                 ) {
                     showPass = false
                 }
+                .transition(.opacity)
+            }
+
+            // Overlay (not fullScreenCover) — nested covers freeze inside Games hub.
+            if matchOver {
+                GameResultView(
+                    title: engine.p1Score == engine.p2Score ? "Great match!" : "Nice game!",
+                    message: "\(p1.displayName) \(engine.p1Score) — \(engine.p2Score) \(p2.displayName)",
+                    players: resultPlayers(),
+                    winnerIds: winnerIds(),
+                    onRematch: {
+                        matchOver = false
+                        engine.resetMatch()
+                        isPickingP1 = true
+                        showResult = false
+                        startedAt = Date()
+                    },
+                    onExit: onExit
+                )
+                .transition(.opacity)
             }
         }
-        .fullScreenCover(isPresented: $matchOver) {
-            GameResultView(
-                title: engine.p1Score == engine.p2Score ? "Great match!" : "Nice game!",
-                message: "\(p1.displayName) \(engine.p1Score) — \(engine.p2Score) \(p2.displayName)",
-                players: resultPlayers(),
-                winnerIds: winnerIds(),
-                onRematch: {
-                    matchOver = false
-                    engine.resetMatch()
-                    isPickingP1 = true
-                    showResult = false
-                    startedAt = Date()
-                },
-                onExit: onExit
-            )
-        }
+        .animation(.easeInOut(duration: 0.2), value: showPass)
+        .animation(.easeInOut(duration: 0.2), value: matchOver)
     }
 
     private func resultPlayers() -> [GamePlayer] {

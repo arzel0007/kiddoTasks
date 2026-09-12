@@ -24,7 +24,7 @@ struct GamePlayerSetupView: View {
         self.game = game
         self.onStart = onStart
         self.onCancel = onCancel
-        let count = max(2, min(2, game.maxPlayers))
+        let count = max(game.minPlayers, min(2, game.maxPlayers))
         let palette = Self.palette
         _playerCount = State(initialValue: count)
         _seats = State(initialValue: (0..<count).map { i in
@@ -164,13 +164,35 @@ struct GamesHubView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Pick a game — no need to choose a kid first")
-                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    HStack {
+                        Text("Pick a game — no need to choose a kid first")
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        Spacer()
+                        if appState.currentChildProfile == nil {
+                            Button("Parent") {
+                                appState.exitGamesMode()
+                            }
+                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.85)))
+                            .buttonStyle(KiddoPressStyle())
+                            .accessibilityLabel("Back to Parent Center")
+                        }
+                    }
 
                     ForEach(MiniGameID.allCases) { game in
                         Button {
-                            selectedGame = game
+                            // Basketball has its own in-game player menu — skip setup sheet.
+                            if game == .basketball {
+                                startGame = .basketball
+                                pendingPlayers = []
+                            } else {
+                                selectedGame = game
+                            }
                         } label: {
                             HStack(spacing: 14) {
                                 Image(systemName: game.symbol)
@@ -206,8 +228,14 @@ struct GamesHubView: View {
             .sheet(item: $selectedGame) { game in
                 GamePlayerSetupView(game: game) { players in
                     selectedGame = nil
-                    startGame = game
-                    pendingPlayers = players
+                    // Present the full-screen game only after the sheet has
+                    // finished dismissing — same-runloop sheet→cover races
+                    // silently fail (game "doesn't launch").
+                    let playersCopy = players
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        pendingPlayers = playersCopy
+                        startGame = game
+                    }
                 } onCancel: {
                     selectedGame = nil
                 }
@@ -276,7 +304,7 @@ struct MiniGameHostView: View {
             case .memory:
                 MemoryGameView(players: players, requirePassDevice: false, onExit: onExit)
             case .basketball:
-                BasketballGameView()
+                BasketballGameView(onExit: onExit)
             }
         }
     }
