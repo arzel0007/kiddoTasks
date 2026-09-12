@@ -804,7 +804,7 @@ struct FamilyView: View {
                             .font(KiddoTasksDesignTokens.Typography.captionLarge)
                             .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                     }
-                    Text("Shows a Play tab in Kids Space for the basketball challenge.")
+                    Text("Shows the Games hub in Kids Space (basketball, tic-tac-toe, and more).")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }

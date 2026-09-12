@@ -21,6 +21,8 @@ final class AppState {
     var familyBootstrapPIN: String?
     /// Kids unlocked this session via PIN (may be without a parent UI session).
     var kidsSessionUnlocked = false
+    /// When true, Kids Station opens on the shared Games tab (no child required).
+    var gamesTabRequested = false
     /// Where a push notification wants us to go after launch.
     var pendingDeepLink: String?
     /// Set when a notification arrived in foreground/background.
@@ -79,13 +81,25 @@ final class AppState {
         case .parent:
             return .parentControl
         case .kids:
-            return currentChildProfile == nil ? .kidsSelection : .kidsStation
+            if currentChildProfile == nil && !gamesTabRequested {
+                return .kidsSelection
+            }
+            return .kidsStation
         case .automatic:
             if isIPad {
-                return currentChildProfile == nil ? .kidsSelection : .kidsStation
+                if currentChildProfile == nil && !gamesTabRequested {
+                    return .kidsSelection
+                }
+                return .kidsStation
             }
             return .parentControl
         }
+    }
+
+    func openGamesHub() {
+        gamesTabRequested = true
+        interfaceOverride = .kids
+        currentChildProfile = nil
     }
 
     /// Unlocks Kids Station with the family PIN (local cache or cloud callable).

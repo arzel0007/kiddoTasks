@@ -34,6 +34,13 @@ struct ChildSelectionView: View {
                 }
 
                 Spacer(minLength: 8)
+
+                if appState.currentFamily?.settings.enableMiniGames ?? true {
+                    SecondaryButton(title: "Play games together") {
+                        appState.openGamesHub()
+                    }
+                    .padding(.horizontal, 8)
+                }
             }
             .padding(.top, 20)
             .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
@@ -199,22 +206,30 @@ struct KidsStationView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            MissionsView()
-                .tabItem { Label("Missions", systemImage: "star.fill") }
-                .tag(0)
-            RewardShopView()
-                .tabItem { Label("Shop", systemImage: "gift.fill") }
-                .tag(1)
-            AchievementsView()
-                .tabItem { Label("Badges", systemImage: "medal.fill") }
-                .tag(2)
+            if child != nil {
+                MissionsView()
+                    .tabItem { Label("Missions", systemImage: "star.fill") }
+                    .tag(0)
+                RewardShopView()
+                    .tabItem { Label("Shop", systemImage: "gift.fill") }
+                    .tag(1)
+                AchievementsView()
+                    .tabItem { Label("Badges", systemImage: "medal.fill") }
+                    .tag(2)
+            }
             if appState.currentFamily?.settings.enableMiniGames ?? true {
-                BasketballGameView()
-                    .tabItem { Label("Play", systemImage: "basketball.fill") }
+                GamesHubView()
+                    .tabItem { Label("Games", systemImage: "gamecontroller.fill") }
                     .tag(3)
             }
         }
-        .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.accent)
+        .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary)
+        .onAppear {
+            if appState.gamesTabRequested {
+                selectedTab = 3
+                appState.gamesTabRequested = false
+            }
+        }
         .onChange(of: selectedTab) { _, _ in
             if !reduceMotion { Haptic.light() }
             tabContentID += 1
