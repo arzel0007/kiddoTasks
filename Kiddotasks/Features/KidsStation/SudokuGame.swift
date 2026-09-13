@@ -24,7 +24,7 @@ final class SudokuEngine {
     func start(removeCount: Int = 40) {
         solution = Self.generate()
         grid = solution
-        var blanks: [Int] = Array(0..<(Self.size * Self.size)).shuffled()
+        let blanks: [Int] = Array(0..<(Self.size * Self.size)).shuffled()
         givens = []
         var removed = 0
         for idx in blanks {

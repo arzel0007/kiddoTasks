@@ -6,13 +6,12 @@ import SwiftUI
 @Observable
 final class SnakesLaddersEngine {
     static let boardSize = 100
+    /// Unique starts/ends — no shared squares (avoids overlapping art).
     static let ladders: [Int: Int] = [
-        4: 14, 9: 31, 20: 38, 28: 84,
-        40: 59, 51: 67, 63: 81, 71: 91,
+        4: 14, 9: 31, 21: 42, 28: 84, 51: 67, 71: 91,
     ]
     static let snakes: [Int: Int] = [
-        17: 7, 54: 34, 62: 19, 64: 60,
-        87: 24, 93: 73, 95: 75, 98: 78,
+        17: 7, 54: 34, 62: 19, 87: 24, 93: 73, 98: 78,
     ]
 
     var positions: [Int] = []
@@ -23,6 +22,19 @@ final class SnakesLaddersEngine {
     var winnerIndex: Int?
     var banner: String?
     var hopTick = 0
+    /// When sliding on a snake/ladder, extra visual offset along the path (0…1).
+    var slideKind: SlideKind?
+    var slideProgress: Double = 0
+
+    enum SlideKind: Equatable {
+        case ladder
+        case snake
+    }
+
+    /// ~0.55s per tile — readable without dragging.
+    private static let hopNanos: UInt64 = 550_000_000
+    /// ~0.9s slide along snake/ladder body.
+    private static let slideNanos: UInt64 = 900_000_000
 
     func start(playerCount: Int) {
         positions = Array(repeating: 0, count: max(2, playerCount))
@@ -33,6 +45,8 @@ final class SnakesLaddersEngine {
         winnerIndex = nil
         banner = nil
         hopTick = 0
+        slideKind = nil
+        slideProgress = 0
     }
 
     func beginRoll() -> Int {
@@ -47,7 +61,7 @@ final class SnakesLaddersEngine {
         isRolling = false
     }
 
-    /// Moves one square at a time so tokens visibly hop.
+    /// Square-by-square hops, then a long slide on snake/ladder.
     func moveSteps(_ steps: Int) async {
         guard winnerIndex == nil, positions.indices.contains(turnIndex) else {
             isMoving = false
@@ -61,38 +75,28 @@ final class SnakesLaddersEngine {
             if next > Self.boardSize {
                 next = Self.boardSize - (next - Self.boardSize)
             }
-            withAnimation(.spring(response: 0.18, dampingFraction: 0.65)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                 positions[turnIndex] = next
                 hopTick += 1
             }
             Haptic.light()
-            try? await Task.sleep(nanoseconds: 160_000_000)
+            try? await Task.sleep(nanoseconds: Self.hopNanos)
             remaining -= 1
             if positions[turnIndex] >= Self.boardSize { break }
         }
 
-        // Snake / ladder after landing
+        // Slide along snake / climb ladder
         let landed = positions[turnIndex]
         if let dest = Self.ladders[landed] {
             banner = "🚀 BONUS CLIMB!"
             GameSounds.win()
             Haptic.success()
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
-                positions[turnIndex] = dest
-                hopTick += 1
-            }
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            await slide(from: landed, to: dest, kind: .ladder)
         } else if let dest = Self.snakes[landed] {
             banner = "🐍 Oops!"
             GameSounds.miss()
             Haptic.light()
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
-                positions[turnIndex] = dest
-                hopTick += 1
-            }
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            await slide(from: landed, to: dest, kind: .snake)
         }
 
         if positions[turnIndex] >= Self.boardSize {
@@ -101,6 +105,7 @@ final class SnakesLaddersEngine {
             GameSounds.win()
             Haptic.success()
             isMoving = false
+            slideKind = nil
             return
         }
 
@@ -111,6 +116,31 @@ final class SnakesLaddersEngine {
             banner = nil
         }
         isMoving = false
+        slideKind = nil
+        slideProgress = 0
+    }
+
+    /// Smooth travel along the board path (not a teleport).
+    private func slide(from: Int, to: Int, kind: SlideKind) async {
+        slideKind = kind
+        slideProgress = 0
+        // Ease through the visual path so the token rides the snake/ladder.
+        let duration = Self.slideNanos
+        let steps = 18
+        for i in 0...steps {
+            let t = Double(i) / Double(steps)
+            withAnimation(.linear(duration: Double(duration) / 1e9 / Double(steps))) {
+                slideProgress = t
+            }
+            try? await Task.sleep(nanoseconds: duration / UInt64(steps))
+        }
+        withAnimation(.easeOut(duration: 0.18)) {
+            positions[turnIndex] = to
+            hopTick += 1
+            slideProgress = 0
+            slideKind = nil
+        }
+        try? await Task.sleep(nanoseconds: 220_000_000)
     }
 }
 
@@ -154,14 +184,18 @@ struct SnakesLaddersView: View {
                         ? (engine.isMoving ? "\(activeName) is moving…" : "\(activeName)'s turn")
                         : nil
                 )
-                if let banner = engine.banner {
-                    Text(banner)
-                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
-                        .fontWeight(.bold)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
-                        .id(banner)
-                        .transition(.scale.combined(with: .opacity))
+                // Fixed-height slot — banners never push/resize the board.
+                ZStack {
+                    if let banner = engine.banner {
+                        Text(banner)
+                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                            .fontWeight(.bold)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                            .id(banner)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
+                .frame(height: 28)
                 boardView
                 diceBar
             }
@@ -256,23 +290,18 @@ struct SnakesLaddersView: View {
                     }
                 }
 
-                // Tokens — use .position (center in board space), NOT .offset
+                // Tokens — .position in board space; slide rides snake/ladder path.
                 ForEach(Array(p.enumerated()), id: \.element.id) { index, player in
-                    let pos = engine.positions.indices.contains(index) ? max(engine.positions[index], 1) : 1
-                    let (col, row) = Self.colRow(for: pos)
+                    let point = tokenPoint(index: index, cell: cell)
                     let stackX = CGFloat(index % 2) * cell * 0.28 - cell * 0.07
                     let stackY = CGFloat(index / 2) * cell * 0.18 - cell * 0.05
                     let tokenSize = max(16, cell * 0.52)
 
                     PlayerTokenView(player: player, size: tokenSize)
-                        .position(
-                            x: CGFloat(col) * cell + cell / 2 + stackX,
-                            y: CGFloat(row) * cell + cell / 2 + stackY
-                        )
-                        .scaleEffect(engine.hopTick > 0 && index == engine.turnIndex ? 1.14 : 1)
+                        .position(x: point.x + stackX, y: point.y + stackY)
+                        .scaleEffect(engine.hopTick > 0 && index == engine.turnIndex ? 1.1 : 1)
                         .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
-                        .animation(.spring(response: 0.18, dampingFraction: 0.6), value: pos)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.5), value: engine.hopTick)
+                        .animation(.spring(response: 0.2, dampingFraction: 0.55), value: engine.hopTick)
                         .zIndex(Double(index))
                 }
             }
@@ -285,6 +314,33 @@ struct SnakesLaddersView: View {
         .frame(maxWidth: 400)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 10)
+    }
+
+    /// Center of a token in board coordinates, including snake/ladder slide blend.
+    private func tokenPoint(index: Int, cell: CGFloat) -> CGPoint {
+        let pos = engine.positions.indices.contains(index) ? max(engine.positions[index], 1) : 1
+        let (col, row) = Self.colRow(for: pos)
+        var px = CGFloat(col) * cell + cell / 2
+        var py = CGFloat(row) * cell + cell / 2
+
+        if index == engine.turnIndex,
+           let kind = engine.slideKind,
+           let dest = slideDestination(for: pos, kind: kind) {
+            let (dcol, drow) = Self.colRow(for: dest)
+            let t = CGFloat(engine.slideProgress)
+            let dx = CGFloat(dcol) * cell + cell / 2
+            let dy = CGFloat(drow) * cell + cell / 2
+            px += (dx - px) * t
+            py += (dy - py) * t
+        }
+        return CGPoint(x: px, y: py)
+    }
+
+    private func slideDestination(for pos: Int, kind: SnakesLaddersEngine.SlideKind) -> Int? {
+        switch kind {
+        case .ladder: return SnakesLaddersEngine.ladders[pos]
+        case .snake: return SnakesLaddersEngine.snakes[pos]
+        }
     }
 
     private func center(_ n: Int, cell: CGFloat) -> CGPoint {

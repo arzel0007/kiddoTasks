@@ -176,7 +176,7 @@ struct Connect4View: View {
                             guard engine.winner == nil else { return }
                             GameSounds.place()
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
-                                engine.drop(col: c)
+                                _ = engine.drop(col: c)
                             }
                             if !reduceMotion {
                                 boardShake += 1
