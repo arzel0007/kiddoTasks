@@ -609,7 +609,7 @@ body {
   color: var(--color-primary-deep);
 }
 
-/* Reduced motion */
+/* Landing / forms reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .animate-rise,
   .form-swap,
@@ -628,13 +628,316 @@ body {
     transition: none !important;
   }
 
-  .step-card:hover {
-    transform: none;
-  }
-
+  .step-card:hover,
   .btn-primary:active,
   .chip-btn:active,
   .btn-secondary:active {
+    transform: none;
+  }
+}
+
+/* —— Mini-games (kid-friendly shell) —— */
+.game-stage {
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--color-primary-light) 80%, transparent) 0 42px, transparent 43px),
+    radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--color-reward-light) 90%, transparent) 0 36px, transparent 37px),
+    var(--color-surface-card);
+}
+
+.game-ambient {
+  overflow: hidden;
+}
+
+.game-bubble {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  animation: game-float 5s ease-in-out infinite;
+}
+
+.game-star {
+  position: absolute;
+  font-size: 12px;
+  color: var(--color-reward);
+  opacity: 0.55;
+  animation: game-twinkle 2.8s ease-in-out infinite;
+}
+
+@keyframes game-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes game-twinkle {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.2); opacity: 0.85; }
+}
+
+.game-btn {
+  display: inline-flex;
+  min-height: 3rem;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  padding: 0 1.25rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  border: 2px solid transparent;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  box-shadow: 0 3px 0 rgba(36, 54, 75, 0.12);
+}
+
+.game-btn:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+
+.game-btn:active:not(:disabled) {
+  transform: scale(0.94);
+  box-shadow: 0 1px 0 rgba(36, 54, 75, 0.12);
+}
+
+.game-btn:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.game-btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.game-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-deep);
+}
+
+.game-btn--soft {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-border);
+}
+
+.game-btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.game-result {
+  animation: game-result-in 0.32s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
+@keyframes game-result-in {
+  from { opacity: 0; transform: scale(0.9) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.game-score-pop {
+  animation: game-pop 0.45s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+
+.game-star-pop {
+  animation: game-pop 0.35s ease-out both;
+}
+
+@keyframes game-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Tic-tac-toe */
+.ttt-cell {
+  position: relative;
+  border-radius: 20px;
+  border: 2px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  background: var(--color-surface-card);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--color-primary) 12%, transparent);
+  min-height: 56px;
+  min-width: 56px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+}
+
+.ttt-cell:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+}
+
+.ttt-cell:active:not(:disabled) {
+  transform: scale(0.96);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.ttt-cell:disabled {
+  cursor: default;
+}
+
+.ttt-cell--win {
+  background: var(--color-success-light);
+  border-color: var(--color-success);
+  animation: ttt-pulse 0.7s ease-out;
+}
+
+@keyframes ttt-pulse {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.04); }
+}
+
+.ttt-stroke {
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+  animation: ttt-draw 0.28s ease-out forwards;
+}
+
+.ttt-stroke--2 {
+  animation-delay: 0.14s;
+}
+
+@keyframes ttt-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+.ttt-pop {
+  animation: ttt-scale-in 0.32s cubic-bezier(0.22, 1.35, 0.36, 1) both;
+}
+
+@keyframes ttt-scale-in {
+  from { transform: scale(0.55); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.ttt-win-bounce {
+  animation: ttt-bounce 0.55s ease-out;
+}
+
+@keyframes ttt-bounce {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+}
+
+/* Memory cards */
+.memory-card {
+  perspective: 800px;
+  border-radius: 16px;
+  min-height: 56px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.memory-card:hover:not(:disabled) {
+  transform: translateY(-3px);
+}
+
+.memory-card:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.memory-card:disabled {
+  cursor: default;
+}
+
+.memory-card__inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: 16px;
+}
+
+.memory-card.is-flipped .memory-card__inner {
+  transform: rotateY(180deg);
+}
+
+.memory-card__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  border: 2px solid var(--color-border);
+}
+
+.memory-card__back {
+  background: linear-gradient(160deg, #3978a8, #285b82);
+  color: #fff;
+  box-shadow: 0 3px 0 rgba(40, 91, 130, 0.35);
+}
+
+.memory-card__front {
+  background: var(--color-surface-card);
+  transform: rotateY(180deg);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.memory-card--match .memory-card__front {
+  background: var(--color-success-light);
+  border-color: var(--color-success);
+  animation: mem-match 0.5s ease-out;
+}
+
+@keyframes mem-match {
+  0%, 100% { transform: rotateY(180deg) scale(1); }
+  40% { transform: rotateY(180deg) scale(1.08); }
+}
+
+.memory-card--shake .memory-card__inner {
+  animation: mem-shake 0.28s ease-in-out;
+}
+
+@keyframes mem-shake {
+  0%, 100% { transform: rotateY(180deg) translateX(0); }
+  25% { transform: rotateY(180deg) translateX(-4px); }
+  75% { transform: rotateY(180deg) translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-bubble,
+  .game-star,
+  .game-btn,
+  .game-result,
+  .game-score-pop,
+  .game-star-pop,
+  .ttt-cell,
+  .ttt-stroke,
+  .ttt-pop,
+  .ttt-win-bounce,
+  .memory-card,
+  .memory-card__inner,
+  .memory-card--match .memory-card__front,
+  .memory-card--shake .memory-card__inner {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .memory-card.is-flipped .memory-card__inner {
+    transform: none;
+  }
+
+  .memory-card.is-flipped .memory-card__back {
+    display: none;
+  }
+
+  .memory-card.is-flipped .memory-card__front {
+    transform: none;
+  }
+
+  .game-btn:hover:not(:disabled),
+  .game-btn:active:not(:disabled),
+  .ttt-cell:hover:not(:disabled),
+  .memory-card:hover:not(:disabled) {
     transform: none;
   }
 }

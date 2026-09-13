@@ -821,25 +821,7 @@ struct FamilyView: View {
                             }
                         }
                     ))
-                    if appState.currentFamily?.settings.enableMiniGames ?? true {
-                        Stepper(
-                            appState.currentFamily?.settings.basketballMaxMinutes == 0
-                                ? "Basketball time: default"
-                                : "Basketball time: \(appState.currentFamily?.settings.basketballMaxMinutes ?? 0) min",
-                            value: Binding(
-                                get: { appState.currentFamily?.settings.basketballMaxMinutes ?? 0 },
-                                set: { value in
-                                    try? appState.store.updateBasketballMaxMinutes(value)
-                                }
-                            ),
-                            in: 0...30,
-                            step: 5
-                        )
-                        Text("0 uses the standard 60s solo / 45s per player turns.")
-                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                    }
-                    Text("Shows basketball, tic-tac-toe, rock-paper-scissors, and memory in Kids Space.")
+                    Text("Shows tic-tac-toe and memory in Kids Space.")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 }

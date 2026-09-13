@@ -4,12 +4,13 @@ import SwiftUI
 
 struct GamePlayerSetupView: View {
     let game: MiniGameID
-    let onStart: ([GamePlayer]) -> Void
+    let onStart: ([GamePlayer], MemoryBoardSize) -> Void
     let onCancel: () -> Void
 
     @Environment(AppState.self) private var appState
     @State private var playerCount: Int
     @State private var seats: [Seat]
+    @State private var boardSize: MemoryBoardSize = .four
 
     private struct Seat: Identifiable {
         let id = UUID()
@@ -20,7 +21,11 @@ struct GamePlayerSetupView: View {
 
     private static let palette = ["#3978A8", "#3F8B70", "#D59A3A", "#D97868"]
 
-    init(game: MiniGameID, onStart: @escaping ([GamePlayer]) -> Void, onCancel: @escaping () -> Void) {
+    init(
+        game: MiniGameID,
+        onStart: @escaping ([GamePlayer], MemoryBoardSize) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
         self.game = game
         self.onStart = onStart
         self.onCancel = onCancel
@@ -63,6 +68,10 @@ struct GamePlayerSetupView: View {
                         }
                     }
 
+                    if game == .memory {
+                        boardSizeSection
+                    }
+
                     ForEach(Array(seats.enumerated()), id: \.element.id) { index, seat in
                         seatEditor(index: index)
                     }
@@ -80,6 +89,47 @@ struct GamePlayerSetupView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
+            }
+        }
+    }
+
+    private var boardSizeSection: some View {
+        KiddoFormSection(title: "Board size", icon: "square.grid.3x3.fill") {
+            VStack(alignment: .leading, spacing: 10) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(MemoryBoardSize.allCases) { size in
+                            Button {
+                                boardSize = size
+                                Haptic.light()
+                            } label: {
+                                VStack(spacing: 2) {
+                                    Text(size.label)
+                                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                                        .fontWeight(.bold)
+                                    Text("\(size.pairCount) pairs")
+                                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                }
+                                .frame(minWidth: 64, minHeight: 52)
+                                .padding(.horizontal, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(
+                                            boardSize == size
+                                                ? KiddoTasksDesignTokens.Colors.primary
+                                                : KiddoTasksDesignTokens.Colors.surface
+                                        )
+                                )
+                                .foregroundStyle(boardSize == size ? .white : KiddoTasksDesignTokens.Colors.text)
+                            }
+                            .buttonStyle(KiddoPressStyle())
+                            .accessibilityLabel("\(size.label) board, \(size.detail)")
+                        }
+                    }
+                }
+                Text(boardSize.detail)
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
         }
     }
@@ -148,7 +198,7 @@ struct GamePlayerSetupView: View {
                 symbol: symbols[i % symbols.count]
             )
         }
-        onStart(players)
+        onStart(players, boardSize)
     }
 }
 
@@ -159,6 +209,7 @@ private struct GameLaunch: Identifiable {
     let id = UUID()
     let game: MiniGameID
     let players: [GamePlayer]
+    var boardSize: MemoryBoardSize = .four
 }
 
 struct GamesHubView: View {
@@ -192,20 +243,17 @@ struct GamesHubView: View {
 
                     ForEach(MiniGameID.allCases) { game in
                         Button {
-                            // Basketball has its own in-game player menu — skip setup sheet.
-                            if game == .basketball {
-                                launch = GameLaunch(game: .basketball, players: [])
-                            } else {
-                                selectedGame = game
-                            }
+                            selectedGame = game
                         } label: {
                             HStack(spacing: 14) {
-                                Image(systemName: game.symbol)
-                                    .font(.system(size: 22, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 48, height: 48)
-                                    .background(RoundedRectangle(cornerRadius: 14).fill(Color(hex: game.accentHex)))
-                                VStack(alignment: .leading, spacing: 2) {
+                                Text(game.emoji)
+                                    .font(.system(size: 28))
+                                    .frame(width: 56, height: 56)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .fill(Color(hex: game.accentHex).opacity(0.18))
+                                    )
+                                VStack(alignment: .leading, spacing: 3) {
                                     Text(game.title)
                                         .font(KiddoTasksDesignTokens.Typography.titleSmall)
                                         .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
@@ -214,12 +262,17 @@ struct GamesHubView: View {
                                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                                Text("PLAY")
+                                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Capsule().fill(Color(hex: game.accentHex)))
                             }
                             .padding(14)
-                            .background(RoundedRectangle(cornerRadius: 18).fill(KiddoTasksDesignTokens.Colors.surfaceCard))
-                            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(KiddoTasksDesignTokens.Colors.borderSubtle))
+                            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(KiddoTasksDesignTokens.Colors.surfaceCard))
+                            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(KiddoTasksDesignTokens.Colors.borderSubtle))
+                            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
                         }
                         .buttonStyle(CardPressStyle())
                     }
@@ -231,11 +284,11 @@ struct GamesHubView: View {
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
             .navigationTitle("Games")
             .sheet(item: $selectedGame) { game in
-                GamePlayerSetupView(game: game) { players in
+                GamePlayerSetupView(game: game) { players, boardSize in
                     selectedGame = nil
                     // Present after the sheet finishes dismissing (same-runloop race).
                     // Players ride inside GameLaunch so the cover never sees [].
-                    let payload = GameLaunch(game: game, players: players)
+                    let payload = GameLaunch(game: game, players: players, boardSize: boardSize)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         launch = payload
                     }
@@ -244,7 +297,11 @@ struct GamesHubView: View {
                 }
             }
             .fullScreenCover(item: $launch) { item in
-                MiniGameHostView(game: item.game, players: item.players) {
+                MiniGameHostView(
+                    game: item.game,
+                    players: item.players,
+                    memoryBoardSize: item.boardSize
+                ) {
                     launch = nil
                 }
             }
@@ -294,6 +351,7 @@ struct GamesHubView: View {
 struct MiniGameHostView: View {
     let game: MiniGameID
     let players: [GamePlayer]
+    var memoryBoardSize: MemoryBoardSize = .four
     let onExit: () -> Void
 
     /// Never crash on empty roster — fall back to guest seats.
@@ -314,12 +372,23 @@ struct MiniGameHostView: View {
             switch game {
             case .tictactoe:
                 TicTacToeView(players: safePlayers, requirePassDevice: true, onExit: onExit)
-            case .rps:
-                RPSView(players: safePlayers, requirePassDevice: true, onExit: onExit)
             case .memory:
-                MemoryGameView(players: safePlayers, requirePassDevice: false, onExit: onExit)
-            case .basketball:
-                BasketballGameView(onExit: onExit)
+                MemoryGameView(
+                    players: safePlayers,
+                    boardSize: memoryBoardSize,
+                    requirePassDevice: false,
+                    onExit: onExit
+                )
+            case .snakes:
+                SnakesLaddersView(players: safePlayers, onExit: onExit)
+            case .connect4:
+                Connect4View(players: safePlayers, onExit: onExit)
+            case .whack:
+                WhackAMoleView(players: safePlayers, onExit: onExit)
+            case .balloon:
+                BalloonPopView(players: safePlayers, onExit: onExit)
+            case .sudoku:
+                SudokuView(players: safePlayers, onExit: onExit)
             }
         }
     }

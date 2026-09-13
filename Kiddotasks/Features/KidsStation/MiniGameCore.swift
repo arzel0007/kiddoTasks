@@ -4,62 +4,87 @@ import SwiftUI
 // MARK: - Shared game identity
 
 enum MiniGameID: String, CaseIterable, Identifiable {
-    case basketball
     case tictactoe
     case memory
-    case rps
+    case snakes
+    case connect4
+    case whack
+    case balloon
+    case sudoku
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .basketball: return "Basketball"
         case .tictactoe: return "Tic-Tac-Toe"
         case .memory: return "Memory"
-        case .rps: return "Rock Paper Scissors"
+        case .snakes: return "Snakes & Ladders"
+        case .connect4: return "Connect 4"
+        case .whack: return "Whack-a-Mole"
+        case .balloon: return "Balloon Pop Race"
+        case .sudoku: return "Sudoku"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .basketball: return "1–2 players · timed shots"
         case .tictactoe: return "2 players · classic 3×3"
         case .memory: return "2–4 players · find pairs"
-        case .rps: return "2 players · best of 3"
+        case .snakes: return "2–4 players · roll & climb"
+        case .connect4: return "2 players · drop to win"
+        case .whack: return "2 players · reaction race"
+        case .balloon: return "2 players · pop race"
+        case .sudoku: return "1 player · number puzzle"
         }
     }
 
     var symbol: String {
         switch self {
-        case .basketball: return "basketball.fill"
         case .tictactoe: return "xmark.circle.fill"
         case .memory: return "rectangle.on.rectangle.fill"
-        case .rps: return "hand.raised.fill"
+        case .snakes: return "arrow.up.right.circle.fill"
+        case .connect4: return "circle.grid.3x3.fill"
+        case .whack: return "hammer.fill"
+        case .balloon: return "balloon.fill"
+        case .sudoku: return "square.grid.3x3.fill"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .tictactoe: return "🎮"
+        case .memory: return "🧠"
+        case .snakes: return "🐍"
+        case .connect4: return "🔴"
+        case .whack: return "🔨"
+        case .balloon: return "🎈"
+        case .sudoku: return "🔢"
         }
     }
 
     var accentHex: String {
         switch self {
-        case .basketball: return "#3978A8"
         case .tictactoe: return "#285B82"
         case .memory: return "#3F8B70"
-        case .rps: return "#D59A3A"
+        case .snakes: return "#D59A3A"
+        case .connect4: return "#D97868"
+        case .whack: return "#8B6B4A"
+        case .balloon: return "#3978A8"
+        case .sudoku: return "#6F9FBD"
         }
     }
 
     var minPlayers: Int {
         switch self {
-        case .basketball: return 1
+        case .sudoku: return 1
         default: return 2
         }
     }
 
     var maxPlayers: Int {
         switch self {
-        case .basketball: return 2
-        case .tictactoe: return 2
-        case .rps: return 2
-        case .memory: return 4
+        case .tictactoe, .connect4, .whack, .balloon, .sudoku: return 2
+        case .memory, .snakes: return 4
         }
     }
 }

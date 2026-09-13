@@ -107,7 +107,7 @@ export default function KidsPage() {
                     key={c.id}
                     type="button"
                     onClick={() => setSelectedChildId(c.id)}
-                    className="card flex flex-col items-center gap-3 py-7 transition hover:-translate-y-0.5 hover:shadow-cardlg"
+                    className="card flex flex-col items-center gap-3 py-7 transition hover:-translate-y-0.5"
                     style={{ borderColor: `${c.avatar.colorHex}55`, borderWidth: 2 }}
                   >
                     <ChildAvatar

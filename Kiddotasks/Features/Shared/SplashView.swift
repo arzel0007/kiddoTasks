@@ -2,9 +2,9 @@ import SwiftUI
 
 /// Splash shown on launch.
 ///
-/// Prefers the bundled rocket intro video (`Images/Boy_riding_rocket_in_space.mp4`).
-/// Falls back to the logo beat if the asset is missing or Reduce Motion is on.
-/// Exits when the clip ends (or after a short ready wait) / hard cap.
+/// Prefers the bundled rocket intro video when Reduce Motion is off.
+/// Video clip is ~8s — we hold ~3s so the intro is enjoyable, then fade.
+/// RootView is already mounted underneath — no blank gap after dismiss.
 struct SplashView: View {
     var isReady: Bool
     var onFinish: () -> Void
@@ -16,10 +16,13 @@ struct SplashView: View {
     @State private var wordmarkVisible = false
     @State private var taglineVisible = false
     @State private var didFinish = false
-    @State private var videoFinished = false
 
-    private let hardCap: TimeInterval = 6.0
-    private let minDisplay: TimeInterval = 1.1
+    /// Short logo-only beat (no video / Reduce Motion).
+    private let logoMinDisplay: TimeInterval = 1.0
+    /// Long enough to enjoy the rocket intro (~8s clip), not the full length.
+    private let videoMinDisplay: TimeInterval = 3.0
+    /// Absolute ceiling — never block launch past this.
+    private let hardCap: TimeInterval = 3.5
     private let videoResourceName = "Boy_riding_rocket_in_space"
 
     private var hasVideoAsset: Bool {
@@ -28,70 +31,72 @@ struct SplashView: View {
 
     private var useVideo: Bool { hasVideoAsset && !reduceMotion }
 
+    private var minDisplay: TimeInterval {
+        useVideo ? videoMinDisplay : logoMinDisplay
+    }
+
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geo in
+            // Scale lockup from the shorter axis so landscape/tablets stay balanced.
+            let unit = min(geo.size.width, geo.size.height)
+            let logoSize = max(72, min(128, unit * 0.22))
 
-            if useVideo {
-                SplashVideoLayer(
-                    resourceName: videoResourceName,
-                    fileExtension: "mp4",
-                    isMuted: true
-                ) {
-                    videoFinished = true
-                    Task { await maybeFinish(force: false) }
-                }
-                .ignoresSafeArea()
+            ZStack {
+                if useVideo {
+                    Color.black.ignoresSafeArea()
+                    SplashVideoLayer(
+                        resourceName: videoResourceName,
+                        fileExtension: "mp4",
+                        isMuted: true
+                    )
+                    .ignoresSafeArea()
 
-                VStack {
-                    Spacer()
-                    brandLockup
-                        .padding(.bottom, 36)
+                    VStack {
+                        Spacer()
+                        brandLockup(logoSize: logoSize)
+                            .padding(.bottom, max(24, geo.safeAreaInsets.bottom + 16))
+                    }
+                    .opacity(logoVisible ? 1 : 0)
+                } else {
+                    KiddoTasksDesignTokens.PageBackgrounds.welcome.ignoresSafeArea()
+                    VStack(spacing: KiddoTasksDesignTokens.Spacing.large) {
+                        Spacer()
+                        KiddoTasksLogoMark(size: logoSize)
+                            .scaleEffect(logoVisible ? 1 : 0.86)
+                            .opacity(logoVisible ? 1 : 0)
+                        Text("KiddoTasks")
+                            .font(KiddoTasksDesignTokens.Typography.displayMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+                            .minimumScaleFactor(0.7)
+                            .opacity(wordmarkVisible ? 1 : 0)
+                        Text("Missions for kids. Support for parents.")
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                            .opacity(taglineVisible ? 1 : 0)
+                        Spacer()
+                    }
+                    .padding(KiddoTasksDesignTokens.Spacing.xLarge)
                 }
-                .opacity(logoVisible ? 1 : 0)
-            } else {
-                KiddoTasksDesignTokens.PageBackgrounds.welcome.ignoresSafeArea()
-                VStack(spacing: KiddoTasksDesignTokens.Spacing.large) {
-                    Spacer()
-                    KiddoTasksLogoMark(size: 112)
-                        .scaleEffect(logoVisible ? 1 : 0.86)
-                        .opacity(logoVisible ? 1 : 0)
-                    Text("KiddoTasks")
-                        .font(KiddoTasksDesignTokens.Typography.displayMedium)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
-                        .opacity(wordmarkVisible ? 1 : 0)
-                    Text("Missions for kids. Support for parents.")
-                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .opacity(taglineVisible ? 1 : 0)
-                    Spacer()
-                }
-                .padding(KiddoTasksDesignTokens.Spacing.xLarge)
             }
         }
         .onAppear {
             appearedAt = Date()
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.78).delay(0.15)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8).delay(0.08)) {
                 logoVisible = true
             }
-            withAnimation(.easeOut(duration: 0.35).delay(0.28)) {
+            withAnimation(.easeOut(duration: 0.28).delay(0.18)) {
                 wordmarkVisible = true
                 taglineVisible = true
             }
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(minDisplay * 1_000_000_000))
-                await maybeFinish(force: false)
-            }
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(hardCap * 1_000_000_000))
-                await maybeFinish(force: true)
-            }
+            Task { await scheduleExit() }
         }
     }
 
-    private var brandLockup: some View {
+    private func brandLockup(logoSize: CGFloat) -> some View {
         VStack(spacing: 6) {
+            KiddoTasksLogoMark(size: logoSize * 0.55)
             Text("KiddoTasks")
                 .font(KiddoTasksDesignTokens.Typography.headingLarge)
                 .foregroundStyle(.white)
@@ -102,37 +107,29 @@ struct SplashView: View {
                 .shadow(color: .black.opacity(0.45), radius: 4, x: 0, y: 1)
         }
         .multilineTextAlignment(.center)
+        .opacity(logoVisible ? 1 : 0)
     }
 
     @MainActor
-    private func maybeFinish(force: Bool) async {
-        guard !didFinish else { return }
-
-        let elapsed = Date().timeIntervalSince(appearedAt)
-        if elapsed < minDisplay {
-            try? await Task.sleep(nanoseconds: UInt64((minDisplay - elapsed) * 1_000_000_000))
-        }
-        guard !didFinish else { return }
-
-        if !force {
-            if useVideo {
-                // Let the clip play; if the app is already ready and the clip is
-                // still going, allow a soft exit after a bit so we never block.
-                let deadline = appearedAt.addingTimeInterval(hardCap - 0.4)
-                while !videoFinished, Date() < deadline {
-                    if isReady, Date().timeIntervalSince(appearedAt) > minDisplay + 1.0 {
-                        break
-                    }
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                }
-            } else {
-                let deadline = Date().addingTimeInterval(1.0)
-                while !isReady, Date() < deadline {
-                    try? await Task.sleep(nanoseconds: 50_000_000)
-                }
+    private func scheduleExit() async {
+        // Hold for the brand/intro beat, then exit once ready.
+        // Never wait for the entire 8s clip.
+        while !didFinish {
+            let elapsed = Date().timeIntervalSince(appearedAt)
+            if elapsed >= hardCap {
+                finish()
+                return
             }
+            if isReady, elapsed >= minDisplay {
+                finish()
+                return
+            }
+            try? await Task.sleep(nanoseconds: 80_000_000)
         }
+    }
 
+    @MainActor
+    private func finish() {
         guard !didFinish else { return }
         didFinish = true
         onFinish()

@@ -7,14 +7,14 @@ import UIKit
 #endif
 
 @main
-struct KiddoTasksApp: App {
+struct KiddotasksApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
     @State private var theme = ThemeStore()
     @State private var showSplash = true
     @State private var launchReady = false
 
-    /// Process start for a rough time-to-interactive log (Phase 7 measurement).
+    /// Process start for a rough time-to-interactive log.
     private static let processStart = Date()
 
     init() {
@@ -28,26 +28,30 @@ struct KiddoTasksApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
+                // Mount the real app immediately so the first heavy frame is
+                // painted *under* the splash — no blank gap after dismiss.
+                RootView()
+                    .environment(appState)
+                    .environment(theme)
+                    .preferredColorScheme(theme.appearance.preferredColorScheme)
+                    // Keep hit-testing off while splash is up.
+                    .allowsHitTesting(!showSplash)
+                    .opacity(showSplash ? 0.01 : 1)
+
                 if showSplash {
                     SplashView(isReady: launchReady) {
-                        withAnimation(.easeInOut(duration: 0.28)) {
+                        withAnimation(.easeInOut(duration: 0.22)) {
                             showSplash = false
                         }
                         let ms = Int(Date().timeIntervalSince(Self.processStart) * 1000)
                         print("[Perf] Splash dismissed after \(ms)ms from process start")
                     }
                     .transition(.opacity)
-                } else {
-                    RootView()
-                        .environment(appState)
-                        .environment(theme)
-                        .preferredColorScheme(theme.appearance.preferredColorScheme)
-                        .transition(.opacity)
                 }
             }
             .onAppear {
+                // Mark ready on the next runloop turn — don't sleep.
                 Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 80_000_000)
                     launchReady = true
                     if let route = AppState.sharedNotificationRoute {
                         AppState.sharedNotificationRoute = nil
