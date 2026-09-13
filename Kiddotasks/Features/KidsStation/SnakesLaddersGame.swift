@@ -246,28 +246,34 @@ struct SnakesLaddersView: View {
                             context.draw(text, at: CGPoint(x: rect.midX, y: rect.midY))
                         }
                     }
+                    // Ladders first (under snakes)
                     for (start, end) in SnakesLaddersEngine.ladders {
-                        drawLine(context: context, from: start, to: end, cell: cell, color: Color(hex: "#3F8B70"))
+                        drawLadder(context: context, from: start, to: end, cell: cell)
                     }
+                    // Snakes on top
                     for (start, end) in SnakesLaddersEngine.snakes {
-                        drawLine(context: context, from: start, to: end, cell: cell, color: Color(hex: "#D97868"))
+                        drawSnake(context: context, from: start, to: end, cell: cell)
                     }
                 }
 
-                ForEach(Array(p.enumerated()), id: \.element.id) { index, _ in
+                // Tokens — use .position (center in board space), NOT .offset
+                ForEach(Array(p.enumerated()), id: \.element.id) { index, player in
                     let pos = engine.positions.indices.contains(index) ? max(engine.positions[index], 1) : 1
                     let (col, row) = Self.colRow(for: pos)
-                    let stackOffset = CGFloat(index % 2) * cell * 0.22 + CGFloat(index / 2) * cell * 0.08
-                    Text(tokenEmoji(index))
-                        .font(.system(size: max(14, cell * 0.4)))
-                        .offset(
-                            x: CGFloat(col) * cell + cell * 0.08 + stackOffset,
-                            y: CGFloat(row) * cell + cell * 0.05
+                    let stackX = CGFloat(index % 2) * cell * 0.28 - cell * 0.07
+                    let stackY = CGFloat(index / 2) * cell * 0.18 - cell * 0.05
+                    let tokenSize = max(16, cell * 0.52)
+
+                    PlayerTokenView(player: player, size: tokenSize)
+                        .position(
+                            x: CGFloat(col) * cell + cell / 2 + stackX,
+                            y: CGFloat(row) * cell + cell / 2 + stackY
                         )
-                        .scaleEffect(engine.hopTick > 0 && index == engine.turnIndex ? 1.12 : 1)
+                        .scaleEffect(engine.hopTick > 0 && index == engine.turnIndex ? 1.14 : 1)
                         .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
-                        .animation(.spring(response: 0.16, dampingFraction: 0.55), value: pos)
+                        .animation(.spring(response: 0.18, dampingFraction: 0.6), value: pos)
                         .animation(.spring(response: 0.2, dampingFraction: 0.5), value: engine.hopTick)
+                        .zIndex(Double(index))
                 }
             }
             .frame(width: side, height: side)
@@ -281,29 +287,104 @@ struct SnakesLaddersView: View {
         .padding(.horizontal, 10)
     }
 
-    private func tokenEmoji(_ index: Int) -> String {
-        ["🧒", "🐱", "🚀", "🦊"][index % 4]
+    private func center(_ n: Int, cell: CGFloat) -> CGPoint {
+        let (col, row) = Self.colRow(for: n)
+        return CGPoint(x: CGFloat(col) * cell + cell / 2, y: CGFloat(row) * cell + cell / 2)
     }
 
-    private func drawLine(
-        context: GraphicsContext,
-        from: Int,
-        to: Int,
-        cell: CGFloat,
-        color: Color
-    ) {
-        let a = Self.colRow(for: from)
-        let b = Self.colRow(for: to)
+    /// Wooden ladder: two rails + rungs.
+    private func drawLadder(context: GraphicsContext, from: Int, to: Int, cell: CGFloat) {
+        let a = center(from, cell: cell)
+        let b = center(to, cell: cell)
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let len = max(sqrt(dx * dx + dy * dy), 1)
+        let nx = -dy / len
+        let ny = dx / len
+        let half = cell * 0.22
+
+        let railA1 = CGPoint(x: a.x + nx * half, y: a.y + ny * half)
+        let railA2 = CGPoint(x: a.x - nx * half, y: a.y - ny * half)
+        let railB1 = CGPoint(x: b.x + nx * half, y: b.y + ny * half)
+        let railB2 = CGPoint(x: b.x - nx * half, y: b.y - ny * half)
+
+        var rail1 = Path()
+        rail1.move(to: railA1)
+        rail1.addLine(to: railB1)
+        var rail2 = Path()
+        rail2.move(to: railA2)
+        rail2.addLine(to: railB2)
+
+        let railColor = Color(hex: "#A67C52")
+        let rungColor = Color(hex: "#C4A574")
+        let railW = max(2.5, cell * 0.09)
+        context.stroke(rail1, with: .color(railColor), style: StrokeStyle(lineWidth: railW, lineCap: .round))
+        context.stroke(rail2, with: .color(railColor), style: StrokeStyle(lineWidth: railW, lineCap: .round))
+
+        let rungCount = max(3, Int(len / (cell * 0.45)))
+        for i in 1..<rungCount {
+            let t = CGFloat(i) / CGFloat(rungCount)
+            let cx = a.x + dx * t
+            let cy = a.y + dy * t
+            var rung = Path()
+            rung.move(to: CGPoint(x: cx + nx * half, y: cy + ny * half))
+            rung.addLine(to: CGPoint(x: cx - nx * half, y: cy - ny * half))
+            context.stroke(rung, with: .color(rungColor), style: StrokeStyle(lineWidth: max(2, cell * 0.07), lineCap: .round))
+        }
+
+        // Start / end badges
+        let up = Text("🪜")
+            .font(.system(size: max(10, cell * 0.32)))
+        context.draw(up, at: CGPoint(x: a.x, y: a.y - cell * 0.05))
+    }
+
+    /// Snake: wavy body + head at the high square (slides down to tail).
+    private func drawSnake(context: GraphicsContext, from: Int, to: Int, cell: CGFloat) {
+        // from = head (high), to = tail (low)
+        let head = center(from, cell: cell)
+        let tail = center(to, cell: cell)
+
+        let dx = tail.x - head.x
+        let dy = tail.y - head.y
+        let len = max(sqrt(dx * dx + dy * dy), 1)
+        let ux = dx / len
+        let uy = dy / len
+        let nx = -uy
+        let ny = ux
+
         var path = Path()
-        let p1 = CGPoint(x: CGFloat(a.col) * cell + cell / 2, y: CGFloat(a.row) * cell + cell / 2)
-        let p2 = CGPoint(x: CGFloat(b.col) * cell + cell / 2, y: CGFloat(b.row) * cell + cell / 2)
-        path.move(to: p1)
-        path.addLine(to: p2)
+        path.move(to: head)
+        let steps = 16
+        for i in 1...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let wave = sin(t * .pi * 3) * cell * 0.28
+            let x = head.x + dx * t + nx * wave
+            let y = head.y + dy * t + ny * wave
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
         context.stroke(
             path,
-            with: .color(color.opacity(0.7)),
-            style: StrokeStyle(lineWidth: max(2, cell * 0.07), lineCap: .round)
+            with: .color(Color(hex: "#3F8B70")),
+            style: StrokeStyle(lineWidth: max(4, cell * 0.16), lineCap: .round, lineJoin: .round)
         )
+        // Belly stripe
+        context.stroke(
+            path,
+            with: .color(Color(hex: "#7BC49A").opacity(0.45)),
+            style: StrokeStyle(lineWidth: max(2, cell * 0.06), lineCap: .round)
+        )
+
+        // Head + tail markers
+        let headEmoji = Text("🐍").font(.system(size: max(12, cell * 0.38)))
+        context.draw(headEmoji, at: CGPoint(x: head.x, y: head.y - cell * 0.02))
+        let tailDot = CGRect(
+            x: tail.x - cell * 0.1,
+            y: tail.y - cell * 0.1,
+            width: cell * 0.2,
+            height: cell * 0.2
+        )
+        context.fill(Path(ellipseIn: tailDot), with: .color(Color(hex: "#2E6B52")))
     }
 
     static func colRow(for n: Int) -> (col: Int, row: Int) {
@@ -389,6 +470,41 @@ struct SnakesLaddersView: View {
             dicePop = false
             engine.endRollAnimation()
             await engine.moveSteps(value)
+        }
+    }
+}
+
+/// Board token: real kid avatar when linked, else colored initial chip.
+private struct PlayerTokenView: View {
+    @Environment(AppState.self) private var appState
+    let player: GamePlayer
+    let size: CGFloat
+
+    private var child: Child? {
+        guard let id = player.childId else { return nil }
+        return appState.child(id: id)
+    }
+
+    var body: some View {
+        if let child {
+            ChildAvatarView(
+                avatar: child.avatar,
+                size: size,
+                photoData: child.photoData,
+                photoURL: child.photoURL
+            )
+        } else {
+            Circle()
+                .fill(Color(hex: player.colorHex).opacity(0.28))
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(String(player.displayName.prefix(1)).uppercased())
+                        .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color(hex: player.colorHex))
+                )
+                .overlay(
+                    Circle().strokeBorder(KiddoTasksDesignTokens.Colors.surfaceCard, lineWidth: 2)
+                )
         }
     }
 }
