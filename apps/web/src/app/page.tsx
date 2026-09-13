@@ -248,9 +248,10 @@ export default function WelcomePage() {
         }
         await loadFamily(cred.user.uid);
       } else if (mode === "join") {
-        // Co-parent join is Premium (founder email always allowed).
+        // Co-parent join is Premium; founder email always allowed (payments not live).
+        const joinEmail = (email || firebaseAuth().currentUser?.email || "").trim();
         const joinAllowed = canJoinWithCode(
-          email || firebaseAuth().currentUser?.email,
+          joinEmail,
           useFamilyStore.getState().entitlements.plan !== "free"
         );
         if (!joinAllowed) {

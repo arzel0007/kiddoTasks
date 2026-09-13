@@ -306,16 +306,17 @@ final class AppState {
                 do {
                     isLoading = true
                     defer { isLoading = false }
-                    // Premium gate: co-parent join is not on the free plan
-                    // (owner email is always exempt).
+                    // Founder/test account is always allowed (payments not live yet).
+                    // Premium is checked against the *current* family only after owner check.
+                    let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
                     let isPremium = (store.family?.settings.plan ?? "free") != "free"
-                    guard KiddoPlan.canJoinWithCode(email: email, isPremium: isPremium) else {
+                    guard KiddoPlan.canJoinWithCode(email: trimmedEmail, isPremium: isPremium) else {
                         authenticationError = KiddoPlan.upgradePrompt(for: .joinFamily)
                         return
                     }
                     try await cloudSync.joinFamilyWithCode(
                         code: code,
-                        email: email,
+                        email: trimmedEmail,
                         password: password
                     )
                     completion?()

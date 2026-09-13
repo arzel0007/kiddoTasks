@@ -1009,16 +1009,31 @@ struct PINEditorRow: View {
                     isSecure: true
                 )
                 Button("Save") {
+                    let previous = appState.store.family?.settings.kidsStationPIN
                     do {
                         try appState.store.updateKidsPIN(pin)
-                        // Keep cloud kidsPins index in sync when possible.
+                        // Keep cloud kidsPins index in sync (required for other devices).
                         if appState.isCloudEnabled {
+                            let newPin = pin
                             Task { @MainActor in
-                                try? await appState.cloudSync.syncKidsPINIndex(pin: pin)
+                                do {
+                                    try await appState.cloudSync.syncKidsPINIndex(
+                                        pin: newPin,
+                                        previousPin: previous
+                                    )
+                                    // Push family snapshot so settings match on every device.
+                                    try? await appState.cloudSync.pushSnapshot()
+                                    appState.toastSuccess("PIN updated on all devices")
+                                } catch {
+                                    appState.toastError(
+                                        "PIN saved on this device, but cloud sync failed — kids on other devices may need the old PIN."
+                                    )
+                                }
                             }
+                        } else {
+                            appState.toastSuccess("PIN updated")
                         }
                         pin = ""
-                        appState.toastSuccess("PIN updated")
                     } catch {
                         appState.toastError(error.localizedDescription)
                     }

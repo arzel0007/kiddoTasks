@@ -291,7 +291,10 @@ export const joinFamilyWithCode = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError("already-exists", "Account already belongs to another family");
   }
 
-  const email = String(context.auth.token.email || "");
+  const email = String(context.auth.token.email || "").trim().toLowerCase();
+  const OWNER_EMAILS = new Set(["xxarzelxx@gmail.com"]);
+  // Client enforces Premium for co-parent join; owner/founder is always allowed.
+  // (Payments are not live yet — owner exemption unblocks real-device testing.)
   const displayName = String(data?.displayName || "Parent");
   const now = admin.firestore.FieldValue.serverTimestamp();
 
@@ -311,7 +314,12 @@ export const joinFamilyWithCode = functions.https.onCall(async (data, context) =
     });
   });
 
-  return { familyId, parentId: uid, alreadyMember: false };
+  return {
+    familyId,
+    parentId: uid,
+    alreadyMember: false,
+    ownerAllowed: OWNER_EMAILS.has(email),
+  };
 });
 
 export const createChildProfile = functions.https.onCall(async (data, context) => {
@@ -866,6 +874,28 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
         { merge: true }
       );
       batchCount += 1;
+    }
+
+    // Keep kidsPins index in sync when the client pushes a PIN (cross-device Kids Station).
+    const pushedPin = data.family?.settings?.kidsStationPIN
+      ? String(data.family.settings.kidsStationPIN).trim()
+      : "";
+    if (/^\d{4,6}$/.test(pushedPin)) {
+      const existingFamilySnap = await db.collection("families").doc(familyId).get();
+      const previousPin = String(existingFamilySnap.data()?.settings?.kidsStationPIN || "").trim();
+      batch.set(
+        db.collection("kidsPins").doc(pushedPin),
+        { familyId, updatedAt: now },
+        { merge: true }
+      );
+      batchCount += 1;
+      if (previousPin && previousPin !== pushedPin) {
+        const stale = await db.collection("kidsPins").doc(previousPin).get();
+        if (stale.exists && stale.data()?.familyId === familyId) {
+          batch.delete(db.collection("kidsPins").doc(previousPin));
+          batchCount += 1;
+        }
+      }
     }
   }
 

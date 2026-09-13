@@ -183,8 +183,12 @@ final class CloudSyncEngine {
 
         // Email confirmation (anti-spam / security). Parent still gets a local
         // family immediately; cloud features stay available after they confirm.
-        if let createdUser, !createdUser.isEmailVerified {
-            try? await createdUser.sendEmailVerification()
+        if let createdUser, !createdUser.isEmailVerified, !KiddoPlan.isOwner(email: email) {
+            do {
+                try await createdUser.sendEmailVerification()
+            } catch {
+                print("[Auth] sendEmailVerification failed: \(error.localizedDescription)")
+            }
         }
 
         let callResult = try await Functions.functions()
@@ -248,8 +252,18 @@ final class CloudSyncEngine {
         let uid = user.uid
 
         // Require confirmed email before entering Parent Center (anti-spam).
-        if !user.isEmailVerified {
-            try? await user.sendEmailVerification()
+        // Founder/test accounts skip the gate so real-device QA isn't blocked
+        // when Firebase email templates aren't configured yet.
+        if !user.isEmailVerified, !KiddoPlan.isOwner(email: email) {
+            do {
+                try await user.sendEmailVerification()
+            } catch {
+                // Don't claim an email was sent when Firebase rejected the request
+                // (template missing, rate limit, network).
+                throw FirebaseError.operationFailed(
+                    "Couldn’t send the confirmation email. Check spam, or try again in a few minutes."
+                )
+            }
             throw FirebaseError.emailNotVerified
         }
 
@@ -469,12 +483,16 @@ final class CloudSyncEngine {
     }
 
     /// Keeps the server-side kidsPins index in sync after a parent changes the PIN.
-    func syncKidsPINIndex(pin: String) async throws {
+    func syncKidsPINIndex(pin: String, previousPin: String? = nil) async throws {
         #if canImport(FirebaseFunctions)
         guard isAvailable else { return }
+        var payload: [String: Any] = ["pin": pin]
+        if let previousPin, !previousPin.isEmpty, previousPin != pin {
+            payload["previousPin"] = previousPin
+        }
         _ = try await Functions.functions()
             .httpsCallable("updateKidsStationPIN")
-            .call(["pin": pin])
+            .call(payload)
         #endif
     }
 
