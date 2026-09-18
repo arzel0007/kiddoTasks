@@ -2,8 +2,9 @@ import SwiftUI
 
 // MARK: - Head
 
-/// Animated Arz head. Idle: subtle blink / breathe / micro-move.
-/// Expression state comes from `ArzCompanionController`.
+/// Animated Arz head.
+/// Temporary swap (web + iOS): muted looping emotion-cycle video when bundled.
+/// Falls back to expression PNG stills on Reduce Motion or missing clip.
 struct ArzHeadView: View {
     var size: CGFloat = 52
     var interactive: Bool = true
@@ -14,9 +15,16 @@ struct ArzHeadView: View {
     @State private var controller = ArzCompanionController.shared
     @State private var blinkWorkItem: DispatchWorkItem?
 
+    private var prefersVideo: Bool {
+        !reduceMotion && ArzAvatarMedia.hasVideo
+    }
+
     var body: some View {
         Group {
-            if reduceMotion {
+            if prefersVideo, let videoURL = ArzAvatarMedia.videoURL {
+                ArzLoopVideoView(url: videoURL, size: size)
+                    .clipShape(Circle())
+            } else if reduceMotion {
                 staticHead
             } else {
                 animatedHead

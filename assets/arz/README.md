@@ -7,8 +7,10 @@
 | Asset | Role | Spec |
 |---|---|---|
 | `Boy_riding_rocket_in_space.mp4` | Full-screen splash | 720×1280 portrait, H.264+AAC, ~8s |
-| `kiddo_head_*.png` | Header Arz | 512×512 @3x (≈171pt logical) |
-| `/arz/head_*.png` (web) | Header Arz | Same 512px sources |
+| `Boy_animated_avatar_cycling_emotions.mp4` | Header Arz avatar (web + iOS temporary) | 1280×720 landscape, H.264+AAC, ~10s, ~1.5MB |
+| `kiddo_head_*.png` | Header Arz fallback stills | 512×512 @3x (≈171pt logical) |
+| `/arz/head_*.png` (web) | Header Arz fallback stills | Same 512px sources |
+| `/arz/emotions-loop.mp4` (web) | Same emotion loop for web avatar | Copy of the iOS clip |
 
 There is no higher-resolution master for the splash clip in-repo. Do not upscale it and call it HD. Replace `master/` with a true 1080p/1440p export when available; UI already loads by filename.
 

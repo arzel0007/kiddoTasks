@@ -192,6 +192,10 @@ export const ARZ_AVATAR_SIZE = 80;
 /** How long the tap phrase stays visible (ms). */
 export const ARZ_PHRASE_MS = 2500;
 
+/** Temporary web-only avatar: looping emotion-cycle MP4 (1280×720 H.264). */
+const ARZ_VIDEO_SRC = "/arz/emotions-loop.mp4";
+const ARZ_STILL_FALLBACK = "/arz/head_happy.png";
+
 const ARZ_PHRASES = [
   {
     title: "Hi! I'm Arz 👋",
@@ -226,8 +230,10 @@ function useAvatarSize() {
   return ARZ_AVATAR_SIZE;
 }
 
-/** Compact Arz avatar for the page header row (replaces brand logo).
- *  Uses 512px HD stills — not a large video box.
+/**
+ * Compact Arz avatar for the page header row (replaces brand logo).
+ * Web-only temporary swap: muted looping MP4 of the boy avatar cycling emotions.
+ * Tap still opens the phrase bubble. Reduced-motion / load failure → PNG stills.
  */
 export function ArzAvatar({
   size,
@@ -240,13 +246,17 @@ export function ArzAvatar({
   const { expression, blinking, reduceMotion } = useArzState();
   const [showPhrase, setShowPhrase] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
   const [phrase, setPhrase] = useState<{ title: string; body: string }>(ARZ_PHRASES[0]);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const responsive = useAvatarSize();
   const px = size ?? responsive;
 
-  const src = blinking ? BLINK_ASSET : ASSET[expression];
-  const idleMotion = !reduceMotion && (expression === "idle" || expression === "happy");
+  const useVideo = !reduceMotion && !videoFailed;
+  const stillSrc = blinking ? BLINK_ASSET : ASSET[expression];
+  const idleMotion =
+    !reduceMotion && !useVideo && (expression === "idle" || expression === "happy");
 
   useEffect(() => {
     return () => {
@@ -254,8 +264,15 @@ export function ArzAvatar({
     };
   }, []);
 
+  // Keep the loop playing when the element remounts after route changes.
+  useEffect(() => {
+    if (!useVideo) return;
+    const el = videoRef.current;
+    if (!el) return;
+    void el.play().catch(() => setVideoFailed(true));
+  }, [useVideo]);
+
   const showPhraseNow = () => {
-    // Keep the resting face — only show the bubble.
     if (kidName) {
       setPhrase({
         title: `Hi ${kidName}! 👋`,
@@ -288,16 +305,35 @@ export function ArzAvatar({
           window.setTimeout(() => setPressed(false), 180);
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt=""
-          draggable={false}
-          decoding="async"
-          width={px * 3}
-          height={px * 3}
-          className="h-full w-full rounded-full object-contain [image-rendering:auto]"
-        />
+        {useVideo ? (
+          <video
+            ref={videoRef}
+            src={ARZ_VIDEO_SRC}
+            width={px}
+            height={px}
+            muted
+            loop
+            playsInline
+            autoPlay
+            preload="auto"
+            disablePictureInPicture
+            aria-hidden
+            className="h-full w-full rounded-full bg-white object-cover"
+            style={{ objectPosition: "50% 30%" }}
+            onError={() => setVideoFailed(true)}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={videoFailed ? ARZ_STILL_FALLBACK : stillSrc}
+            alt=""
+            draggable={false}
+            decoding="async"
+            width={px * 3}
+            height={px * 3}
+            className="h-full w-full rounded-full object-contain [image-rendering:auto]"
+          />
+        )}
       </button>
 
       {showPhrase && (
