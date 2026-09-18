@@ -23,6 +23,9 @@ struct SplashView: View {
     private let videoMinDisplay: TimeInterval = 3.0
     /// Absolute ceiling — never block launch past this.
     private let hardCap: TimeInterval = 3.5
+    /// Splash intro clip (not the header Arz avatar).
+    /// Source is 720×1280 H.264; replace with a true 1080p+ master under
+    /// `assets/arz/master/` when available — SplashVideoLayer loads by name.
     private let videoResourceName = "Boy_riding_rocket_in_space"
 
     private var hasVideoAsset: Bool {

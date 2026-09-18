@@ -29,37 +29,8 @@ struct RootView: View {
         }
         // No root `.animation`/`.transaction` — those overrode NavigationStack
         // push/pop and tab transitions (janky navigation).
-        .overlay(alignment: .top) {
-            if appState.cloudSyncStatus == .pending
-                || appState.cloudSyncStatus == .syncing {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.mini)
-                    Text(appState.cloudSyncStatus == .syncing ? "Syncing…" : "Waiting to sync…")
-                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.95)))
-                .padding(.top, 4)
-                .zIndex(9)
-            } else if case .error = appState.cloudSyncStatus {
-                HStack(spacing: 6) {
-                    Image(systemName: "wifi.exclamationmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
-                    Text("Offline — changes save on this device")
-                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.95)))
-                .padding(.top, 4)
-                .zIndex(9)
-            }
-        }
+        // Arz lives in each page header (ArzPageHeader / arzNavigationTitle) —
+        // not as a shell overlay.
         .overlay(alignment: .bottom) {
             if let toast = toastCenter.current {
                 ToastBannerView(
@@ -82,6 +53,27 @@ struct RootView: View {
             Button("OK", role: .cancel) { appState.clearError() }
         } message: {
             Text(appState.errorMessage ?? "")
+        }
+        .onChange(of: mode) { _, newMode in
+            switch newMode {
+            case .login:
+                Arz.returnToIdle()
+            case .kidsStation:
+                Arz.handle(.kidsStationOpened)
+            case .kidsSelection, .parentControl:
+                Arz.handle(.dashboardOpened)
+            }
+        }
+        .onChange(of: appState.errorMessage) { _, message in
+            if message != nil {
+                Arz.handle(.error)
+            }
+        }
+        .onChange(of: appState.store.achievements.count) { _, count in
+            // Achievement unlocks bump this array; react without touching store logic.
+            if count > 0 {
+                Arz.handle(.achievementUnlocked)
+            }
         }
     }
 }

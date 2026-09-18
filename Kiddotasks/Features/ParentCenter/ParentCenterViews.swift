@@ -35,6 +35,7 @@ struct TaskListView: View {
     @State private var showEditor = false
     @State private var taskPendingDeletion: KiddoTask?
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
 
     private var activeTasks: [KiddoTask] {
         let base = appState.store.tasks.filter(\.isActive)
@@ -47,89 +48,136 @@ struct TaskListView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Active") {
-                    let active = activeTasks
-                    if active.isEmpty {
-                        EmptyListHint(
-                            emoji: "📋",
-                            title: search.isEmpty
-                                ? "No chores yet. Create one for the kids."
-                                : "No chores match “\(search)”.",
-                            actionTitle: search.isEmpty ? "Add task" : nil
-                        ) {
-                            showEditor = true
-                        }
+            VStack(spacing: 0) {
+                ArzPageHeader(title: "Tasks") {
+                    Button { showEditor = true } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(KiddoTasksDesignTokens.Colors.primary))
                     }
-                    ForEach(active) { task in
-                        NavigationLink {
-                            TaskEditorView(task: task)
-                        } label: {
-                            TaskRow(task: task)
-                        }
-                        .buttonStyle(CardPressStyle())
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                taskPendingDeletion = task
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                            Button {
-                                do {
-                                    try appState.store.archiveTask(task.id)
-                                    appState.toastSuccessUndo("Task archived") {
-                                        do {
-                                            try appState.store.restoreTask(task.id)
-                                            appState.toastSuccess("Task restored")
-                                        } catch {
-                                            appState.toastError(error.localizedDescription)
-                                        }
-                                    }
-                                } catch {
-                                    appState.toastError(error.localizedDescription)
-                                }
-                            } label: {
-                                Label("Archive", systemImage: "archivebox")
-                            }
-                            .tint(KiddoTasksDesignTokens.Colors.warning)
-                        }
-                    }
+                    .buttonStyle(KiddoPressStyle())
+                    .accessibilityLabel("Add task")
                 }
 
-                let archived = appState.store.tasks.filter { !$0.isActive }
-                if !archived.isEmpty {
-                    Section("Archived") {
-                        ForEach(archived) { task in
-                            TaskRow(task: task, isArchived: true)
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
-                                        taskPendingDeletion = task
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                    Button {
-                                        do {
-                                            try appState.store.restoreTask(task.id)
-                                            appState.toastSuccess("Task restored")
-                                        } catch {
-                                            appState.toastError(error.localizedDescription)
-                                        }
-                                    } label: {
-                                        Label("Restore", systemImage: "arrow.uturn.backward")
-                                    }
-                                    .tint(KiddoTasksDesignTokens.Colors.success)
+                List {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            TextField("Search chores", text: $search)
+                                .focused($searchFocused)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .submitLabel(.search)
+                            if !search.isEmpty {
+                                Button {
+                                    search = ""
+                                    searchFocused = false
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                                 }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(KiddoTasksDesignTokens.Colors.surfaceCard)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(KiddoTasksDesignTokens.Colors.border, lineWidth: 1)
+                        )
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+
+                    Section("Active") {
+                        let active = activeTasks
+                        if active.isEmpty {
+                            EmptyListHint(
+                                emoji: "📋",
+                                title: search.isEmpty
+                                    ? "No chores yet. Create one for the kids."
+                                    : "No chores match “\(search)”.",
+                                actionTitle: search.isEmpty ? "Add task" : nil
+                            ) {
+                                showEditor = true
+                            }
+                        }
+                        ForEach(active) { task in
+                            NavigationLink {
+                                TaskEditorView(task: task)
+                            } label: {
+                                TaskRow(task: task)
+                            }
+                            .buttonStyle(CardPressStyle())
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    taskPendingDeletion = task
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                Button {
+                                    do {
+                                        try appState.store.archiveTask(task.id)
+                                        appState.toastSuccessUndo("Task archived") {
+                                            do {
+                                                try appState.store.restoreTask(task.id)
+                                                appState.toastSuccess("Task restored")
+                                            } catch {
+                                                appState.toastError(error.localizedDescription)
+                                            }
+                                        }
+                                    } catch {
+                                        appState.toastError(error.localizedDescription)
+                                    }
+                                } label: {
+                                    Label("Archive", systemImage: "archivebox")
+                                }
+                                .tint(KiddoTasksDesignTokens.Colors.warning)
+                            }
+                        }
+                    }
+
+                    let archived = appState.store.tasks.filter { !$0.isActive }
+                    if !archived.isEmpty {
+                        Section("Archived") {
+                            ForEach(archived) { task in
+                                TaskRow(task: task, isArchived: true)
+                                    .swipeActions(edge: .trailing) {
+                                        Button(role: .destructive) {
+                                            taskPendingDeletion = task
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                        Button {
+                                            do {
+                                                try appState.store.restoreTask(task.id)
+                                                appState.toastSuccess("Task restored")
+                                            } catch {
+                                                appState.toastError(error.localizedDescription)
+                                            }
+                                        } label: {
+                                            Label("Restore", systemImage: "arrow.uturn.backward")
+                                        }
+                                        .tint(KiddoTasksDesignTokens.Colors.success)
+                                    }
+                            }
                         }
                     }
                 }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Tasks")
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search chores")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showEditor = true } label: { Image(systemName: "plus") }
-                }
-            }
+            .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .scrollDismissesKeyboard(.interactively)
             .sheet(isPresented: $showEditor) {
                 TaskEditorView()
             }
@@ -394,96 +442,149 @@ struct TaskEditorView: View {
 struct RewardListView: View {
     @Environment(AppState.self) private var appState
     @State private var showEditor = false
+    @State private var rewardPendingDeletion: Reward?
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Active") {
-                    let active = appState.store.rewards.filter(\.isActive)
-                    if active.isEmpty {
-                        EmptyListHint(
-                            emoji: "🎁",
-                            title: "No rewards yet. Kids can shop once you add some.",
-                            actionTitle: "Add reward"
-                        ) { showEditor = true }
+            VStack(spacing: 0) {
+                ArzPageHeader(title: "Rewards") {
+                    Button { showEditor = true } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(KiddoTasksDesignTokens.Colors.primary))
                     }
-                    ForEach(active) { reward in
-                        NavigationLink {
-                            RewardEditorView(reward: reward)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: reward.icon)
-                                    .font(.system(size: 17, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 40, height: 40)
-                                    .background {
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(KiddoTasksDesignTokens.Colors.accent)
-                                    }
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(reward.name)
-                                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
-                                    Text("\(reward.pointCost) ⭐")
-                                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button {
-                                reward.isActive = false
-                                do {
-                                    try appState.store.updateReward(reward)
-                                    appState.toastSuccess("Reward archived")
-                                } catch {
-                                    appState.toastError(error.localizedDescription)
-                                }
-                            } label: {
-                                Label("Archive", systemImage: "archivebox")
-                            }
-                            .tint(KiddoTasksDesignTokens.Colors.warning)
-                        }
-                    }
+                    .buttonStyle(KiddoPressStyle())
+                    .accessibilityLabel("Add reward")
                 }
 
-                let archived = appState.store.rewards.filter { !$0.isActive }
-                if !archived.isEmpty {
-                    Section("Archived") {
-                        ForEach(archived) { reward in
-                            HStack {
-                                Text(reward.name)
-                                    .font(KiddoTasksDesignTokens.Typography.titleSmall)
-                                Spacer()
-                                Text("Archived")
-                                    .font(KiddoTasksDesignTokens.Typography.captionSmall)
-                                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                List {
+                    Section("Active") {
+                        let active = appState.store.rewards.filter(\.isActive)
+                        if active.isEmpty {
+                            EmptyListHint(
+                                emoji: "🎁",
+                                title: "No rewards yet. Kids can shop once you add some.",
+                                actionTitle: "Add reward"
+                            ) { showEditor = true }
+                        }
+                        ForEach(active) { reward in
+                            NavigationLink {
+                                RewardEditorView(reward: reward)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: reward.icon)
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background {
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .fill(KiddoTasksDesignTokens.Colors.accent)
+                                        }
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(reward.name)
+                                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                                        Text("\(reward.pointCost) ⭐")
+                                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
                             }
-                            .swipeActions(edge: .trailing) {
+                            // Swipe right → Delete; swipe left → Archive
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    rewardPendingDeletion = reward
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                .tint(KiddoTasksDesignTokens.Colors.error)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button {
-                                    reward.isActive = true
+                                    reward.isActive = false
                                     do {
                                         try appState.store.updateReward(reward)
-                                        appState.toastSuccess("Reward restored")
+                                        appState.toastSuccess("Reward archived")
                                     } catch {
                                         appState.toastError(error.localizedDescription)
                                     }
                                 } label: {
-                                    Label("Restore", systemImage: "arrow.uturn.backward")
+                                    Label("Archive", systemImage: "archivebox")
                                 }
-                                .tint(KiddoTasksDesignTokens.Colors.success)
+                                .tint(KiddoTasksDesignTokens.Colors.warning)
+                            }
+                        }
+                    }
+
+                    let archived = appState.store.rewards.filter { !$0.isActive }
+                    if !archived.isEmpty {
+                        Section("Archived") {
+                            ForEach(archived) { reward in
+                                HStack {
+                                    Text(reward.name)
+                                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                                    Spacer()
+                                    Text("Archived")
+                                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        rewardPendingDeletion = reward
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .tint(KiddoTasksDesignTokens.Colors.error)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button {
+                                        reward.isActive = true
+                                        do {
+                                            try appState.store.updateReward(reward)
+                                            appState.toastSuccess("Reward restored")
+                                        } catch {
+                                            appState.toastError(error.localizedDescription)
+                                        }
+                                    } label: {
+                                        Label("Restore", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .tint(KiddoTasksDesignTokens.Colors.success)
+                                }
                             }
                         }
                     }
                 }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Rewards")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showEditor = true } label: { Image(systemName: "plus") }
-                }
-            }
+            .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showEditor) { RewardEditorView() }
+            .confirmationDialog(
+                "Delete “\(rewardPendingDeletion?.name ?? "")”?",
+                isPresented: Binding(
+                    get: { rewardPendingDeletion != nil },
+                    set: { if !$0 { rewardPendingDeletion = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete reward", role: .destructive) {
+                    if let reward = rewardPendingDeletion {
+                        do {
+                            try appState.store.deleteReward(reward.id)
+                            appState.toastSuccess("Reward deleted")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
+                    }
+                    rewardPendingDeletion = nil
+                }
+                Button("Cancel", role: .cancel) { rewardPendingDeletion = nil }
+            } message: {
+                Text("Kids can no longer claim this. Past claims stay in History.")
+            }
         }
     }
 }
@@ -620,7 +721,9 @@ struct FamilyView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 0) {
+                ArzPageHeader(title: "Family")
+                List {
                 Section {
                     VStack(spacing: 12) {
                         Button {
@@ -848,8 +951,12 @@ struct FamilyView: View {
                     }
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                 }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             }
-            .navigationTitle("Family")
+            .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showChildEditor) { ChildEditorView() }
             .sheet(isPresented: $showFamilyNameEditor) {
                 FamilyNameEditor(initialName: appState.currentFamily?.name ?? "")
@@ -1240,7 +1347,9 @@ struct ActivityView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 0) {
+                ArzPageHeader(title: "History")
+                List {
                 Picker("Filter", selection: $filter) {
                     ForEach(Filter.allCases) { f in
                         Text(f.rawValue).tag(f)
@@ -1326,8 +1435,12 @@ struct ActivityView: View {
                         }
                     }
                 }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             }
-            .navigationTitle("History")
+            .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }

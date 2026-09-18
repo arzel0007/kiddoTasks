@@ -940,4 +940,40 @@ body {
   .memory-card:hover:not(:disabled) {
     transform: none;
   }
+
+  .arz-breathe,
+  .arz-pop {
+    animation: none !important;
+  }
+}
+
+/* —— Arz companion (flat dock) —— */
+.arz-breathe {
+  animation: arz-breathe 4s ease-in-out infinite;
+}
+
+.arz-pop {
+  animation: arz-pop 0.55s ease-out;
+}
+
+@keyframes arz-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes arz-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
 }

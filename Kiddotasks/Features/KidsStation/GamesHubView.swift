@@ -282,7 +282,10 @@ struct GamesHubView: View {
                 .padding(16)
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
-            .navigationTitle("Games")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                ArzPageHeader(title: "Games")
+            }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selectedGame) { game in
                 GamePlayerSetupView(game: game) { players, boardSize in
                     selectedGame = nil

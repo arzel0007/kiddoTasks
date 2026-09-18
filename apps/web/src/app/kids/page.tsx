@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
-import { BrandLogo } from "@/components/brand-logo";
+import { ArzAvatar, arzHandle } from "@/components/arz-companion";
 
 /** Kids Station — works for parent-signed-in browser or PIN session. */
 export default function KidsPage() {
@@ -14,9 +16,48 @@ export default function KidsPage() {
   const store = useFamilyStore();
   const { family, children, tasks, completions } = store;
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [restoringParent, setRestoringParent] = useState(
+    () => isFirebaseConfigured && !store.kidsMode && !store.family
+  );
 
   const canOpen = Boolean(family) || store.kidsMode;
   const selected = children.find((c) => c.id === selectedChildId) ?? null;
+
+  // Parent session lives outside this route — restore family so a signed-in
+  // parent isn't bounced into the lock screen (and then to /parent/today).
+  useEffect(() => {
+    if (!isFirebaseConfigured) {
+      setRestoringParent(false);
+      return;
+    }
+    const auth = firebaseAuth();
+    let cancelled = false;
+    const tryLoad = (user: { uid: string } | null) => {
+      if (cancelled) return;
+      if (!user) {
+        setRestoringParent(false);
+        return;
+      }
+      const s = useFamilyStore.getState();
+      if (s.kidsMode || s.family || s.loading) {
+        setRestoringParent(false);
+        return;
+      }
+      void s.loadFamilyForParent(user.uid).finally(() => {
+        if (!cancelled) setRestoringParent(false);
+      });
+    };
+    tryLoad(auth.currentUser);
+    const unsub = onAuthStateChanged(auth, tryLoad);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (canOpen) arzHandle("kidsStationOpened");
+  }, [canOpen]);
 
   const missions = useMemo(() => {
     if (!selected) return [];
@@ -27,7 +68,7 @@ export default function KidsPage() {
     );
   }, [tasks, selected]);
 
-  if (store.loading && !family) {
+  if ((store.loading || restoringParent) && !family && !store.kidsMode) {
     return (
       <main className="min-h-screen bg-page px-4 py-8">
         <div className="mx-auto max-w-3xl">
@@ -48,13 +89,17 @@ export default function KidsPage() {
             Sign in as a parent, or unlock with the family PIN.
           </p>
           <div className="mt-5 space-y-2">
-            <button type="button" className="btn-primary" onClick={() => router.push("/")}>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => router.push("/?from=kids&auth=kids")}
+            >
               Enter family PIN
             </button>
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/?from=kids&auth=signin")}
             >
               Parent sign in
             </button>
@@ -65,21 +110,20 @@ export default function KidsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-page pb-16">
+    <main className="min-h-screen bg-page pb-28">
       <div className="mx-auto max-w-3xl px-4 py-6">
-        {/* Top bar */}
-        <div className="mb-5 flex items-center justify-between">
+        {/* Top bar — Arz inline with title (flat). mb-5 keeps gap before content. */}
+        <div className="mb-5 flex min-h-[96px] items-center gap-3">
           <Link
             href={store.parentUid ? "/parent/today" : "/"}
             className="rounded-full bg-white/80 px-3 py-1.5 text-xs font-bold text-ink-secondary shadow-card"
           >
             Parent
           </Link>
-          <div className="flex items-center gap-2">
-            <BrandLogo size={28} />
-            <h1 className="text-lg font-bold text-ink">Who&apos;s playing?</h1>
-          </div>
-          <div className="w-16" />
+          <ArzAvatar kidName={selected?.name ?? children[0]?.name ?? "friend"} />
+          <h1 className="min-w-0 flex-1 truncate text-2xl font-bold text-ink">
+            {selected ? `Hi, ${selected.name}!` : "Who's playing?"}
+          </h1>
         </div>
 
         {!selected ? (

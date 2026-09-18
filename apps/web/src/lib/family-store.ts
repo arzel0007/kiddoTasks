@@ -38,6 +38,9 @@ type FamilyState = {
   kidsMode: boolean;
   setKidsMode: (on: boolean) => void;
   reset: () => void;
+  /** Local list updates for parent web UI (full editors live on iOS). */
+  setRewardActive: (id: string, isActive: boolean) => void;
+  removeReward: (id: string) => void;
   loadFamilyForParent: (uid: string) => Promise<void>;
   loadKidsSession: (payload: {
     family: Family;
@@ -71,6 +74,16 @@ export const useFamilyStore = create<FamilyState>((set) => ({
   kidsMode: false,
 
   setKidsMode: (on) => set({ kidsMode: on }),
+
+  setRewardActive: (id, isActive) =>
+    set((s) => ({
+      rewards: s.rewards.map((r) => (r.id === id ? { ...r, isActive } : r)),
+    })),
+
+  removeReward: (id) =>
+    set((s) => ({
+      rewards: s.rewards.filter((r) => r.id !== id),
+    })),
 
   reset: () =>
     set({

@@ -8,6 +8,8 @@ struct ChildSelectionView: View {
 
     /// Soft-previewed child (press/focus) — drives the page wash before enter.
     @State private var previewChild: Child?
+    @State private var showArzIntro = false
+    @State private var arzPhrase = ArzPhrases.all[0]
 
     private var pageTheme: ChildPlayerTheme {
         ChildPlayerTheme.theme(for: previewChild, colorScheme: colorScheme)
@@ -24,7 +26,7 @@ struct ChildSelectionView: View {
                     .transition(.opacity)
             }
 
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 header
 
                 if appState.familyChildren.isEmpty {
@@ -42,7 +44,7 @@ struct ChildSelectionView: View {
                     .padding(.horizontal, 8)
                 }
             }
-            .padding(.top, 20)
+            .padding(.top, 12)
             .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
         }
         .animation(
@@ -52,42 +54,68 @@ struct ChildSelectionView: View {
     }
 
     private var header: some View {
-        HStack {
-            Button {
-                appState.clearChildProfile()
-                appState.interfaceOverride = .parent
-            } label: {
-                Text("Parent")
-                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.85))
-                    )
-            }
-            .buttonStyle(KiddoPressStyle())
-            .accessibilityLabel("Back to Parent Center")
-
-            Spacer()
-
-            VStack(spacing: 4) {
-                HStack(spacing: 8) {
-                    KiddoTasksLogoMark(size: 24)
-                    Text("Who's playing?")
-                        .font(KiddoTasksDesignTokens.Typography.headingLarge)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+        VStack(spacing: 12) {
+            HStack {
+                Button {
+                    appState.clearChildProfile()
+                    appState.interfaceOverride = .parent
+                } label: {
+                    Text("Parent")
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.85))
+                        )
                 }
-                Text(previewSubtitle)
-                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                    .opacity(previewChild == nil ? 0.7 : 1)
+                .buttonStyle(KiddoPressStyle())
+                .accessibilityLabel("Back to Parent Center")
+
+                Spacer()
+
+                ArzHeadView(
+                    size: ArzAvatarMetrics.displaySize,
+                    interactive: false,
+                    onTapped: {
+                        arzPhrase = ArzPhrases.kidHello(
+                            name: previewChild?.name
+                                ?? appState.familyChildren.first?.name
+                                ?? "friend"
+                        )
+                        withAnimation { showArzIntro = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            withAnimation { showArzIntro = false }
+                        }
+                    }
+                )
+            }
+            // Overlay bubble so the picker grid does not shift.
+            .overlay(alignment: .topTrailing) {
+                if showArzIntro {
+                    ArzPhraseBubble(phrase: arzPhrase) {
+                        withAnimation { showArzIntro = false }
+                    }
+                    .frame(maxWidth: 280, alignment: .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, ArzAvatarMetrics.displaySize - 8)
+                    .padding(.trailing, 4)
+                    .transition(.opacity)
+                    .zIndex(5)
+                }
             }
 
-            Spacer()
+            Text("Who's playing?")
+                .font(KiddoTasksDesignTokens.Typography.displaySmall)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                .frame(maxWidth: .infinity)
 
-            Color.clear.frame(width: 64, height: 1)
+            Text(previewSubtitle)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                .opacity(previewChild == nil ? 0.7 : 1)
+                .frame(maxWidth: .infinity)
         }
     }
 
@@ -309,35 +337,46 @@ struct MissionsView: View {
                 }
             }
             .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
-            .navigationTitle(child.map { "Hi, \($0.name)!" } ?? "Missions")
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let child, BirthdayReminder.upcomingBirthdays(children: [child]).first?.isToday == true {
-                    Text("🎂 Happy birthday, \(child.name)!")
-                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
-                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(KiddoTasksDesignTokens.Colors.rewardLight)
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Switch") {
-                        // Leaving the active kid profile; if this was a PIN-only
-                        // session with no parent account, lock back to Welcome.
-                        if appState.currentParent?.id == "kids-session" {
-                            appState.lockKidsSession()
-                        } else {
-                            appState.clearChildProfile()
+                VStack(spacing: 0) {
+                    ArzPageHeader(
+                        title: child.map { "Hi, \($0.name)!" } ?? "Missions",
+                        greeting: {
+                            ArzPhrases.kidHello(name: child?.name ?? "friend")
+                        }
+                    ) {
+                        HStack(spacing: 10) {
+                            Button("Switch") {
+                                if appState.currentParent?.id == "kids-session" {
+                                    appState.lockKidsSession()
+                                } else {
+                                    appState.clearChildProfile()
+                                }
+                            }
+                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(KiddoTasksDesignTokens.Colors.surfaceCard.opacity(0.85)))
+                            .buttonStyle(KiddoPressStyle())
+
+                            if let child {
+                                PointsBadge(points: child.activePoints, compact: true)
+                            }
                         }
                     }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if let child {
-                        PointsBadge(points: child.activePoints, compact: true)
+                    if let child, BirthdayReminder.upcomingBirthdays(children: [child]).first?.isToday == true {
+                        Text("🎂 Happy birthday, \(child.name)!")
+                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(KiddoTasksDesignTokens.Colors.rewardLight)
                     }
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selectedTask) { task in
                 if let child {
                     TaskDetailView(task: task, child: child) { completed in
@@ -358,6 +397,7 @@ struct MissionsView: View {
                 }
             }
             .onAppear {
+                Arz.handle(.kidsStationOpened)
                 guard let child else { return }
                 let status = WeekBonus.status(
                     child: child,
@@ -375,6 +415,11 @@ struct MissionsView: View {
     private func quickSubmit(task: KiddoTask, child: Child) {
         do {
             _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
+            let startOfDay = Calendar.current.startOfDay(for: Date())
+            let todays = appState.store.completions.filter {
+                $0.childId == child.id && $0.completedAt >= startOfDay
+            }.count
+            Arz.handle(todays >= 3 ? .multipleTasksCompleted : .taskCompleted)
             let needsApproval = task.requiresParentApproval(using: appState.currentFamily?.settings ?? .default)
             if needsApproval {
                 appState.toastSuccess("Sent to a parent — \(task.name)")
@@ -382,6 +427,7 @@ struct MissionsView: View {
                 appState.toastSuccess("+\(task.pointValue) ★ \(task.name)!")
             }
         } catch {
+            Arz.handle(.error)
             appState.toastError(error.localizedDescription)
         }
     }
@@ -469,9 +515,16 @@ struct TaskDetailView: View {
     private func submitCompletion() {
         do {
             _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
+            // Recent completions today → excited; single → happy.
+            let startOfDay = Calendar.current.startOfDay(for: Date())
+            let todays = appState.store.completions.filter {
+                $0.childId == child.id && $0.completedAt >= startOfDay
+            }.count
+            Arz.handle(todays >= 3 ? .multipleTasksCompleted : .taskCompleted)
             appState.toastSuccess("Mission sent to a parent")
             onFinish(true)
         } catch {
+            Arz.handle(.error)
             appState.toastError(error.localizedDescription)
             appState.presentError(error)
         }
@@ -521,7 +574,10 @@ struct CelebrationView: View {
         }
         .padding(24)
         .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
-        .onAppear { appeared = true }
+        .onAppear {
+            appeared = true
+            Arz.handle(.multipleTasksCompleted)
+        }
     }
 }
 
@@ -577,7 +633,10 @@ struct RewardShopView: View {
                 }
             }
             .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsRewardPop)
-            .navigationTitle("Reward shop")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                ArzPageHeader(title: "Reward shop")
+            }
+            .toolbar(.hidden, for: .navigationBar)
             .alert("Shop", isPresented: Binding(
                 get: { message != nil },
                 set: { if !$0 { message = nil } }
@@ -660,7 +719,10 @@ struct AchievementsView: View {
                 }
             }
             .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsPlayground)
-            .navigationTitle("Badges")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                ArzPageHeader(title: "Badges")
+            }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }

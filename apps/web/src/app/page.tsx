@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -123,10 +123,14 @@ function Field({
   );
 }
 
-export default function WelcomePage() {
+function WelcomePageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const loadFamily = useFamilyStore((s) => s.loadFamilyForParent);
-  const [mode, setMode] = useState<AuthMode>("signin");
+  /** Came from Kids Station lock screen — keep post-auth destination on /kids. */
+  const fromKids = searchParams.get("from") === "kids";
+  const authPref = searchParams.get("auth"); // "kids" | "signin" | null
+  const [mode, setMode] = useState<AuthMode>(authPref === "kids" ? "kids" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [familyName, setFamilyName] = useState("Our family");
@@ -141,11 +145,26 @@ export default function WelcomePage() {
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<InfoKey | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const appliedUrlAuth = useRef(false);
 
   const tabIndex = Math.max(
     0,
     AUTH_TABS.findIndex((t) => t.key === mode)
   );
+
+  const postAuthPath = mode === "kids" || fromKids ? "/kids" : "/parent/today";
+
+  // Open the matching auth sheet when arriving from Kids Station.
+  useEffect(() => {
+    if (appliedUrlAuth.current || checkingSession) return;
+    if (authPref === "kids") {
+      appliedUrlAuth.current = true;
+      openAuth("kids");
+    } else if (authPref === "signin" && fromKids) {
+      appliedUrlAuth.current = true;
+      openAuth("signin");
+    }
+  }, [authPref, fromKids, checkingSession]);
 
   const submitLabel = useMemo(() => {
     if (busy) return "Please wait…";
@@ -196,7 +215,8 @@ export default function WelcomePage() {
       }
       try {
         await loadFamily(user.uid);
-        router.replace("/parent/today");
+        // Kids-intent visits must land on Kids Station, not Parent Today.
+        router.replace(fromKids || authPref === "kids" ? "/kids" : "/parent/today");
       } catch {
         setCheckingSession(false);
       }
@@ -215,7 +235,7 @@ export default function WelcomePage() {
       }
     });
     return () => unsub();
-  }, [loadFamily, router]);
+  }, [loadFamily, router, fromKids, authPref]);
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
@@ -302,7 +322,7 @@ export default function WelcomePage() {
           transactions: data.transactions as never,
         });
       }
-      router.push(mode === "kids" ? "/kids" : "/parent/today");
+      router.push(postAuthPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -812,5 +832,20 @@ export default function WelcomePage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+export default function WelcomePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6">
+          <BrandLogo size={72} />
+          <p className="mt-4 text-sm text-ink-secondary">Loading…</p>
+        </main>
+      }
+    >
+      <WelcomePageInner />
+    </Suspense>
   );
 }

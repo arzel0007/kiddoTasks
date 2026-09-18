@@ -25,18 +25,23 @@ struct TodayDashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
-                    header
-                    birthdayBanner
-                    statTiles
-                    WeeklyStarsCard(series: weeklySeries)
-                    childProgress
-                    pendingApprovalsCard
-                    rewardRequestsCard
+            VStack(spacing: 0) {
+                // Pinned header — matches Tasks/Rewards/Family/History.
+                header
+
+                ScrollView {
+                    VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                        birthdayBanner
+                        statTiles
+                        WeeklyStarsCard(series: weeklySeries)
+                        childProgress
+                        pendingApprovalsCard
+                        rewardRequestsCard
+                    }
+                    .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
+                    .padding(.bottom, KiddoTasksDesignTokens.Spacing.xLarge)
                 }
-                .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
-                .padding(.bottom, KiddoTasksDesignTokens.Spacing.xLarge)
+                .scrollContentBackground(.hidden)
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .toolbar(.hidden, for: .navigationBar)
@@ -183,10 +188,9 @@ struct TodayDashboardView: View {
     // MARK: Header
 
     private var header: some View {
-        FamilyBrandHeader(
-            familyName: appState.currentFamily?.name ?? "Our family",
-            subtitle: Date.now.formatted(date: .abbreviated, time: .omitted),
-            familyPhotoData: appState.currentFamily?.photoData
+        ArzPageHeader(
+            title: "Today",
+            subtitle: Date.now.formatted(date: .abbreviated, time: .omitted)
         ) {
             Button {
                 appState.clearChildProfile()
@@ -201,7 +205,6 @@ struct TodayDashboardView: View {
             .buttonStyle(KiddoPressStyle())
             .accessibilityLabel("Open Kids Station")
         }
-        .padding(.top, KiddoTasksDesignTokens.Spacing.medium)
     }
 
     // MARK: Stat tiles

@@ -22,12 +22,27 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-4">
-      <input
-        className="field-input"
-        placeholder="Search chores…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary">
+          🔍
+        </span>
+        <input
+          className="field-input pl-9 pr-9"
+          placeholder="Search chores…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-sm text-ink-tertiary hover:text-ink"
+            onClick={() => setSearch("")}
+          >
+            ✕
+          </button>
+        ) : null}
+      </div>
       <div className="card">
         <h2 className="mb-3 font-bold">Active chores</h2>
         {loading ? (

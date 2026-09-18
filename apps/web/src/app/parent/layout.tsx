@@ -7,7 +7,11 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { PageSkeleton } from "@/components/skeleton";
-import { BrandLogo } from "@/components/brand-logo";
+import {
+  ArzAvatar,
+  arzHandle,
+  arzTitleFromPath,
+} from "@/components/arz-companion";
 import {
   IconFamily,
   IconHistory,
@@ -30,6 +34,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const router = useRouter();
   const { family, loading, loadFamilyForParent, reset } = useFamilyStore();
+  const pageTitle = arzTitleFromPath(pathname);
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
@@ -57,18 +62,21 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     };
   }, [loadFamilyForParent, reset, router]);
 
+  useEffect(() => {
+    arzHandle("dashboardOpened");
+  }, [pathname]);
+
   return (
     <div className="min-h-screen bg-page">
-      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pb-28 pt-5">
-        <header className="mb-5 flex items-center gap-3">
-          <BrandLogo size={44} />
+      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pb-10 pt-3">
+        {/* Flat page header matching Today: [Arz] Title · actions. mb-5 keeps gap before nav/content. */}
+        <header className="mb-5 flex min-h-[96px] items-center gap-3">
+          <ArzAvatar />
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-tertiary">
-              KiddoTasks
-            </p>
-            <h1 className="truncate text-lg font-bold text-ink">
-              {family?.name ?? "Parent Center"}
-            </h1>
+            <h1 className="truncate text-2xl font-bold text-ink">{pageTitle}</h1>
+            {family?.name ? (
+              <p className="truncate text-sm text-ink-secondary">{family.name}</p>
+            ) : null}
           </div>
           <Link
             href="/kids"
@@ -90,7 +98,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
           </button>
         </header>
 
-        <nav className="mb-6 flex flex-wrap gap-1.5" aria-label="Primary">
+        <nav className="mb-5 flex flex-wrap gap-1.5" aria-label="Primary">
           {tabs.map(({ href, label, Icon }) => {
             const active = pathname?.startsWith(href);
             return (
