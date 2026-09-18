@@ -154,17 +154,14 @@ function WelcomePageInner() {
 
   const postAuthPath = mode === "kids" || fromKids ? "/kids" : "/parent/today";
 
-  // Open the matching auth sheet when arriving from Kids Station.
+  // Kids Station unlocks inline on /kids — bounce kids-intent URLs there.
   useEffect(() => {
-    if (appliedUrlAuth.current || checkingSession) return;
-    if (authPref === "kids") {
-      appliedUrlAuth.current = true;
-      openAuth("kids");
-    } else if (authPref === "signin" && fromKids) {
-      appliedUrlAuth.current = true;
-      openAuth("signin");
-    }
-  }, [authPref, fromKids, checkingSession]);
+    if (appliedUrlAuth.current) return;
+    if (!fromKids && authPref !== "kids") return;
+    if (checkingSession) return;
+    appliedUrlAuth.current = true;
+    router.replace("/kids");
+  }, [fromKids, authPref, checkingSession, router]);
 
   const submitLabel = useMemo(() => {
     if (busy) return "Please wait…";

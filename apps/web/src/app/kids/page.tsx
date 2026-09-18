@@ -3,14 +3,43 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
+import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import {
+  firebaseAuth,
+  firebaseFunctions,
+  isFirebaseConfigured,
+} from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
+import type {
+  Child,
+  Family,
+  KiddoTask,
+  PointTransaction,
+  Reward,
+  RewardClaim,
+  TaskCompletion,
+} from "@/lib/types";
 import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
 import { ArzAvatar, arzHandle } from "@/components/arz-companion";
 
-/** Kids Station — works for parent-signed-in browser or PIN session. */
+type UnlockTab = "pin" | "parent";
+
+type KidsSessionPayload = {
+  family: Family;
+  children: Child[];
+  tasks: KiddoTask[];
+  completions: TaskCompletion[];
+  rewards: Reward[];
+  claims: RewardClaim[];
+  transactions: PointTransaction[];
+};
+
+/**
+ * Kids Station — parent-signed-in browser or family PIN.
+ * Unlock stays on this route so auth never bounces through Parent Today.
+ */
 export default function KidsPage() {
   const router = useRouter();
   const store = useFamilyStore();
@@ -20,11 +49,18 @@ export default function KidsPage() {
     () => isFirebaseConfigured && !store.kidsMode && !store.family
   );
 
+  const [unlockTab, setUnlockTab] = useState<UnlockTab>("pin");
+  const [pin, setPin] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+
   const canOpen = Boolean(family) || store.kidsMode;
   const selected = children.find((c) => c.id === selectedChildId) ?? null;
 
-  // Parent session lives outside this route — restore family so a signed-in
-  // parent isn't bounced into the lock screen (and then to /parent/today).
+  // Parent session can outlive this route — restore family so a signed-in
+  // parent opens Kids Station instead of the lock screen.
   useEffect(() => {
     if (!isFirebaseConfigured) {
       setRestoringParent(false);
@@ -68,6 +104,81 @@ export default function KidsPage() {
     );
   }, [tasks, selected]);
 
+  async function unlockWithPin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isFirebaseConfigured) {
+      setUnlockError("Firebase isn’t configured.");
+      return;
+    }
+    const value = pin.trim();
+    if (!/^\d{4,6}$/.test(value)) {
+      setUnlockError("Enter the family PIN (4–6 digits).");
+      return;
+    }
+    setBusy(true);
+    setUnlockError(null);
+    try {
+      const open = httpsCallable(firebaseFunctions(), "openKidsSession");
+      const res = await open({ pin: value });
+      const data = res.data as {
+        family: Record<string, unknown>;
+        children: unknown[];
+        tasks: unknown[];
+        completions: unknown[];
+        rewards: unknown[];
+        claims: unknown[];
+        transactions: unknown[];
+        familyId: string;
+      };
+      const payload = {
+        family: { ...(data.family as Record<string, unknown>), id: data.familyId },
+        children: data.children,
+        tasks: data.tasks,
+        completions: data.completions,
+        rewards: data.rewards,
+        claims: data.claims,
+        transactions: data.transactions,
+      } as unknown as KidsSessionPayload;
+      useFamilyStore.getState().loadKidsSession(payload);
+      setPin("");
+      setSelectedChildId(null);
+    } catch (err) {
+      setUnlockError(err instanceof Error ? err.message : "Wrong PIN — try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unlockWithParent(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isFirebaseConfigured) {
+      setUnlockError("Firebase isn’t configured.");
+      return;
+    }
+    setBusy(true);
+    setUnlockError(null);
+    try {
+      const auth = firebaseAuth();
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (!cred.user.emailVerified) {
+        setUnlockError("Confirm your parent email first, then try again.");
+        return;
+      }
+      await useFamilyStore.getState().loadFamilyForParent(cred.user.uid);
+      const after = useFamilyStore.getState();
+      if (!after.family) {
+        setUnlockError(after.error || "Couldn’t load this family.");
+        return;
+      }
+      setPassword("");
+      setSelectedChildId(null);
+    } catch (err) {
+      setUnlockError(err instanceof Error ? err.message : "Sign in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if ((store.loading || restoringParent) && !family && !store.kidsMode) {
     return (
       <main className="min-h-screen bg-page px-4 py-8">
@@ -81,29 +192,119 @@ export default function KidsPage() {
 
   if (!canOpen) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 text-center">
+      <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-10 text-center">
         <div className="card w-full">
           <p className="text-5xl">🔒</p>
           <h1 className="mt-3 text-2xl font-bold">Kids Station</h1>
           <p className="mt-2 text-sm text-ink-secondary">
-            Sign in as a parent, or unlock with the family PIN.
+            Unlock with the family PIN, or sign in as a parent.
           </p>
-          <div className="mt-5 space-y-2">
+
+          <div className="auth-segment mx-auto mb-5 mt-5" role="tablist" aria-label="Unlock">
             <button
               type="button"
-              className="btn-primary"
-              onClick={() => router.push("/?from=kids&auth=kids")}
+              role="tab"
+              aria-selected={unlockTab === "pin"}
+              className={`auth-segment__btn ${unlockTab === "pin" ? "is-active" : ""}`}
+              onClick={() => {
+                setUnlockTab("pin");
+                setUnlockError(null);
+              }}
             >
-              Enter family PIN
+              Family PIN
             </button>
             <button
               type="button"
-              className="btn-secondary"
-              onClick={() => router.push("/?from=kids&auth=signin")}
+              role="tab"
+              aria-selected={unlockTab === "parent"}
+              className={`auth-segment__btn ${unlockTab === "parent" ? "is-active" : ""}`}
+              onClick={() => {
+                setUnlockTab("parent");
+                setUnlockError(null);
+              }}
             >
               Parent sign in
             </button>
           </div>
+
+          {unlockTab === "pin" ? (
+            <form onSubmit={unlockWithPin} className="space-y-3 text-left">
+              <div>
+                <label className="field-label" htmlFor="kids-station-pin">
+                  Family PIN
+                </label>
+                <input
+                  id="kids-station-pin"
+                  className="field-input"
+                  inputMode="numeric"
+                  placeholder="4–6 digits"
+                  autoComplete="one-time-code"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  aria-invalid={Boolean(unlockError)}
+                />
+              </div>
+              {unlockError ? (
+                <p className="field-error text-left" role="alert">
+                  {unlockError}
+                </p>
+              ) : null}
+              <button className="btn-primary w-full" type="submit" disabled={busy}>
+                {busy && <span className="btn-spinner mr-2" aria-hidden="true" />}
+                Open Kids Station
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={unlockWithParent} className="space-y-3 text-left">
+              <div>
+                <label className="field-label" htmlFor="kids-station-email">
+                  Parent email
+                </label>
+                <input
+                  id="kids-station-email"
+                  className="field-input"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="kids-station-password">
+                  Password
+                </label>
+                <input
+                  id="kids-station-password"
+                  className="field-input"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={Boolean(unlockError)}
+                />
+              </div>
+              {unlockError ? (
+                <p className="field-error text-left" role="alert">
+                  {unlockError}
+                </p>
+              ) : null}
+              <button className="btn-primary w-full" type="submit" disabled={busy}>
+                {busy && <span className="btn-spinner mr-2" aria-hidden="true" />}
+                Open Kids Station
+              </button>
+            </form>
+          )}
+
+          <p className="mt-5 text-xs text-ink-tertiary">
+            Need the full parent app?{" "}
+            <button
+              type="button"
+              className="font-semibold text-primary underline"
+              onClick={() => router.push("/")}
+            >
+              Go to Parent Center
+            </button>
+          </p>
         </div>
       </main>
     );
