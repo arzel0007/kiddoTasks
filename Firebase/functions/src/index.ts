@@ -838,10 +838,19 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
     }
   }
 
-  const upsert = async (collection: string, items: any[]) => {
+  const tombstoneId = (collectionKey: string, docId: string) =>
+    `${familyId}:${collectionKey}:${docId}`;
+
+  const upsert = async (collection: string, items: any[], collectionKey: string) => {
     for (const item of items || []) {
       if (!item || typeof item.id !== "string") continue;
       if (typeof item.familyId === "string" && item.familyId !== familyId) continue;
+      // Skip docs deleted from another client (e.g. web) — do not resurrect.
+      const tomb = await db
+        .collection("familyTombstones")
+        .doc(tombstoneId(collectionKey, item.id))
+        .get();
+      if (tomb.exists) continue;
       batch.set(
         db.collection(collection).doc(item.id),
         toFirestoreValue({ ...item, familyId }),
@@ -899,13 +908,13 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
     }
   }
 
-  await upsert("children", data?.children);
-  await upsert("tasks", data?.tasks);
-  await upsert("taskCompletions", data?.completions);
-  await upsert("rewards", data?.rewards);
-  await upsert("rewardClaims", data?.claims);
-  await upsert("pointTransactions", data?.transactions);
-  await upsert("achievements", data?.achievements);
+  await upsert("children", data?.children, "children");
+  await upsert("tasks", data?.tasks, "tasks");
+  await upsert("taskCompletions", data?.completions, "completions");
+  await upsert("rewards", data?.rewards, "rewards");
+  await upsert("rewardClaims", data?.claims, "claims");
+  await upsert("pointTransactions", data?.transactions, "transactions");
+  await upsert("achievements", data?.achievements, "achievements");
 
   await flushBatch();
   return { ok: true, familyId, deleted };

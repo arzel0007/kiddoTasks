@@ -143,6 +143,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
   removeReward: async (id) => {
     const previous = get().rewards;
+    const familyId = get().family?.id;
     if (!previous.some((r) => r.id === id)) {
       throw new Error("Couldn’t find that reward.");
     }
@@ -151,6 +152,15 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
       const db = firestore();
       await deleteDoc(doc(db, "rewards", id));
+      // Tombstone so iOS pushFamilySnapshot cannot re-upsert a deleted reward.
+      if (familyId) {
+        await setDoc(doc(db, "familyTombstones", `${familyId}:rewards:${id}`), {
+          familyId,
+          collectionName: "rewards",
+          docId: id,
+          deletedAt: new Date().toISOString(),
+        });
+      }
     } catch (e) {
       set({ rewards: previous });
       throw e instanceof Error ? e : new Error("Failed to delete reward");

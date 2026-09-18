@@ -189,34 +189,40 @@ export default function RewardsPage() {
               >
                 <IconTile icon={r.icon} reward size={48} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{r.name}</p>
-                  <p className="text-sm text-ink-secondary line-clamp-2">{r.description}</p>
-                  <p className="mt-2 text-sm font-bold text-primary">★ {r.pointCost}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="btn-secondary !px-2 !py-1 !text-xs"
-                      disabled={busyId === r.id}
-                      onClick={() => openEdit(r)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary !px-2 !py-1 !text-xs"
-                      disabled={busyId === r.id}
-                      onClick={() => void archiveReward(r.id, r.name)}
-                    >
-                      {busyId === r.id ? "…" : "Archive"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary !px-2 !py-1 !text-xs !text-attention"
-                      disabled={busyId === r.id}
-                      onClick={() => setPendingDelete(r.id)}
-                    >
-                      Delete
-                    </button>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{r.name}</p>
+                      {r.description ? (
+                        <p className="text-sm text-ink-secondary line-clamp-2">{r.description}</p>
+                      ) : null}
+                      <p className="mt-1 text-sm font-bold text-primary">★ {r.pointCost}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="btn-secondary btn-compact"
+                        disabled={busyId === r.id}
+                        onClick={() => openEdit(r)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-compact"
+                        disabled={busyId === r.id}
+                        onClick={() => void archiveReward(r.id, r.name)}
+                      >
+                        {busyId === r.id ? "…" : "Archive"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary btn-compact !text-attention"
+                        disabled={busyId === r.id}
+                        onClick={() => setPendingDelete(r.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </li>
@@ -235,10 +241,10 @@ export default function RewardsPage() {
                   <p className="truncate font-semibold">{r.name}</p>
                   <p className="text-xs text-ink-tertiary">Archived · ★ {r.pointCost}</p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
-                    className="btn-secondary !px-2 !py-1 !text-xs"
+                    className="btn-secondary btn-compact"
                     disabled={busyId === r.id}
                     onClick={() => openEdit(r)}
                   >
@@ -246,7 +252,7 @@ export default function RewardsPage() {
                   </button>
                   <button
                     type="button"
-                    className="btn-secondary !px-2 !py-1 !text-xs"
+                    className="btn-secondary btn-compact"
                     disabled={busyId === r.id}
                     onClick={() => void restoreReward(r.id, r.name)}
                   >
@@ -254,7 +260,7 @@ export default function RewardsPage() {
                   </button>
                   <button
                     type="button"
-                    className="btn-secondary !px-2 !py-1 !text-xs !text-attention"
+                    className="btn-secondary btn-compact !text-attention"
                     disabled={busyId === r.id}
                     onClick={() => setPendingDelete(r.id)}
                   >

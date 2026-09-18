@@ -206,8 +206,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
     
+    // MARK: - Family delete tombstones
+    // Written by parent clients on hard delete; read only by Admin SDK
+    // (pushFamilySnapshot) so iOS sync cannot resurrect deleted docs.
+    match /familyTombstones/{tombId} {
+      allow create: if isAuthenticated() && isParent(request.auth.uid)
+        && parentBelongsToFamily(request.auth.uid, request.resource.data.familyId);
+      allow read, update, delete: if false;
+    }
+
     // MARK: - Default: Deny all
-    
+
     match /{document=**} {
       allow read, write: if false;
     }

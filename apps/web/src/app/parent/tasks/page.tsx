@@ -241,10 +241,10 @@ export default function TasksPage() {
                       : " · all kids"}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-2">
+                <div className="flex shrink-0 gap-1.5">
                   <button
                     type="button"
-                    className="btn-secondary !px-2 !py-1 !text-xs"
+                    className="btn-secondary btn-compact"
                     disabled={busyId === t.id}
                     onClick={() => openEdit(t)}
                   >
@@ -252,7 +252,7 @@ export default function TasksPage() {
                   </button>
                   <button
                     type="button"
-                    className="btn-secondary !px-2 !py-1 !text-xs"
+                    className="btn-secondary btn-compact"
                     disabled={busyId === t.id}
                     onClick={() => void toggleActive(t)}
                   >

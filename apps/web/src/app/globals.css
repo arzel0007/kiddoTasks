@@ -126,6 +126,15 @@ body {
   transform: scale(0.98);
 }
 
+/* Inline row actions — keep secondary buttons from stretching full width. */
+.btn-compact {
+  width: auto !important;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 /* —— Cards —— */
 .card {
   border-radius: var(--radius-lg);
