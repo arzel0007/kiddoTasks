@@ -24,6 +24,7 @@ import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
 import { ArzAvatar, arzHandle } from "@/components/arz-companion";
 import { toast } from "@/components/toast";
+import { errorMessage } from "@/lib/errors";
 
 type UnlockTab = "pin" | "parent";
 
@@ -149,7 +150,7 @@ export default function KidsPage() {
       setSelectedChildId(null);
       toast.success("Kids Station unlocked. Have fun!");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Wrong PIN — try again.";
+      const msg = errorMessage(err, "Wrong PIN — try again.");
       setUnlockError(msg);
       toast.error(msg);
     } finally {
@@ -188,7 +189,7 @@ export default function KidsPage() {
       setSelectedChildId(null);
       toast.success("Signed in — Kids Station is ready.");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Sign in failed.";
+      const msg = errorMessage(err, "Sign in failed.");
       setUnlockError(msg);
       toast.error(msg);
     } finally {

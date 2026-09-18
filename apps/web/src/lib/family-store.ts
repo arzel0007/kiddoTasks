@@ -27,6 +27,7 @@ import type {
 } from "./types";
 import { canAddTask, isOwnerEmail } from "./entitlements";
 import { requiresApprovalFromBehavior } from "./catalog";
+import { errorMessage } from "./errors";
 
 type FamilyState = {
   loading: boolean;
@@ -137,7 +138,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       });
     } catch (e) {
       set({ rewards: previous });
-      throw e instanceof Error ? e : new Error("Failed to update reward");
+      throw new Error(errorMessage(e, "Failed to update reward"));
     }
   },
 
@@ -163,7 +164,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       }
     } catch (e) {
       set({ rewards: previous });
-      throw e instanceof Error ? e : new Error("Failed to delete reward");
+      throw new Error(errorMessage(e, "Failed to delete reward"));
     }
   },
 
@@ -199,7 +200,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       return reward;
     } catch (e) {
       set({ rewards: previous });
-      throw e instanceof Error ? e : new Error("Failed to add reward");
+      throw new Error(errorMessage(e, "Failed to add reward"));
     }
   },
 
@@ -238,7 +239,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       });
     } catch (e) {
       set({ rewards: previous });
-      throw e instanceof Error ? e : new Error("Failed to update reward");
+      throw new Error(errorMessage(e, "Failed to update reward"));
     }
   },
 
@@ -285,7 +286,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       return task;
     } catch (e) {
       set({ tasks: previous });
-      throw e instanceof Error ? e : new Error("Failed to add chore");
+      throw new Error(errorMessage(e, "Failed to add chore"));
     }
   },
 
@@ -337,7 +338,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       });
     } catch (e) {
       set({ tasks: previous });
-      throw e instanceof Error ? e : new Error("Failed to update chore");
+      throw new Error(errorMessage(e, "Failed to update chore"));
     }
   },
 
@@ -353,7 +354,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       });
     } catch (e) {
       set({ tasks: previous });
-      throw e instanceof Error ? e : new Error("Failed to update chore");
+      throw new Error(errorMessage(e, "Failed to update chore"));
     }
   },
 
@@ -444,7 +445,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     } catch (e) {
       set({
         loading: false,
-        error: e instanceof Error ? e.message : "Failed to load family",
+        error: errorMessage(e, "Failed to load family"),
       });
     }
   },

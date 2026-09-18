@@ -6,6 +6,7 @@ import { IconTile } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
+import { errorMessage } from "@/lib/errors";
 import { REWARD_ICONS } from "@/lib/catalog";
 import type { Reward } from "@/lib/types";
 
@@ -100,7 +101,7 @@ export default function RewardsPage() {
       }
       setEditorOpen(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Couldn’t save reward.";
+      const msg = errorMessage(err, "Couldn’t save reward.");
       setFormError(msg);
       toast.error(msg);
     } finally {
@@ -114,7 +115,7 @@ export default function RewardsPage() {
       await setRewardActive(id, false);
       toast.success(`Archived “${name}”.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn’t archive reward.");
+      toast.error(errorMessage(e, "Couldn’t archive reward."));
     } finally {
       setBusyId(null);
     }
@@ -126,7 +127,7 @@ export default function RewardsPage() {
       await setRewardActive(id, true);
       toast.success(`Restored “${name}”.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn’t restore reward.");
+      toast.error(errorMessage(e, "Couldn’t restore reward."));
     } finally {
       setBusyId(null);
     }
@@ -144,7 +145,7 @@ export default function RewardsPage() {
       setPendingDelete(null);
       toast.success(`Deleted “${reward.name}”.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn’t delete reward.");
+      toast.error(errorMessage(e, "Couldn’t delete reward."));
     } finally {
       setBusyId(null);
     }

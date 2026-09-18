@@ -15,6 +15,7 @@ import { useFamilyStore } from "@/lib/family-store";
 import { BrandLogo } from "@/components/brand-logo";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
+import { errorMessage } from "@/lib/errors";
 import { canJoinWithCode, PREMIUM_PRICE } from "@/lib/entitlements";
 
 type AuthMode = "signin" | "signup" | "join" | "kids";
@@ -335,7 +336,7 @@ function WelcomePageInner() {
       }
       router.push(postAuthPath);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
+      const msg = errorMessage(err, "Something went wrong");
       setError(msg);
       toast.error(msg);
     } finally {

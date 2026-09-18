@@ -163,6 +163,8 @@ export function ChildAvatar({
           alt={name ?? "avatar"}
           className="h-full w-full object-cover"
           onError={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
             (e.currentTarget as HTMLImageElement).style.display = "none";
           }}
         />

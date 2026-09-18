@@ -7,6 +7,7 @@ import { IconTile } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
+import { errorMessage } from "@/lib/errors";
 import {
   TASK_APPROVAL_OPTIONS,
   TASK_CATEGORIES,
@@ -132,7 +133,7 @@ export default function TasksPage() {
       }
       setEditorOpen(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Couldn’t save chore.";
+      const msg = errorMessage(err, "Couldn’t save chore.");
       setFormError(msg);
       toast.error(msg);
     } finally {
@@ -147,7 +148,7 @@ export default function TasksPage() {
       await setTaskActive(task.id, next);
       toast.success(next ? `Restored “${task.name}”.` : `Archived “${task.name}”.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn’t update chore.");
+      toast.error(errorMessage(e, "Couldn’t update chore."));
     } finally {
       setBusyId(null);
     }

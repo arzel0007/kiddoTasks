@@ -264,12 +264,31 @@ export function ArzAvatar({
     };
   }, []);
 
-  // Keep the loop playing when the element remounts after route changes.
+  // Keep the loop playing after remount. Autoplay interruptions are not failures.
   useEffect(() => {
     if (!useVideo) return;
     const el = videoRef.current;
     if (!el) return;
-    void el.play().catch(() => setVideoFailed(true));
+
+    const onMediaError = (event: Event) => {
+      // Stop media error Events from bubbling to Next.js error overlay as "[object Event]".
+      event.preventDefault();
+      event.stopPropagation();
+      setVideoFailed(true);
+    };
+    el.addEventListener("error", onMediaError);
+
+    const playPromise = el.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch((err: unknown) => {
+        const name = err instanceof Error ? err.name : "";
+        // Muted autoplay can still abort on unmount/navigation — keep video path.
+        if (name === "AbortError" || name === "NotAllowedError") return;
+        if (el.error) setVideoFailed(true);
+      });
+    }
+
+    return () => el.removeEventListener("error", onMediaError);
   }, [useVideo]);
 
   const showPhraseNow = () => {
@@ -320,7 +339,11 @@ export function ArzAvatar({
             aria-hidden
             className="h-full w-full rounded-full bg-white object-cover"
             style={{ objectPosition: "50% 30%" }}
-            onError={() => setVideoFailed(true)}
+            onError={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setVideoFailed(true);
+            }}
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
