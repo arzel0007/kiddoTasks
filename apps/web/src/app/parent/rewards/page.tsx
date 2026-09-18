@@ -4,60 +4,182 @@ import { useState } from "react";
 import { useFamilyStore } from "@/lib/family-store";
 import { IconTile } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
+import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
+import { REWARD_ICONS } from "@/lib/catalog";
+import type { Reward } from "@/lib/types";
+
+type RewardForm = {
+  name: string;
+  description: string;
+  icon: string;
+  pointCost: number;
+  eligibleChildIds: string[];
+  requiresApproval: boolean;
+};
+
+const emptyForm: RewardForm = {
+  name: "",
+  description: "",
+  icon: "gift.fill",
+  pointCost: 20,
+  eligibleChildIds: [],
+  requiresApproval: true,
+};
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="field-label">{label}</label>
+      {children}
+    </div>
+  );
+}
 
 export default function RewardsPage() {
-  const { rewards, loading, setRewardActive, removeReward } = useFamilyStore();
+  const {
+    rewards,
+    children,
+    loading,
+    setRewardActive,
+    removeReward,
+    addReward,
+    updateReward,
+  } = useFamilyStore();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<RewardForm>(emptyForm);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const active = rewards.filter((r) => r.isActive);
   const archived = rewards.filter((r) => !r.isActive);
 
-  function archiveReward(id: string, name: string) {
-    try {
-      setRewardActive(id, false);
-      toast.success(`Archived “${name}”.`);
-    } catch {
-      toast.error("Couldn’t archive reward.");
-    }
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setFormError(null);
+    setEditorOpen(true);
   }
 
-  function restoreReward(id: string, name: string) {
-    try {
-      setRewardActive(id, true);
-      toast.success(`Restored “${name}”.`);
-    } catch {
-      toast.error("Couldn’t restore reward.");
-    }
+  function openEdit(reward: Reward) {
+    setEditingId(reward.id);
+    setForm({
+      name: reward.name,
+      description: reward.description ?? "",
+      icon: reward.icon || "gift.fill",
+      pointCost: reward.pointCost,
+      eligibleChildIds: reward.eligibleChildIds ?? [],
+      requiresApproval: reward.requiresApproval ?? true,
+    });
+    setFormError(null);
+    setEditorOpen(true);
   }
 
-  function deleteReward(id: string) {
+  async function saveForm(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
     try {
-      const reward = rewards.find((r) => r.id === id);
-      if (!reward) {
-        toast.error("Couldn’t find that reward.");
-        return;
+      const payload = {
+        name: form.name,
+        description: form.description,
+        icon: form.icon,
+        pointCost: form.pointCost,
+        eligibleChildIds: form.eligibleChildIds,
+        requiresApproval: form.requiresApproval,
+      };
+      if (editingId) {
+        await updateReward(editingId, payload);
+        toast.success(`Updated “${payload.name.trim()}”.`);
+      } else {
+        await addReward(payload);
+        toast.success(`Added “${payload.name.trim()}”.`);
       }
-      removeReward(id);
+      setEditorOpen(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Couldn’t save reward.";
+      setFormError(msg);
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function archiveReward(id: string, name: string) {
+    setBusyId(id);
+    try {
+      await setRewardActive(id, false);
+      toast.success(`Archived “${name}”.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn’t archive reward.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function restoreReward(id: string, name: string) {
+    setBusyId(id);
+    try {
+      await setRewardActive(id, true);
+      toast.success(`Restored “${name}”.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn’t restore reward.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteReward(id: string) {
+    const reward = rewards.find((r) => r.id === id);
+    if (!reward) {
+      toast.error("Couldn’t find that reward.");
+      return;
+    }
+    setBusyId(id);
+    try {
+      await removeReward(id);
       setPendingDelete(null);
       toast.success(`Deleted “${reward.name}”.`);
-    } catch {
-      toast.error("Couldn’t delete reward.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn’t delete reward.");
+    } finally {
+      setBusyId(null);
     }
+  }
+
+  function toggleEligible(childId: string) {
+    setForm((f) => ({
+      ...f,
+      eligibleChildIds: f.eligibleChildIds.includes(childId)
+        ? f.eligibleChildIds.filter((id) => id !== childId)
+        : [...f.eligibleChildIds, childId],
+    }));
   }
 
   return (
     <div className="space-y-4">
       <div className="card">
-        <h2 className="mb-3 font-bold">Active rewards</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="font-bold">Active rewards</h2>
+          <button type="button" className="chip-btn chip-btn--primary" onClick={openCreate}>
+            + Add reward
+          </button>
+        </div>
         {loading ? (
           <div className="space-y-3">
             <SkeletonListRow />
             <SkeletonListRow />
           </div>
         ) : active.length === 0 ? (
-          <p className="text-sm text-ink-secondary">
-            No rewards yet. Add them on iOS for the full editor.
-          </p>
+          <div className="text-center">
+            <p className="text-sm text-ink-secondary">No rewards yet. Kids can shop once you add some.</p>
+            <button type="button" className="btn-secondary mt-3 inline-flex w-auto px-4" onClick={openCreate}>
+              Add reward
+            </button>
+          </div>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">
             {active.map((r) => (
@@ -74,13 +196,23 @@ export default function RewardsPage() {
                     <button
                       type="button"
                       className="btn-secondary !px-2 !py-1 !text-xs"
-                      onClick={() => archiveReward(r.id, r.name)}
+                      disabled={busyId === r.id}
+                      onClick={() => openEdit(r)}
                     >
-                      Archive
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary !px-2 !py-1 !text-xs"
+                      disabled={busyId === r.id}
+                      onClick={() => void archiveReward(r.id, r.name)}
+                    >
+                      {busyId === r.id ? "…" : "Archive"}
                     </button>
                     <button
                       type="button"
                       className="btn-secondary !px-2 !py-1 !text-xs !text-attention"
+                      disabled={busyId === r.id}
                       onClick={() => setPendingDelete(r.id)}
                     >
                       Delete
@@ -101,19 +233,29 @@ export default function RewardsPage() {
               <li key={r.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{r.name}</p>
-                  <p className="text-xs text-ink-tertiary">Archived</p>
+                  <p className="text-xs text-ink-tertiary">Archived · ★ {r.pointCost}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
                     className="btn-secondary !px-2 !py-1 !text-xs"
-                    onClick={() => restoreReward(r.id, r.name)}
+                    disabled={busyId === r.id}
+                    onClick={() => openEdit(r)}
                   >
-                    Restore
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary !px-2 !py-1 !text-xs"
+                    disabled={busyId === r.id}
+                    onClick={() => void restoreReward(r.id, r.name)}
+                  >
+                    {busyId === r.id ? "…" : "Restore"}
                   </button>
                   <button
                     type="button"
                     className="btn-secondary !px-2 !py-1 !text-xs !text-attention"
+                    disabled={busyId === r.id}
                     onClick={() => setPendingDelete(r.id)}
                   >
                     Delete
@@ -125,32 +267,133 @@ export default function RewardsPage() {
         </div>
       )}
 
-      {pendingDelete && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-        >
-          <div className="card w-full max-w-sm">
-            <p className="font-bold">Delete this reward?</p>
-            <p className="mt-1 text-sm text-ink-secondary">
-              Kids can no longer claim it. Manage full reward editing on iOS.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="btn-secondary" onClick={() => setPendingDelete(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => deleteReward(pendingDelete)}
-              >
-                Delete
-              </button>
+      <Modal
+        open={editorOpen}
+        title={editingId ? "Edit reward" : "Add reward"}
+        description="Kids claim these with stars in Kids Station."
+        onClose={() => {
+          if (!saving) setEditorOpen(false);
+        }}
+      >
+        <form onSubmit={saveForm} className="space-y-3 text-left">
+          <Field label="Name">
+            <input
+              className="field-input"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </Field>
+          <Field label="Description">
+            <input
+              className="field-input"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </Field>
+          <Field label="Icon">
+            <div className="flex flex-wrap gap-2">
+              {REWARD_ICONS.map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  aria-label={icon}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg ${
+                    form.icon === icon ? "border-primary bg-primary-light" : "border-border bg-surface"
+                  }`}
+                  onClick={() => setForm((f) => ({ ...f, icon }))}
+                >
+                  <IconTile icon={icon} reward size={32} />
+                </button>
+              ))}
             </div>
-          </div>
+          </Field>
+          <Field label="Star cost">
+            <input
+              className="field-input"
+              type="number"
+              min={1}
+              value={form.pointCost}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, pointCost: Number(e.target.value) || 0 }))
+              }
+            />
+          </Field>
+          <Field label="Eligible kids">
+            {children.length === 0 ? (
+              <p className="text-xs text-ink-tertiary">No kids yet — reward stays open to all.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                    form.eligibleChildIds.length === 0
+                      ? "bg-primary text-white"
+                      : "bg-surface text-ink-secondary"
+                  }`}
+                  onClick={() => setForm((f) => ({ ...f, eligibleChildIds: [] }))}
+                >
+                  All kids
+                </button>
+                {children.map((c) => {
+                  const on = form.eligibleChildIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        on ? "bg-primary text-white" : "bg-surface text-ink-secondary"
+                      }`}
+                      onClick={() => toggleEligible(c.id)}
+                    >
+                      {c.avatar?.emoji} {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Field>
+          <label className="flex items-center gap-2 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={form.requiresApproval}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, requiresApproval: e.target.checked }))
+              }
+            />
+            Parent approval required
+          </label>
+          {formError ? (
+            <p className="field-error" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <button className="btn-primary" type="submit" disabled={saving}>
+            {saving ? "Saving…" : editingId ? "Save changes" : "Add reward"}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        open={pendingDelete !== null}
+        title="Delete this reward?"
+        description="Kids can no longer claim it. This removes it from the cloud."
+        onClose={() => setPendingDelete(null)}
+      >
+        <div className="mt-2 space-y-2">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busyId === pendingDelete}
+            onClick={() => pendingDelete && void deleteReward(pendingDelete)}
+          >
+            {busyId === pendingDelete ? "Deleting…" : "Delete"}
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => setPendingDelete(null)}>
+            Cancel
+          </button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

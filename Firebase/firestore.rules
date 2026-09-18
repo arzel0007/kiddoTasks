@@ -133,12 +133,14 @@ service cloud.firestore {
         && parentBelongsToFamily(request.auth.uid, request.resource.data.familyId);
       
       // Parent can update rewards (limited fields)
-      allow update: if isAuthenticated() && isParent(request.auth.uid) 
+      allow update: if isAuthenticated() && isParent(request.auth.uid)
         && parentBelongsToFamily(request.auth.uid, resource.data.familyId)
         && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(
           ['name', 'description', 'icon', 'pointCost', 'eligibleChildIds', 'requiresApproval', 'isActive', 'updatedAt', 'version']));
-      
-      allow delete: if false;
+
+      // Parent can permanently delete rewards in their family (web + iOS)
+      allow delete: if isAuthenticated() && isParent(request.auth.uid)
+        && parentBelongsToFamily(request.auth.uid, resource.data.familyId);
     }
     
     // MARK: - Reward Claims

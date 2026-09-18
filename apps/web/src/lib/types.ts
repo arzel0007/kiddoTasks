@@ -42,6 +42,21 @@ export type Child = {
   updatedAt?: string;
 };
 
+export type TaskCategory =
+  | "household"
+  | "learning"
+  | "health"
+  | "personal"
+  | "pets"
+  | "other";
+
+export type TaskApprovalBehavior =
+  | "useFamilyDefault"
+  | "alwaysRequireApproval"
+  | "autoApprove";
+
+export type TaskRecurrenceType = "oneTime" | "daily" | "weekdays" | "weekly" | "custom";
+
 export type KiddoTask = {
   id: string;
   familyId: string;
@@ -50,13 +65,15 @@ export type KiddoTask = {
   icon: string;
   category: string;
   pointValue: number;
-  requiresApproval: boolean;
+  requiresApproval?: boolean;
   approvalBehavior: string;
   assignedChildIds: string[];
+  recurrence?: { type: TaskRecurrenceType; weekdays?: number[] };
   isActive: boolean;
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
+  version?: number;
 };
 
 export type TaskCompletion = {
@@ -79,10 +96,12 @@ export type Reward = {
   icon: string;
   pointCost: number;
   eligibleChildIds: string[];
+  requiresApproval?: boolean;
   isActive: boolean;
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
+  version?: number;
 };
 
 export type RewardClaim = {

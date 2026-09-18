@@ -3,10 +3,13 @@
 import { create } from "zustand";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   query,
+  setDoc,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { firestore, isFirebaseConfigured } from "./firebase";
@@ -19,8 +22,11 @@ import type {
   RewardClaim,
   TaskCompletion,
   Entitlements,
+  TaskApprovalBehavior,
+  TaskRecurrenceType,
 } from "./types";
-import { isOwnerEmail } from "./entitlements";
+import { canAddTask, isOwnerEmail } from "./entitlements";
+import { requiresApprovalFromBehavior } from "./catalog";
 
 type FamilyState = {
   loading: boolean;
@@ -38,9 +44,53 @@ type FamilyState = {
   kidsMode: boolean;
   setKidsMode: (on: boolean) => void;
   reset: () => void;
-  /** Local list updates for parent web UI (full editors live on iOS). */
-  setRewardActive: (id: string, isActive: boolean) => void;
-  removeReward: (id: string) => void;
+  /** Persist archive/restore to Firestore; optimistic UI, throws on failure. */
+  setRewardActive: (id: string, isActive: boolean) => Promise<void>;
+  /** Persist hard delete to Firestore; optimistic UI, throws on failure. */
+  removeReward: (id: string) => Promise<void>;
+  addReward: (input: {
+    name: string;
+    description: string;
+    icon: string;
+    pointCost: number;
+    eligibleChildIds: string[];
+    requiresApproval?: boolean;
+  }) => Promise<Reward>;
+  updateReward: (
+    id: string,
+    input: {
+      name: string;
+      description: string;
+      icon: string;
+      pointCost: number;
+      eligibleChildIds: string[];
+      requiresApproval: boolean;
+    }
+  ) => Promise<void>;
+  addTask: (input: {
+    name: string;
+    description: string;
+    icon: string;
+    category: string;
+    pointValue: number;
+    approvalBehavior: TaskApprovalBehavior;
+    assignedChildIds: string[];
+    recurrence: TaskRecurrenceType;
+  }) => Promise<KiddoTask>;
+  updateTask: (
+    id: string,
+    input: {
+      name: string;
+      description: string;
+      icon: string;
+      category: string;
+      pointValue: number;
+      approvalBehavior: TaskApprovalBehavior;
+      assignedChildIds: string[];
+      recurrence: TaskRecurrenceType;
+    }
+  ) => Promise<void>;
+  setTaskActive: (id: string, isActive: boolean) => Promise<void>;
   loadFamilyForParent: (uid: string) => Promise<void>;
   loadKidsSession: (payload: {
     family: Family;
@@ -58,7 +108,7 @@ const emptyEntitlements: Entitlements = {
   status: "none",
 };
 
-export const useFamilyStore = create<FamilyState>((set) => ({
+export const useFamilyStore = create<FamilyState>((set, get) => ({
   loading: false,
   error: null,
   family: null,
@@ -75,15 +125,227 @@ export const useFamilyStore = create<FamilyState>((set) => ({
 
   setKidsMode: (on) => set({ kidsMode: on }),
 
-  setRewardActive: (id, isActive) =>
-    set((s) => ({
-      rewards: s.rewards.map((r) => (r.id === id ? { ...r, isActive } : r)),
-    })),
+  setRewardActive: async (id, isActive) => {
+    const previous = get().rewards;
+    set({ rewards: previous.map((r) => (r.id === id ? { ...r, isActive } : r)) });
+    try {
+      if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+      const db = firestore();
+      await updateDoc(doc(db, "rewards", id), {
+        isActive,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      set({ rewards: previous });
+      throw e instanceof Error ? e : new Error("Failed to update reward");
+    }
+  },
 
-  removeReward: (id) =>
-    set((s) => ({
-      rewards: s.rewards.filter((r) => r.id !== id),
-    })),
+  removeReward: async (id) => {
+    const previous = get().rewards;
+    if (!previous.some((r) => r.id === id)) {
+      throw new Error("Couldn’t find that reward.");
+    }
+    set({ rewards: previous.filter((r) => r.id !== id) });
+    try {
+      if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+      const db = firestore();
+      await deleteDoc(doc(db, "rewards", id));
+    } catch (e) {
+      set({ rewards: previous });
+      throw e instanceof Error ? e : new Error("Failed to delete reward");
+    }
+  },
+
+  addReward: async (input) => {
+    const { family, parentUid } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const name = input.name.trim();
+    if (!name) throw new Error("Reward name is required.");
+    const pointCost = Math.max(1, Math.round(input.pointCost));
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const reward: Reward = {
+      id,
+      familyId: family.id,
+      name,
+      description: input.description.trim(),
+      icon: input.icon || "gift.fill",
+      pointCost,
+      eligibleChildIds: input.eligibleChildIds,
+      requiresApproval: input.requiresApproval ?? true,
+      isActive: true,
+      createdBy: parentUid,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    };
+    const previous = get().rewards;
+    set({ rewards: [...previous, reward] });
+    try {
+      const db = firestore();
+      await setDoc(doc(db, "rewards", id), reward);
+      return reward;
+    } catch (e) {
+      set({ rewards: previous });
+      throw e instanceof Error ? e : new Error("Failed to add reward");
+    }
+  },
+
+  updateReward: async (id, input) => {
+    const previous = get().rewards;
+    const existing = previous.find((r) => r.id === id);
+    if (!existing) throw new Error("Couldn’t find that reward.");
+    const name = input.name.trim();
+    if (!name) throw new Error("Reward name is required.");
+    const pointCost = Math.max(1, Math.round(input.pointCost));
+    const next: Reward = {
+      ...existing,
+      name,
+      description: input.description.trim(),
+      icon: input.icon || existing.icon || "gift.fill",
+      pointCost,
+      eligibleChildIds: input.eligibleChildIds,
+      requiresApproval: input.requiresApproval,
+      updatedAt: new Date().toISOString(),
+      version: (existing.version ?? 1) + 1,
+    };
+    set({ rewards: previous.map((r) => (r.id === id ? next : r)) });
+    try {
+      if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+      const db = firestore();
+      // Only fields allowed by firestore.rules reward update.
+      await updateDoc(doc(db, "rewards", id), {
+        name: next.name,
+        description: next.description,
+        icon: next.icon,
+        pointCost: next.pointCost,
+        eligibleChildIds: next.eligibleChildIds,
+        requiresApproval: next.requiresApproval,
+        updatedAt: next.updatedAt,
+        version: next.version,
+      });
+    } catch (e) {
+      set({ rewards: previous });
+      throw e instanceof Error ? e : new Error("Failed to update reward");
+    }
+  },
+
+  addTask: async (input) => {
+    const { family, parentUid, parentEmail, entitlements, tasks } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const premium = entitlements.plan === "plus" || entitlements.plan === "pro";
+    if (!canAddTask(tasks.length, parentEmail, premium)) {
+      throw new Error("Free plan includes up to 20 chores. Upgrade to add more.");
+    }
+    const name = input.name.trim();
+    if (!name) throw new Error("Chore name is required.");
+    const pointValue = Math.max(1, Math.round(input.pointValue));
+    const requiresApproval = requiresApprovalFromBehavior(
+      input.approvalBehavior,
+      Boolean(family.settings?.requireApprovalByDefault)
+    );
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const task: KiddoTask = {
+      id,
+      familyId: family.id,
+      name,
+      description: input.description.trim(),
+      icon: input.icon || "checkmark.circle",
+      category: input.category || "household",
+      pointValue,
+      requiresApproval,
+      approvalBehavior: input.approvalBehavior,
+      assignedChildIds: input.assignedChildIds,
+      recurrence: { type: input.recurrence },
+      isActive: true,
+      createdBy: parentUid,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    };
+    const previous = get().tasks;
+    set({ tasks: [...previous, task] });
+    try {
+      const db = firestore();
+      await setDoc(doc(db, "tasks", id), task);
+      return task;
+    } catch (e) {
+      set({ tasks: previous });
+      throw e instanceof Error ? e : new Error("Failed to add chore");
+    }
+  },
+
+  updateTask: async (id, input) => {
+    const previous = get().tasks;
+    const { family } = get();
+    const existing = previous.find((t) => t.id === id);
+    if (!existing) throw new Error("Couldn’t find that chore.");
+    const name = input.name.trim();
+    if (!name) throw new Error("Chore name is required.");
+    const pointValue = Math.max(1, Math.round(input.pointValue));
+    const requiresApproval = requiresApprovalFromBehavior(
+      input.approvalBehavior,
+      Boolean(family?.settings?.requireApprovalByDefault)
+    );
+    const next: KiddoTask = {
+      ...existing,
+      name,
+      description: input.description.trim(),
+      icon: input.icon || existing.icon || "checkmark.circle",
+      category: input.category || existing.category || "household",
+      pointValue,
+      requiresApproval,
+      approvalBehavior: input.approvalBehavior,
+      assignedChildIds: input.assignedChildIds,
+      recurrence: {
+        type: input.recurrence,
+        weekdays: existing.recurrence?.weekdays,
+      },
+      updatedAt: new Date().toISOString(),
+      version: (existing.version ?? 1) + 1,
+    };
+    set({ tasks: previous.map((t) => (t.id === id ? next : t)) });
+    try {
+      if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+      const db = firestore();
+      await updateDoc(doc(db, "tasks", id), {
+        name: next.name,
+        description: next.description,
+        icon: next.icon,
+        category: next.category,
+        pointValue: next.pointValue,
+        requiresApproval: next.requiresApproval,
+        approvalBehavior: next.approvalBehavior,
+        assignedChildIds: next.assignedChildIds,
+        recurrence: next.recurrence,
+        updatedAt: next.updatedAt,
+        version: next.version,
+      });
+    } catch (e) {
+      set({ tasks: previous });
+      throw e instanceof Error ? e : new Error("Failed to update chore");
+    }
+  },
+
+  setTaskActive: async (id, isActive) => {
+    const previous = get().tasks;
+    set({ tasks: previous.map((t) => (t.id === id ? { ...t, isActive } : t)) });
+    try {
+      if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+      const db = firestore();
+      await updateDoc(doc(db, "tasks", id), {
+        isActive,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      set({ tasks: previous });
+      throw e instanceof Error ? e : new Error("Failed to update chore");
+    }
+  },
 
   reset: () =>
     set({
