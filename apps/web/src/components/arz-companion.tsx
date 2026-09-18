@@ -192,8 +192,8 @@ export const ARZ_AVATAR_SIZE = 80;
 /** How long the tap phrase stays visible (ms). */
 export const ARZ_PHRASE_MS = 2500;
 
-/** Temporary web-only avatar: looping emotion-cycle MP4 (1280×720 H.264). */
-const ARZ_VIDEO_SRC = "/arz/emotions-loop.mp4";
+/** Final header avatar: looping `arz.mp4` (1280×720 H.264, ~10s). */
+const ARZ_VIDEO_SRC = "/arz/arz.mp4";
 const ARZ_STILL_FALLBACK = "/arz/head_happy.png";
 
 const ARZ_PHRASES = [
@@ -232,8 +232,8 @@ function useAvatarSize() {
 
 /**
  * Compact Arz avatar for the page header row (replaces brand logo).
- * Web-only temporary swap: muted looping MP4 of the boy avatar cycling emotions.
- * Tap still opens the phrase bubble. Reduced-motion / load failure → PNG stills.
+ * Final avatar: muted looping `arz.mp4`. Tap opens the phrase bubble.
+ * Reduced-motion / load failure → PNG stills.
  */
 export function ArzAvatar({
   size,

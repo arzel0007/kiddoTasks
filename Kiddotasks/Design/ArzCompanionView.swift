@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Head
 
 /// Animated Arz head.
-/// Temporary swap (web + iOS): muted looping emotion-cycle video when bundled.
+/// Final avatar (web + iOS): muted looping `arz.mp4` when bundled.
 /// Falls back to expression PNG stills on Reduce Motion or missing clip.
 struct ArzHeadView: View {
     var size: CGFloat = 52

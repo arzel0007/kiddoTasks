@@ -1,16 +1,23 @@
 import AVFoundation
 import SwiftUI
 
-/// Temporary avatar media: looping emotion-cycle clip (matches web `emotions-loop.mp4`).
+/// Final avatar media: looping `arz.mp4` (matches web `/arz/arz.mp4`).
 /// Bundled under `Kiddotasks/Images/` via the synchronized Xcode group.
 enum ArzAvatarMedia {
-    static let videoResourceName = "Boy_animated_avatar_cycling_emotions"
+    static let videoResourceName = "arz"
     static let videoFileExtension = "mp4"
     /// Still used when Reduce Motion is on or the clip is missing from the bundle.
     static let fallbackHeadAsset = "kiddo_head_happy"
 
     static var videoURL: URL? {
-        Bundle.main.url(forResource: videoResourceName, withExtension: videoFileExtension)
+        if let url = Bundle.main.url(forResource: videoResourceName, withExtension: videoFileExtension) {
+            return url
+        }
+        // Older emotion-cycle clip, if `arz.mp4` is not in the target yet.
+        return Bundle.main.url(
+            forResource: "Boy_animated_avatar_cycling_emotions",
+            withExtension: videoFileExtension
+        )
     }
 
     static var hasVideo: Bool { videoURL != nil }
