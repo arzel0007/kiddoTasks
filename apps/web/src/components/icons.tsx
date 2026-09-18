@@ -40,6 +40,18 @@ export function IconRewards({ className, size = 18 }: IconProps) {
   );
 }
 
+/** Wishlist nav icon — gift outline, distinct from Rewards filled box. */
+export function IconWishlist({ className, size = 18 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>
+      <rect x="3.5" y="10" width="17" height="10.5" rx="2" {...base} />
+      <path d="M3.5 14.5h17M12 10v10.5" {...base} />
+      <path d="M12 10c-2.2 0-3.8-1.2-3.8-2.8C8.2 5.8 9.6 5 10.7 5.8c1 .7 1.3 2.2 1.3 4.2z" {...base} />
+      <path d="M12 10c2.2 0 3.8-1.2 3.8-2.8 0-1.4-1.4-2.2-2.5-1.4-1 .7-1.3 2.2-1.3 4.2z" {...base} />
+    </svg>
+  );
+}
+
 export function IconFamily({ className, size = 18 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>

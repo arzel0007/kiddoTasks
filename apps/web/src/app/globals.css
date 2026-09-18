@@ -386,6 +386,13 @@ body {
   color: var(--color-text-tertiary);
 }
 
+/* Search inputs — icon/clear must not overlap text.
+   Longhand padding so this wins over .field-input shorthand. */
+.field-input.field-input--search {
+  padding-left: 2.5rem;
+  padding-right: 2.5rem;
+}
+
 .field-input:disabled {
   opacity: 0.55;
   background: var(--color-surface);

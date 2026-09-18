@@ -7,10 +7,15 @@ import { ChildAvatar } from "@/lib/ui";
 import { PageSkeleton } from "@/components/skeleton";
 import { ALLOWANCE_MODES, type AllowanceMode } from "@/lib/entitlements";
 import { toast } from "@/components/toast";
+import { errorMessage } from "@/lib/errors";
+import { isWishlistEnabled } from "@/lib/wishlist";
+import { computePlanDisplay } from "@/lib/billing/plan-status";
+import { PlanStatusSummary } from "@/components/plan-status-summary";
 
 export default function FamilyPage() {
-  const { family, children, loading } = useFamilyStore();
+  const { family, children, loading, setEnableWishlist, parentEmail } = useFamilyStore();
   const ent = useEntitlements();
+  const planDisplay = computePlanDisplay(ent, parentEmail);
   const [mode, setMode] = useState<AllowanceMode>(
     (family?.settings?.allowanceMode as AllowanceMode) || "STARS_ONLY"
   );
@@ -20,6 +25,21 @@ export default function FamilyPage() {
   const [weekBonus, setWeekBonus] = useState(
     family?.settings?.weekBonusTitle || "Full week!"
   );
+  const [wishlistBusy, setWishlistBusy] = useState(false);
+  const wishlistOn = isWishlistEnabled(family);
+
+  async function toggleWishlist() {
+    const next = !wishlistOn;
+    setWishlistBusy(true);
+    try {
+      await setEnableWishlist(next);
+      toast.success(next ? "Wishlist enabled for your family." : "Wishlist disabled.");
+    } catch (e) {
+      toast.error(errorMessage(e, "Couldn’t save wishlist setting."));
+    } finally {
+      setWishlistBusy(false);
+    }
+  }
 
   if (loading && !family) {
     return <PageSkeleton rows={2} />;
@@ -27,6 +47,17 @@ export default function FamilyPage() {
 
   return (
     <div className="space-y-4">
+      {!family ? (
+        <div className="card border-error/40">
+          <p className="font-semibold text-error">
+            Family data didn’t load. Check your connection or sign out and back in.
+          </p>
+          <p className="mt-1 text-sm text-ink-secondary">
+            The Wishlist toggle needs a loaded family. If Tasks/Rewards are also empty,
+            deploy Firestore rules and hard-refresh.
+          </p>
+        </div>
+      ) : null}
       <div className="card text-center">
         <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/10">
           {family?.photoURL || family?.photoData ? (
@@ -107,6 +138,42 @@ export default function FamilyPage() {
       </div>
 
       <div className="card">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold">Wishlist</h3>
+            <p className="mt-1 text-xs text-ink-secondary">
+              Gift ideas kids can request. Separate from stars and rewards.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={wishlistOn}
+            disabled={wishlistBusy || !family}
+            className={`relative h-8 w-14 shrink-0 rounded-full transition ${
+              wishlistOn ? "bg-primary" : "bg-border"
+            } ${wishlistBusy ? "opacity-60" : ""}`}
+            onClick={() => void toggleWishlist()}
+          >
+            <span
+              className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow-card transition-all ${
+                wishlistOn ? "left-7" : "left-1"
+              }`}
+            />
+            <span className="sr-only">
+              {wishlistOn ? "Disable wishlist" : "Enable wishlist"}
+            </span>
+          </button>
+        </div>
+        <p className="text-xs font-semibold text-ink-secondary">
+          {wishlistOn ? "On — kids can add wishlist items" : "Off — kids cannot add items"}
+        </p>
+        <a href="/parent/wishlist" className="btn-secondary mt-3 inline-flex w-auto px-4">
+          Open wishlist
+        </a>
+      </div>
+
+      <div className="card">
         <h3 className="mb-2 font-bold">Allowance</h3>
         <p className="mb-2 text-xs text-ink-secondary">
           Stars stay in the app. These modes help you know what to pay out.
@@ -165,18 +232,7 @@ export default function FamilyPage() {
         />
       </div>
 
-      <div className="card">
-        <h3 className="mb-2 font-bold">Plan</h3>
-        <p className="capitalize">
-          {ent.plan} · <span className="text-ink-secondary">{ent.status}</span>
-        </p>
-        <p className="mt-1 text-xs text-ink-tertiary">
-          Free: 1 kid · 20 chores · Premium ₱199/mo for co-parent join & unlimited.
-        </p>
-        <a href="/parent/billing" className="btn-secondary mt-3">
-          Manage billing
-        </a>
-      </div>
+      <PlanStatusSummary plan={planDisplay} compact />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useFamilyStore } from "@/lib/family-store";
-import { IconTile } from "@/lib/ui";
+import { IconTile, ChildAvatar } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
@@ -55,6 +55,7 @@ export default function TasksPage() {
     loading,
     parentEmail,
     entitlements,
+    error,
     addTask,
     updateTask,
     setTaskActive,
@@ -165,21 +166,30 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-4">
+      {error ? (
+        <div className="card border-error/40">
+          <p className="font-semibold text-error">{error}</p>
+        </div>
+      ) : null}
       <div className="relative">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-base leading-none text-ink-secondary"
+        >
           🔍
         </span>
         <input
-          className="field-input pl-9 pr-9"
+          className="field-input field-input--search"
           placeholder="Search chores…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search chores"
         />
         {search ? (
           <button
             type="button"
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-sm text-ink-tertiary hover:text-ink"
+            className="absolute right-2 top-1/2 z-[1] -translate-y-1/2 rounded-full px-2 py-1 text-sm text-ink-tertiary hover:text-ink"
             onClick={() => setSearch("")}
           >
             ✕
@@ -401,12 +411,20 @@ export default function TasksPage() {
                     <button
                       key={c.id}
                       type="button"
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                         on ? "bg-primary text-white" : "bg-surface text-ink-secondary"
                       }`}
                       onClick={() => toggleAssigned(c.id)}
                     >
-                      {c.avatar?.emoji} {c.name}
+                      <ChildAvatar
+                        emoji={c.avatar?.emoji}
+                        colorHex={c.avatar?.colorHex}
+                        photoURL={c.photoURL}
+                        photoData={c.photoData}
+                        size={18}
+                        name={c.name}
+                      />
+                      {c.name}
                     </button>
                   );
                 })}

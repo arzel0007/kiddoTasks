@@ -379,6 +379,7 @@ export function arzTitleFromPath(pathname: string | null): string {
   const path = pathname ?? "";
   if (path.startsWith("/parent/tasks")) return "Tasks";
   if (path.startsWith("/parent/rewards")) return "Rewards";
+  if (path.startsWith("/parent/wishlist")) return "Wishlist";
   if (path.startsWith("/parent/family")) return "Family";
   if (path.startsWith("/parent/history")) return "History";
   if (path.startsWith("/parent/billing")) return "Plan";

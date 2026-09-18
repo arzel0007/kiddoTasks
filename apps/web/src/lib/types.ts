@@ -13,6 +13,8 @@ export type FamilySettings = {
   flatDailyAmount?: number;
   weekBonusTitle?: string;
   plan?: string;
+  /** Feature flag — missing / false = disabled. Separate from points/rewards. */
+  enableWishlist?: boolean;
 };
 
 export type Family = {
@@ -128,6 +130,35 @@ export type Entitlements = {
   plan: "free" | "plus" | "pro";
   status: "active" | "trialing" | "past_due" | "canceled" | "none";
   currentPeriodEnd?: string | null;
+};
+
+/** Wishlist domain — gift requests, NEVER linked to points/activePoints. */
+export type WishlistStatus = "PENDING" | "APPROVED" | "REJECTED" | "RECEIVED";
+
+export type WishlistOccasion =
+  | "BIRTHDAY"
+  | "CHRISTMAS"
+  | "GRADUATION"
+  | "SCHOOL"
+  | "SPECIAL"
+  | "JUST_BECAUSE"
+  | "OTHER";
+
+export type WishlistItem = {
+  id: string;
+  familyId: string;
+  childId: string;
+  title: string;
+  message?: string | null;
+  occasion?: WishlistOccasion | string | null;
+  status: WishlistStatus;
+  parentResponse?: string | null;
+  createdBy: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  version?: number;
 };
 
 // FREE_LIMITS moved to entitlements.ts (single source of truth).

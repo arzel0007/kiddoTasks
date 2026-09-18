@@ -460,6 +460,35 @@ struct RewardListView: View {
                 }
 
                 List {
+                    if appState.currentFamily?.settings.enableWishlist == true {
+                        Section("Wishlist") {
+                            NavigationLink {
+                                ParentWishlistView()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "heart.text.square")
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 40, height: 40)
+                                        .background {
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .fill(KiddoTasksDesignTokens.Colors.primary)
+                                        }
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("Review wishes")
+                                            .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                                        let pending = appState.store.pendingWishlistCount()
+                                        Text(pending > 0 ? "\(pending) waiting for you" : "Gift wishes — never use stars")
+                                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            .accessibilityLabel("Review wishlist wishes")
+                        }
+                    }
+
                     Section("Active") {
                         let active = appState.store.rewards.filter(\.isActive)
                         if active.isEmpty {
@@ -927,6 +956,29 @@ struct FamilyView: View {
                     Text("Shows tic-tac-toe and memory in Kids Space.")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
                         .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                }
+                Section("Wishlist") {
+                    Toggle("Enable wishlist", isOn: Binding(
+                        get: { appState.currentFamily?.settings.enableWishlist ?? false },
+                        set: { isEnabled in
+                            do {
+                                try appState.store.updateWishlistEnabled(isEnabled)
+                                appState.toastSuccess(isEnabled ? "Wishlist enabled" : "Wishlist turned off")
+                            } catch {
+                                appState.toastError(error.localizedDescription)
+                            }
+                        }
+                    ))
+                    Text("Kids list gift wishes for birthdays and special days. Approvals never award or spend stars.")
+                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    if appState.currentFamily?.settings.enableWishlist == true {
+                        NavigationLink {
+                            ParentWishlistView()
+                        } label: {
+                            Label("Review wishes", systemImage: "heart.text.square")
+                        }
+                    }
                 }
                 Section("This device") {
                     Picker("Interface", selection: Binding(

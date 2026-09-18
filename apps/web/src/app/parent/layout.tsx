@@ -20,12 +20,14 @@ import {
   IconRewards,
   IconTasks,
   IconToday,
+  IconWishlist,
 } from "@/components/icons";
 
 const tabs = [
   { href: "/parent/today", label: "Today", Icon: IconToday },
   { href: "/parent/tasks", label: "Tasks", Icon: IconTasks },
   { href: "/parent/rewards", label: "Rewards", Icon: IconRewards },
+  { href: "/parent/wishlist", label: "Wishlist", Icon: IconWishlist },
   { href: "/parent/family", label: "Family", Icon: IconFamily },
   { href: "/parent/history", label: "History", Icon: IconHistory },
   { href: "/parent/billing", label: "Plan", Icon: IconPlan },

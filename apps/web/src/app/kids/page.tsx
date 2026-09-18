@@ -19,12 +19,19 @@ import type {
   Reward,
   RewardClaim,
   TaskCompletion,
+  WishlistItem,
 } from "@/lib/types";
 import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
 import { ArzAvatar, arzHandle } from "@/components/arz-companion";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
+import { Modal } from "@/components/ui/modal";
+import {
+  WISHLIST_STATUS_LABELS,
+  occasionLabel,
+  wishlistStatusBadgeClass,
+} from "@/lib/wishlist";
 
 type UnlockTab = "pin" | "parent";
 
@@ -36,7 +43,18 @@ type KidsSessionPayload = {
   rewards: Reward[];
   claims: RewardClaim[];
   transactions: PointTransaction[];
+  wishlistItems?: WishlistItem[];
+  kidsAccessToken?: string | null;
+  wishlistEnabled?: boolean;
 };
+
+type WishlistForm = {
+  title: string;
+  message: string;
+  occasion: string | null;
+};
+
+const emptyWishlistForm: WishlistForm = { title: "", message: "", occasion: null };
 
 /**
  * Kids Station — parent-signed-in browser or family PIN.
@@ -58,8 +76,26 @@ export default function KidsPage() {
   const [busy, setBusy] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
+  // Wishlist UI state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [wishForm, setWishForm] = useState<WishlistForm>(emptyWishlistForm);
+  const [wishFormError, setWishFormError] = useState<string | null>(null);
+  const [wishBusyId, setWishBusyId] = useState<string | null>(null);
+  const [wishSaving, setWishSaving] = useState(false);
+  const [pendingWishDelete, setPendingWishDelete] = useState<string | null>(null);
+
   const canOpen = Boolean(family) || store.kidsMode;
   const selected = children.find((c) => c.id === selectedChildId) ?? null;
+  const wishlistEnabled = store.wishlistEnabled === true;
+
+  const myWishlist = useMemo(() => {
+    if (!selected) return [] as WishlistItem[];
+    // RECEIVED is model-only — hide in kids UI.
+    return store.wishlistItems.filter(
+      (w) => w.childId === selected.id && w.status !== "RECEIVED"
+    );
+  }, [store.wishlistItems, selected]);
 
   // Parent session can outlive this route — restore family so a signed-in
   // parent opens Kids Station instead of the lock screen.
@@ -134,6 +170,9 @@ export default function KidsPage() {
         rewards: unknown[];
         claims: unknown[];
         transactions: unknown[];
+        wishlistItems?: unknown[];
+        wishlistEnabled?: boolean;
+        kidsAccessToken?: string | null;
         familyId: string;
       };
       const payload = {
@@ -144,6 +183,9 @@ export default function KidsPage() {
         rewards: data.rewards,
         claims: data.claims,
         transactions: data.transactions,
+        wishlistItems: (data.wishlistItems ?? []) as WishlistItem[],
+        kidsAccessToken: data.kidsAccessToken ?? null,
+        wishlistEnabled: data.wishlistEnabled === true,
       } as unknown as KidsSessionPayload;
       useFamilyStore.getState().loadKidsSession(payload);
       setPin("");
@@ -194,6 +236,90 @@ export default function KidsPage() {
       toast.error(msg);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function startAddWish() {
+    setEditingItemId(null);
+    setWishForm(emptyWishlistForm);
+    setWishFormError(null);
+    setShowAddForm(true);
+  }
+
+  function startEditWish(item: WishlistItem) {
+    setEditingItemId(item.id);
+    setWishForm({
+      title: item.title,
+      message: item.message ?? "",
+      occasion: item.occasion ? String(item.occasion) : null,
+    });
+    setWishFormError(null);
+    setShowAddForm(true);
+  }
+
+  async function saveWish(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) {
+      const msg = "Pick who you are first.";
+      setWishFormError(msg);
+      toast.error(msg);
+      return;
+    }
+    const title = wishForm.title.trim();
+    if (!title) {
+      const msg = "What do you wish for?";
+      setWishFormError(msg);
+      toast.error(msg);
+      return;
+    }
+    setWishSaving(true);
+    setWishFormError(null);
+    try {
+      if (editingItemId) {
+        const existing = store.wishlistItems.find((w) => w.id === editingItemId);
+        await store.updateWishlistItem({
+          itemId: editingItemId,
+          title,
+          message: wishForm.message,
+          occasion: wishForm.occasion,
+          version: existing?.version,
+        });
+        toast.success("Wishlist updated!");
+      } else {
+        await store.addWishlistItem({
+          childId: selected.id,
+          title,
+          message: wishForm.message,
+          occasion: wishForm.occasion,
+        });
+        toast.success("Added to your wishlist!");
+      }
+      setShowAddForm(false);
+      setEditingItemId(null);
+      setWishForm(emptyWishlistForm);
+    } catch (err) {
+      const msg = errorMessage(err, "Couldn’t save wishlist item.");
+      setWishFormError(msg);
+      toast.error(msg);
+    } finally {
+      setWishSaving(false);
+    }
+  }
+
+  async function deleteWish(itemId: string) {
+    setWishBusyId(itemId);
+    try {
+      await store.deleteWishlistItem(itemId);
+      setPendingWishDelete(null);
+      if (editingItemId === itemId) {
+        setShowAddForm(false);
+        setEditingItemId(null);
+      }
+      toast.success("Removed from your wishlist.");
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn’t delete wishlist item."));
+    } finally {
+      setWishBusyId(null);
     }
   }
 
@@ -462,9 +588,209 @@ export default function KidsPage() {
                 })}
               </ul>
             )}
+
+            {/* Wishlist — separate domain from points. selected childId required. */}
+            <section className="mt-6 card" aria-label="Wishlist">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="font-bold">🎁 Wishlist</h2>
+                {wishlistEnabled ? (
+                  !showAddForm ? (
+                    <button
+                      type="button"
+                      className="chip-btn chip-btn--primary"
+                      onClick={startAddWish}
+                    >
+                      + Add wish
+                    </button>
+                  ) : null
+                ) : null}
+              </div>
+
+              {!wishlistEnabled ? (
+                <div className="rounded-xl bg-surface p-3 text-sm text-ink-secondary">
+                  <p className="font-semibold">🔒 Wishlist is locked</p>
+                  <p className="mt-1">
+                    Ask a parent to turn on Wishlist in Family settings.
+                  </p>
+                  {myWishlist.length > 0 ? (
+                    <p className="mt-2 text-xs text-ink-tertiary">
+                      Past wishes stay here until a parent manages them.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {wishlistEnabled && showAddForm ? (
+                <form onSubmit={saveWish} className="mb-4 space-y-3 rounded-card border border-border p-3">
+                  <div>
+                    <label className="field-label" htmlFor="wish-title">
+                      I wish for…
+                    </label>
+                    <input
+                      id="wish-title"
+                      className="field-input"
+                      required
+                      maxLength={120}
+                      placeholder="A blue bicycle"
+                      value={wishForm.title}
+                      onChange={(e) =>
+                        setWishForm((f) => ({ ...f, title: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label" htmlFor="wish-message">
+                      Why I want it (optional)
+                    </label>
+                    <input
+                      id="wish-message"
+                      className="field-input"
+                      maxLength={500}
+                      placeholder="So we can ride to the park"
+                      value={wishForm.message}
+                      onChange={(e) =>
+                        setWishForm((f) => ({ ...f, message: e.target.value }))
+                      }
+                    />
+                  </div>
+                  {wishFormError ? (
+                    <p className="field-error" role="alert">
+                      {wishFormError}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn-primary" type="submit" disabled={wishSaving}>
+                      {wishSaving
+                        ? "Saving…"
+                        : editingItemId
+                          ? "Save changes"
+                          : "Add to wishlist"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={wishSaving}
+                      onClick={() => {
+                        setShowAddForm(false);
+                        setEditingItemId(null);
+                        setWishFormError(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              {myWishlist.length === 0 ? (
+                <div className="text-center">
+                  <p className="text-3xl">🎁</p>
+                  <p className="mt-2 font-semibold">No wishes yet</p>
+                  <p className="text-sm text-ink-secondary">
+                    {wishlistEnabled
+                      ? "Add something you’d love to get."
+                      : "Wishes will show up here when the wishlist is on."}
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {myWishlist.map((item) => {
+                    const canEdit = item.status === "PENDING";
+                    const canDelete =
+                      item.status === "PENDING" || item.status === "REJECTED";
+                    const showResponse =
+                      (item.status === "APPROVED" || item.status === "REJECTED") &&
+                      Boolean(item.parentResponse);
+                    return (
+                      <li
+                        key={item.id}
+                        className={`rounded-card border border-border p-3 ${
+                          item.status === "REJECTED" ? "opacity-80" : ""
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={wishlistStatusBadgeClass(item.status)}>
+                                {WISHLIST_STATUS_LABELS[item.status] ?? item.status}
+                              </span>
+                              {item.occasion ? (
+                                <span className="rounded-pill bg-surface px-2.5 py-1 text-xs font-semibold text-ink-secondary">
+                                  {occasionLabel(item.occasion)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 truncate font-bold">{item.title}</p>
+                            {item.message ? (
+                              <p className="text-sm text-ink-secondary">{item.message}</p>
+                            ) : null}
+                            {showResponse ? (
+                              <p className="mt-1 text-sm italic text-ink-secondary">
+                                Parent: {item.parentResponse}
+                              </p>
+                            ) : null}
+                          </div>
+                          {wishlistEnabled && (canEdit || canDelete) ? (
+                            <div className="flex shrink-0 flex-wrap gap-1.5">
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  className="btn-secondary btn-compact"
+                                  disabled={wishBusyId === item.id}
+                                  onClick={() => startEditWish(item)}
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
+                              {canDelete ? (
+                                <button
+                                  type="button"
+                                  className="btn-secondary btn-compact !text-attention"
+                                  disabled={wishBusyId === item.id}
+                                  onClick={() => setPendingWishDelete(item.id)}
+                                >
+                                  {wishBusyId === item.id ? "…" : "Delete"}
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </div>
         )}
       </div>
+
+      <Modal
+        open={pendingWishDelete !== null}
+        title="Remove this wish?"
+        description="It will disappear from your wishlist."
+        onClose={() => setPendingWishDelete(null)}
+      >
+        <div className="mt-2 space-y-2">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={wishBusyId === pendingWishDelete}
+            onClick={() =>
+              pendingWishDelete && void deleteWish(pendingWishDelete)
+            }
+          >
+            {wishBusyId === pendingWishDelete ? "Removing…" : "Remove"}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setPendingWishDelete(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
     </main>
   );
 }

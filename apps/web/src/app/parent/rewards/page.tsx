@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useFamilyStore } from "@/lib/family-store";
-import { IconTile } from "@/lib/ui";
+import { IconTile, ChildAvatar } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
@@ -42,6 +42,7 @@ export default function RewardsPage() {
     rewards,
     children,
     loading,
+    error,
     setRewardActive,
     removeReward,
     addReward,
@@ -162,6 +163,11 @@ export default function RewardsPage() {
 
   return (
     <div className="space-y-4">
+      {error ? (
+        <div className="card border-error/40">
+          <p className="font-semibold text-error">{error}</p>
+        </div>
+      ) : null}
       <div className="card">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="font-bold">Active rewards</h2>
@@ -348,12 +354,20 @@ export default function RewardsPage() {
                     <button
                       key={c.id}
                       type="button"
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                         on ? "bg-primary text-white" : "bg-surface text-ink-secondary"
                       }`}
                       onClick={() => toggleEligible(c.id)}
                     >
-                      {c.avatar?.emoji} {c.name}
+                      <ChildAvatar
+                        emoji={c.avatar?.emoji}
+                        colorHex={c.avatar?.colorHex}
+                        photoURL={c.photoURL}
+                        photoData={c.photoData}
+                        size={18}
+                        name={c.name}
+                      />
+                      {c.name}
                     </button>
                   );
                 })}

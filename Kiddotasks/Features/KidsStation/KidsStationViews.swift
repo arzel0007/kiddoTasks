@@ -250,6 +250,9 @@ struct KidsStationView: View {
                 RewardShopView()
                     .tabItem { Label("Shop", systemImage: "gift.fill") }
                     .tag(1)
+                KidsWishlistView()
+                    .tabItem { Label("Wishes", systemImage: "heart.text.square") }
+                    .tag(4)
                 AchievementsView()
                     .tabItem { Label("Badges", systemImage: "medal.fill") }
                     .tag(2)

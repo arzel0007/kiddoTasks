@@ -18,9 +18,7 @@
  *    existing "Family notifications" toggle, now real.
  */
 import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
-
-const db = admin.firestore();
+import { admin, db } from "./firebase-init";
 
 const RECENCY_WINDOW_MS = 5 * 60 * 1000;
 const SKIPPED_LEDGER_TYPES = new Set(["TASK_COMPLETION", "REWARD_REDEMPTION"]);

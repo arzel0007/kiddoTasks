@@ -76,6 +76,9 @@ struct FamilySettings: Codable {
     var weekBonusTitle: String = "Full week!"
     /// Plan for this family (free | plus). Stripe can upgrade this later.
     var plan: String = "free"
+    /// Wishlist (H1): OFF by default until a parent enables it.
+    /// Wishlist review never touches points.
+    var enableWishlist: Bool = false
 
     static let `default` = FamilySettings()
 
@@ -92,6 +95,7 @@ struct FamilySettings: Codable {
         case flatDailyAmount
         case weekBonusTitle
         case plan
+        case enableWishlist
     }
 
     init(
@@ -106,7 +110,8 @@ struct FamilySettings: Codable {
         allowanceMode: AllowanceMode = .starsOnly,
         flatDailyAmount: Double = 1,
         weekBonusTitle: String = "Full week!",
-        plan: String = "free"
+        plan: String = "free",
+        enableWishlist: Bool = false
     ) {
         self.pointDisplaySymbol = pointDisplaySymbol
         self.enableNotifications = enableNotifications
@@ -120,6 +125,7 @@ struct FamilySettings: Codable {
         self.flatDailyAmount = flatDailyAmount
         self.weekBonusTitle = weekBonusTitle
         self.plan = plan
+        self.enableWishlist = enableWishlist
     }
 
     init(from decoder: Decoder) throws {
@@ -136,5 +142,7 @@ struct FamilySettings: Codable {
         flatDailyAmount = try c.decodeIfPresent(Double.self, forKey: .flatDailyAmount) ?? 1
         weekBonusTitle = try c.decodeIfPresent(String.self, forKey: .weekBonusTitle) ?? "Full week!"
         plan = try c.decodeIfPresent(String.self, forKey: .plan) ?? "free"
+        // H1 product default: wishlist stays OFF until a parent turns it on.
+        enableWishlist = try c.decodeIfPresent(Bool.self, forKey: .enableWishlist) ?? false
     }
 }

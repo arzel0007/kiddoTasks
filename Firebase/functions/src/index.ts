@@ -1,9 +1,14 @@
 import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
+import { admin, db } from "./firebase-init";
+import {
+  addWishlistItem,
+  deleteWishlistItem,
+  reviewWishlistItem,
+  signKidToken,
+  updateWishlistItem,
+} from "./wishlist";
 
-admin.initializeApp();
-
-const db = admin.firestore();
+export { addWishlistItem, updateWishlistItem, deleteWishlistItem, reviewWishlistItem };
 
 /** Create family + parent docs after Auth signup. Client cannot write these collections. */
 export const bootstrapFamily = functions.https.onCall(async (data, context) => {
@@ -51,6 +56,8 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
         requireApprovalByDefault: true,
         weekStartsOn: 1,
         kidsStationPIN,
+        // Wishlist (H1): default OFF for new families until parent enables it.
+        enableWishlist: false,
       },
       createdAt: now,
       updatedAt: now,
@@ -133,15 +140,21 @@ async function buildKidsSnapshot(familyId: string, familyData: any) {
     });
   };
 
-  const [children, tasks, completions, rewards, claims, transactions, achievements] = await Promise.all([
-    col("children"),
-    col("tasks"),
-    col("taskCompletions"),
-    col("rewards"),
-    col("rewardClaims"),
-    col("pointTransactions"),
-    col("achievements"),
-  ]);
+  const [children, tasks, completions, rewards, claims, transactions, achievements, wishlistItems] =
+    await Promise.all([
+      col("children"),
+      col("tasks"),
+      col("taskCompletions"),
+      col("rewards"),
+      col("rewardClaims"),
+      col("pointTransactions"),
+      col("achievements"),
+      col("wishlistItems"),
+    ]);
+
+  const wishlistEnabled = familyData?.settings?.enableWishlist === true;
+  // Kid session token for wishlist callables (separate from parent Auth).
+  const kidsAccessToken = signKidToken({ familyId });
 
   return {
     familyId,
@@ -153,6 +166,9 @@ async function buildKidsSnapshot(familyId: string, familyData: any) {
     claims,
     transactions,
     achievements,
+    wishlistItems,
+    wishlistEnabled,
+    kidsAccessToken,
   };
 }
 
@@ -210,6 +226,7 @@ async function deleteAllDocsForFamily(familyId: string): Promise<void> {
     "pointTransactions",
     "achievements",
     "taskInstances",
+    "wishlistItems",
   ];
 
   for (const collection of collections) {
@@ -795,6 +812,7 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
     claims: [],
     transactions: [],
     achievements: [],
+    wishlistItems: [],
   };
 
   const collectionMap: Record<string, string> = {
@@ -805,6 +823,7 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
     claims: "rewardClaims",
     transactions: "pointTransactions",
     achievements: "achievements",
+    wishlistItems: "wishlistItems",
   };
 
   // Delete tombstoned docs (family-scoped). Chunk commits under the 500-op limit.
@@ -915,6 +934,7 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
   await upsert("rewardClaims", data?.claims, "claims");
   await upsert("pointTransactions", data?.transactions, "transactions");
   await upsert("achievements", data?.achievements, "achievements");
+  await upsert("wishlistItems", data?.wishlistItems, "wishlistItems");
 
   await flushBatch();
   return { ok: true, familyId, deleted };

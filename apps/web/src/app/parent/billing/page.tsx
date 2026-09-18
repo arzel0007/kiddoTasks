@@ -6,6 +6,8 @@ import { getAuth } from "firebase/auth";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { PREMIUM_BENEFITS, PLANS } from "@/lib/billing/plans";
+import { computePlanDisplay } from "@/lib/billing/plan-status";
+import { PlanStatusSummary } from "@/components/plan-status-summary";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
 
@@ -39,8 +41,6 @@ export default function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
-
-  const plan = PLANS.premium_monthly;
 
   const refresh = useCallback(async () => {
     const headers = await authHeaders();
@@ -124,52 +124,17 @@ export default function BillingPage() {
     }
   }
 
-  const isPremium = ent.isOwner || ent.isPlus || sub?.premium;
-  const statusLabel = ent.isOwner
-    ? "Founder"
-    : sub?.status === "active"
-      ? "Active"
-      : sub?.status === "past_due"
-        ? "Past due"
-        : sub?.status === "canceled"
-          ? "Canceled"
-          : ent.plan !== "free"
-            ? "Active"
-            : "Free";
+  const parentEmail = useFamilyStore((s) => s.parentEmail);
+  const planDisplay = computePlanDisplay(ent, parentEmail, sub);
+  const isPremium = planDisplay.isPremium;
+  const plan = PLANS.premium_monthly;
 
   return (
     <div className="space-y-4">
-      <div className="card">
-        <h2 className="text-xl font-bold">Your plan</h2>
-        <p className="mt-2 text-3xl font-bold">
-          {isPremium ? "KiddoTasks Premium" : "KiddoTasks Free"}
-        </p>
-        <p className="mt-1 text-sm text-ink-secondary">
-          {isPremium ? plan.display : "Upgrade to unlock Premium"}
-        </p>
-        <p className="mt-2 inline-flex items-center gap-2 rounded-pill bg-surface px-3 py-1 text-xs font-bold">
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              isPremium ? "bg-success" : "bg-ink-tertiary"
-            }`}
-            aria-hidden
-          />
-          {statusLabel}
-        </p>
-        {(sub?.currentPeriodEnd || ent.currentPeriodEnd) && (
-          <p className="mt-2 text-sm text-ink-secondary">
-            Next billing:{" "}
-            {new Date(
-              (sub?.currentPeriodEnd ?? ent.currentPeriodEnd) as string
-            ).toLocaleDateString()}
-          </p>
-        )}
-        {ent.isOwner && (
-          <p className="mt-2 text-xs text-ink-tertiary">
-            Founder account — always Premium. No charge.
-          </p>
-        )}
-      </div>
+      <PlanStatusSummary
+        plan={planDisplay}
+        actionLabel="Manage subscription"
+      />
 
       {!isPremium && (
         <div className="card ring-2 ring-primary">
@@ -203,7 +168,7 @@ export default function BillingPage() {
         </div>
       )}
 
-      {isPremium && !ent.isOwner && (
+      {isPremium && !planDisplay.isOwner && (
         <div className="card">
           <h3 className="font-bold">Manage subscription</h3>
           <p className="mt-1 text-sm text-ink-secondary">

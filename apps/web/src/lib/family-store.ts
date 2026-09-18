@@ -12,7 +12,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { firestore, isFirebaseConfigured } from "./firebase";
+import { httpsCallable } from "firebase/functions";
+import { firebaseFunctions, firestore, isFirebaseConfigured } from "./firebase";
 import type {
   Child,
   Family,
@@ -24,10 +25,84 @@ import type {
   Entitlements,
   TaskApprovalBehavior,
   TaskRecurrenceType,
+  WishlistItem,
+  WishlistStatus,
 } from "./types";
 import { canAddTask, isOwnerEmail } from "./entitlements";
 import { requiresApprovalFromBehavior } from "./catalog";
 import { errorMessage } from "./errors";
+import { isWishlistEnabled } from "./wishlist";
+
+/** Normalize Firestore timestamp-like values to ISO strings. */
+function toIso(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "object" &&
+    typeof (value as { toDate?: () => Date }).toDate === "function"
+  ) {
+    try {
+      return (value as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function mapWishlistDoc(id: string, data: Record<string, unknown>): WishlistItem {
+  return {
+    id,
+    familyId: String(data.familyId ?? ""),
+    childId: String(data.childId ?? ""),
+    title: String(data.title ?? ""),
+    message: data.message == null ? null : String(data.message),
+    occasion: data.occasion == null ? null : String(data.occasion),
+    status: (data.status as WishlistStatus) || "PENDING",
+    parentResponse:
+      data.parentResponse == null ? null : String(data.parentResponse),
+    createdBy: String(data.createdBy ?? ""),
+    createdAt: toIso(data.createdAt),
+    updatedAt: toIso(data.updatedAt),
+    reviewedAt: toIso(data.reviewedAt),
+    reviewedBy: data.reviewedBy == null ? null : String(data.reviewedBy),
+    version: typeof data.version === "number" ? data.version : 1,
+  };
+}
+
+function mapWishlistCallableError(name: string, err: unknown): string {
+  const code = String(
+    (err as { code?: unknown }).code ?? (err as { message?: unknown }).message ?? ""
+  );
+  const message = String((err as { message?: unknown }).message ?? "");
+  if (/not-found|NOT_FOUND|404|UNIMPLEMENTED|unimplemented/i.test(`${code} ${message}`)) {
+    return `Wishlist cloud function “${name}” is not deployed. Run: firebase deploy --only functions`;
+  }
+  if (/internal|INTERNAL|500/i.test(`${code} ${message}`)) {
+    return `Wishlist service error (${name}). Deploy Firebase Functions, then try again.`;
+  }
+  if (/permission|PERMISSION/i.test(`${code} ${message}`)) {
+    return message || "Not allowed for this family.";
+  }
+  if (/failed-precondition|Wishlist is turned off/i.test(`${code} ${message}`)) {
+    return message || "Wishlist is turned off.";
+  }
+  return errorMessage(err, `Couldn’t reach wishlist service (${name}).`);
+}
+
+async function callWishlistFn(
+  name: string,
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+  const fn = httpsCallable(firebaseFunctions(), name);
+  try {
+    const res = await fn(payload);
+    return (res.data ?? {}) as Record<string, unknown>;
+  } catch (e) {
+    throw new Error(mapWishlistCallableError(name, e));
+  }
+}
 
 type FamilyState = {
   loading: boolean;
@@ -40,6 +115,12 @@ type FamilyState = {
   rewards: Reward[];
   claims: RewardClaim[];
   transactions: PointTransaction[];
+  /** Wishlist domain — separate from points/rewards. */
+  wishlistItems: WishlistItem[];
+  /** HMAC token from openKidsSession for kid-path callables. */
+  kidsAccessToken: string | null;
+  /** family.settings.enableWishlist === true (missing = false). */
+  wishlistEnabled: boolean;
   entitlements: Entitlements;
   parentEmail: string | null;
   kidsMode: boolean;
@@ -68,6 +149,29 @@ type FamilyState = {
       requiresApproval: boolean;
     }
   ) => Promise<void>;
+  /** Persist enableWishlist to Firestore families.settings + reload family. */
+  setEnableWishlist: (enabled: boolean) => Promise<void>;
+  addWishlistItem: (input: {
+    childId: string;
+    title: string;
+    message?: string;
+    occasion?: string | null;
+  }) => Promise<WishlistItem>;
+  updateWishlistItem: (input: {
+    itemId: string;
+    title: string;
+    message?: string;
+    occasion?: string | null;
+    version?: number;
+  }) => Promise<void>;
+  deleteWishlistItem: (itemId: string) => Promise<void>;
+  /** Parent only — APPROVED | REJECTED. Never touches points. */
+  reviewWishlistItem: (input: {
+    itemId: string;
+    decision: Extract<WishlistStatus, "APPROVED" | "REJECTED">;
+    parentResponse?: string | null;
+    version?: number;
+  }) => Promise<void>;
   addTask: (input: {
     name: string;
     description: string;
@@ -101,6 +205,9 @@ type FamilyState = {
     rewards: Reward[];
     claims: RewardClaim[];
     transactions: PointTransaction[];
+    wishlistItems?: WishlistItem[];
+    kidsAccessToken?: string | null;
+    wishlistEnabled?: boolean;
   }) => void;
 };
 
@@ -120,6 +227,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   rewards: [],
   claims: [],
   transactions: [],
+  wishlistItems: [],
+  kidsAccessToken: null,
+  wishlistEnabled: false,
   entitlements: emptyEntitlements,
   parentEmail: null,
   kidsMode: false,
@@ -240,6 +350,202 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     } catch (e) {
       set({ rewards: previous });
       throw new Error(errorMessage(e, "Failed to update reward"));
+    }
+  },
+
+  setEnableWishlist: async (enabled) => {
+    const { family, parentUid } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const previous = family;
+    const nextSettings = {
+      ...(family.settings ?? {}),
+      enableWishlist: enabled,
+    };
+    set({
+      family: { ...family, settings: nextSettings },
+      wishlistEnabled: enabled === true,
+    });
+    try {
+      const db = firestore();
+      // firestore.rules families update allows hasOnly(['name','settings','updatedAt']).
+      await updateDoc(doc(db, "families", family.id), {
+        settings: nextSettings,
+        updatedAt: new Date().toISOString(),
+      });
+      await get().loadFamilyForParent(parentUid);
+    } catch (e) {
+      set({
+        family: previous,
+        wishlistEnabled: isWishlistEnabled(previous),
+      });
+      throw new Error(
+        errorMessage(e, enabled ? "Couldn’t enable wishlist" : "Couldn’t disable wishlist")
+      );
+    }
+  },
+
+  addWishlistItem: async (input) => {
+    const { family, parentUid, kidsAccessToken, kidsMode } = get();
+    if (!family) throw new Error("Family not loaded.");
+    const title = input.title.trim();
+    if (!title) throw new Error("Item name is required.");
+    const childId = input.childId?.trim();
+    if (!childId) throw new Error("Select a child first.");
+    const message = (input.message ?? "").trim();
+    // Kid UI does not collect occasion; keep null unless caller sets it.
+    const occasion = input.occasion || null;
+    const payload: Record<string, unknown> = {
+      familyId: family.id,
+      childId,
+      title,
+      message,
+      occasion,
+    };
+    // Prefer parent Firebase Auth when available; otherwise kid session token.
+    if (parentUid && !kidsMode) {
+      // Parent Auth via httpsCallable — no extra token.
+    } else {
+      if (!kidsAccessToken) {
+        throw new Error(
+          "Unlock Kids Station with the family PIN to add wishlist items."
+        );
+      }
+      payload.kidsAccessToken = kidsAccessToken;
+      payload.childId = childId;
+    }
+    try {
+      const data = await callWishlistFn("addWishlistItem", payload);
+      const id = String(data.id ?? crypto.randomUUID());
+      const item: WishlistItem = {
+        id,
+        familyId: family.id,
+        childId,
+        title,
+        message,
+        occasion,
+        status: "PENDING",
+        parentResponse: null,
+        createdBy: parentUid || "kids-session",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        reviewedAt: null,
+        reviewedBy: null,
+        version: 1,
+      };
+      set({ wishlistItems: [...get().wishlistItems, item] });
+      return item;
+    } catch (e) {
+      throw new Error(errorMessage(e, "Couldn’t add wishlist item"));
+    }
+  },
+
+  updateWishlistItem: async (input) => {
+    const { family, parentUid, kidsAccessToken, wishlistItems } = get();
+    if (!family) throw new Error("Family not loaded.");
+    const title = input.title.trim();
+    if (!title) throw new Error("Item name is required.");
+    const existing = wishlistItems.find((w) => w.id === input.itemId);
+    const message = (input.message ?? "").trim();
+    const occasion = input.occasion || null;
+    const payload: Record<string, unknown> = {
+      familyId: family.id,
+      itemId: input.itemId,
+      title,
+      message,
+      occasion,
+    };
+    if (input.version != null) payload.version = input.version;
+    else if (existing?.version != null) payload.version = existing.version;
+    if (!parentUid) {
+      if (!kidsAccessToken) {
+        throw new Error("Unlock Kids Station to update your wishlist.");
+      }
+      payload.kidsAccessToken = kidsAccessToken;
+      if (existing?.childId) payload.childId = existing.childId;
+    }
+    try {
+      await callWishlistFn("updateWishlistItem", payload);
+      set({
+        wishlistItems: wishlistItems.map((w) =>
+          w.id === input.itemId
+            ? {
+                ...w,
+                title,
+                message,
+                occasion,
+                updatedAt: new Date().toISOString(),
+                version: (w.version ?? 1) + 1,
+              }
+            : w
+        ),
+      });
+    } catch (e) {
+      throw new Error(errorMessage(e, "Couldn’t update wishlist item"));
+    }
+  },
+
+  deleteWishlistItem: async (itemId) => {
+    const { family, parentUid, kidsAccessToken, wishlistItems } = get();
+    if (!family) throw new Error("Family not loaded.");
+    const existing = wishlistItems.find((w) => w.id === itemId);
+    const previous = wishlistItems;
+    const payload: Record<string, unknown> = {
+      familyId: family.id,
+      itemId,
+    };
+    if (!parentUid) {
+      if (!kidsAccessToken) {
+        throw new Error("Unlock Kids Station to update your wishlist.");
+      }
+      payload.kidsAccessToken = kidsAccessToken;
+      if (existing?.childId) payload.childId = existing.childId;
+    }
+    set({ wishlistItems: previous.filter((w) => w.id !== itemId) });
+    try {
+      await callWishlistFn("deleteWishlistItem", payload);
+    } catch (e) {
+      set({ wishlistItems: previous });
+      throw new Error(errorMessage(e, "Couldn’t delete wishlist item"));
+    }
+  },
+
+  reviewWishlistItem: async (input) => {
+    const { family, parentUid, wishlistItems } = get();
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const existing = wishlistItems.find((w) => w.id === input.itemId);
+    const parentResponse =
+      input.parentResponse != null && String(input.parentResponse).trim()
+        ? String(input.parentResponse).trim()
+        : null;
+    const payload: Record<string, unknown> = {
+      familyId: family.id,
+      itemId: input.itemId,
+      decision: input.decision,
+      parentResponse,
+    };
+    if (input.version != null) payload.version = input.version;
+    else if (existing?.version != null) payload.version = existing.version;
+    // Parent only — Firebase Auth; do not send kidsAccessToken.
+    try {
+      await callWishlistFn("reviewWishlistItem", payload);
+      set({
+        wishlistItems: wishlistItems.map((w) =>
+          w.id === input.itemId
+            ? {
+                ...w,
+                status: input.decision,
+                parentResponse,
+                reviewedAt: new Date().toISOString(),
+                reviewedBy: parentUid,
+                updatedAt: new Date().toISOString(),
+                version: (w.version ?? 1) + 1,
+              }
+            : w
+        ),
+      });
+    } catch (e) {
+      throw new Error(errorMessage(e, "Couldn’t review wishlist item"));
     }
   },
 
@@ -371,19 +677,36 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       rewards: [],
       claims: [],
       transactions: [],
+      wishlistItems: [],
+      kidsAccessToken: null,
+      wishlistEnabled: false,
       entitlements: emptyEntitlements,
       kidsMode: false,
     }),
 
-  loadKidsSession: (payload) =>
+  loadKidsSession: (payload) => {
+    const {
+      wishlistItems = [],
+      kidsAccessToken = null,
+      wishlistEnabled = false,
+      ...rest
+    } = payload;
     set({
       loading: false,
       error: null,
       parentUid: null,
       parentEmail: null,
       kidsMode: true,
-      ...payload,
-    }),
+      ...rest,
+      wishlistItems: Array.isArray(wishlistItems)
+        ? wishlistItems.map((w) =>
+            mapWishlistDoc(String(w.id ?? ""), w as unknown as Record<string, unknown>)
+          )
+        : [],
+      kidsAccessToken: kidsAccessToken || null,
+      wishlistEnabled: wishlistEnabled === true,
+    });
+  },
 
   loadFamilyForParent: async (uid) => {
     if (!isFirebaseConfigured) {
@@ -419,7 +742,30 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as T);
       };
 
-      const [children, tasks, completions, rewards, claims, transactions] =
+      // Core family data must load even if optional collections are denied
+      // (e.g. wishlistItems before firestore.rules are redeployed).
+      const loadSafe = async <T extends { id: string }>(
+        name: string,
+        map?: (id: string, data: Record<string, unknown>) => T
+      ): Promise<{ rows: T[]; denied?: boolean }> => {
+        try {
+          const snap = await getDocs(
+            query(collection(db, name), where("familyId", "==", familyId))
+          );
+          const rows = snap.docs.map((d) =>
+            map
+              ? map(d.id, d.data() as Record<string, unknown>)
+              : ({ id: d.id, ...d.data() } as T)
+          );
+          return { rows };
+        } catch (e) {
+          const msg = errorMessage(e, "");
+          if (/permission/i.test(msg)) return { rows: [], denied: true };
+          throw e;
+        }
+      };
+
+      const [children, tasks, completions, rewards, claims, transactions, wishlistLoad] =
         await Promise.all([
           load<Child>("children"),
           load<KiddoTask>("tasks"),
@@ -427,7 +773,10 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           load<Reward>("rewards"),
           load<RewardClaim>("rewardClaims"),
           load<PointTransaction>("pointTransactions"),
+          loadSafe<WishlistItem>("wishlistItems", mapWishlistDoc),
         ]);
+
+      const wishlistItems = wishlistLoad.rows;
 
       set({
         loading: false,
@@ -439,9 +788,17 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         rewards,
         claims,
         transactions,
+        wishlistItems,
+        kidsAccessToken: null,
+        wishlistEnabled: isWishlistEnabled(family),
         entitlements,
         error: null,
       });
+      if (wishlistLoad.denied) {
+        console.warn(
+          "[wishlist] parent read denied for wishlistItems — deploy firestore.rules so parents can list wishlist. Family data loaded."
+        );
+      }
     } catch (e) {
       set({
         loading: false,

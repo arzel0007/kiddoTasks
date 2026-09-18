@@ -14,6 +14,40 @@ struct FamilySnapshot: Codable {
     var claims: [RewardClaim]
     var transactions: [PointTransaction]
     var achievements: [Achievement]
+    /// Gift wishes — separate collection from points/rewards.
+    var wishlistItems: [WishlistItem] = []
+}
+
+extension FamilySnapshot {
+    enum CodingKeys: String, CodingKey {
+        case family
+        case parent
+        case passwordHash
+        case children
+        case tasks
+        case completions
+        case rewards
+        case claims
+        case transactions
+        case achievements
+        case wishlistItems
+    }
+
+    /// Tolerates older local snapshots that predate wishlist support.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        family = try c.decode(Family.self, forKey: .family)
+        parent = try c.decode(Parent.self, forKey: .parent)
+        passwordHash = try c.decodeIfPresent(String.self, forKey: .passwordHash) ?? ""
+        children = try c.decodeIfPresent([Child].self, forKey: .children) ?? []
+        tasks = try c.decodeIfPresent([KiddoTask].self, forKey: .tasks) ?? []
+        completions = try c.decodeIfPresent([TaskCompletion].self, forKey: .completions) ?? []
+        rewards = try c.decodeIfPresent([Reward].self, forKey: .rewards) ?? []
+        claims = try c.decodeIfPresent([RewardClaim].self, forKey: .claims) ?? []
+        transactions = try c.decodeIfPresent([PointTransaction].self, forKey: .transactions) ?? []
+        achievements = try c.decodeIfPresent([Achievement].self, forKey: .achievements) ?? []
+        wishlistItems = try c.decodeIfPresent([WishlistItem].self, forKey: .wishlistItems) ?? []
+    }
 }
 
 /// In-memory family database with local persistence.
@@ -33,6 +67,7 @@ final class LocalFamilyDataStore {
     var claims: [RewardClaim] = []
     var transactions: [PointTransaction] = []
     var achievements: [Achievement] = []
+    var wishlistItems: [WishlistItem] = []
     var dataRevision: Int = 0
 
     /// IDs deleted locally that still need to be deleted in the cloud.
@@ -43,6 +78,7 @@ final class LocalFamilyDataStore {
     private(set) var removedClaims: Set<String> = []
     private(set) var removedTransactions: Set<String> = []
     private(set) var removedAchievements: Set<String> = []
+    private(set) var removedWishlistItems: Set<String> = []
 
     /// True when local mutations exist that have not been acknowledged by a
     /// successful cloud push. Persisted so a relaunch still protects the work.
@@ -53,7 +89,16 @@ final class LocalFamilyDataStore {
 
     var isAuthenticated: Bool { parent != nil }
 
-    var pendingRemovals: (children: [String], tasks: [String], completions: [String], rewards: [String], claims: [String], transactions: [String], achievements: [String]) {
+    var pendingRemovals: (
+        children: [String],
+        tasks: [String],
+        completions: [String],
+        rewards: [String],
+        claims: [String],
+        transactions: [String],
+        achievements: [String],
+        wishlistItems: [String]
+    ) {
         (
             Array(removedChildren),
             Array(removedTasks),
@@ -61,7 +106,8 @@ final class LocalFamilyDataStore {
             Array(removedRewards),
             Array(removedClaims),
             Array(removedTransactions),
-            Array(removedAchievements)
+            Array(removedAchievements),
+            Array(removedWishlistItems)
         )
     }
 
@@ -127,6 +173,7 @@ final class LocalFamilyDataStore {
         claims = []
         transactions = []
         achievements = []
+        wishlistItems = []
         restoreSnapshotWithoutSession()
     }
 
@@ -221,6 +268,7 @@ final class LocalFamilyDataStore {
         removedClaims.formUnion(claims.map(\.id))
         removedTransactions.formUnion(transactions.map(\.id))
         removedAchievements.formUnion(achievements.map(\.id))
+        removedWishlistItems.formUnion(wishlistItems.map(\.id))
         hasPendingPush = true
 
         deleteAllLocalData()
@@ -247,6 +295,7 @@ final class LocalFamilyDataStore {
         claims = []
         transactions = []
         achievements = []
+        wishlistItems = []
         dataRevision = 0
         // Tombstones and pendingPush intentionally survive a local wipe so
         // deletes still propagate after reset. Call clearSyncMeta for a full wipe.
@@ -262,6 +311,7 @@ final class LocalFamilyDataStore {
         removedClaims = []
         removedTransactions = []
         removedAchievements = []
+        removedWishlistItems = []
         hasPendingPush = false
         lastSeenServerUpdatedAt = nil
         UserDefaults.standard.removeObject(forKey: Self.syncMetaKey)
@@ -325,7 +375,8 @@ final class LocalFamilyDataStore {
             rewards: rewards,
             claims: claims,
             transactions: transactions,
-            achievements: achievements
+            achievements: achievements,
+            wishlistItems: wishlistItems
         )
     }
 
@@ -351,6 +402,7 @@ final class LocalFamilyDataStore {
         removedClaims.formIntersection(Set(snapshot.claims.map(\.id)))
         removedTransactions.formIntersection(Set(snapshot.transactions.map(\.id)))
         removedAchievements.formIntersection(Set(snapshot.achievements.map(\.id)))
+        removedWishlistItems.formIntersection(Set(snapshot.wishlistItems.map(\.id)))
         persist(passwordHash: existingHash)
         persistSyncMeta()
         UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
@@ -370,7 +422,8 @@ final class LocalFamilyDataStore {
         rewards: [String] = [],
         claims: [String] = [],
         transactions: [String] = [],
-        achievements: [String] = []
+        achievements: [String] = [],
+        wishlistItems: [String] = []
     ) {
         removedChildren.subtract(children)
         removedTasks.subtract(tasks)
@@ -379,6 +432,7 @@ final class LocalFamilyDataStore {
         removedClaims.subtract(claims)
         removedTransactions.subtract(transactions)
         removedAchievements.subtract(achievements)
+        removedWishlistItems.subtract(wishlistItems)
         persistSyncMeta()
     }
 
@@ -722,6 +776,138 @@ final class LocalFamilyDataStore {
         persistKeepingPassword()
     }
 
+    // MARK: - Wishlist (gift wishes — NEVER points)
+
+    /// Family-level wishlist toggle. Default is OFF; parents opt in.
+    func updateWishlistEnabled(_ isEnabled: Bool) throws {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        family.settings.enableWishlist = isEnabled
+        family.updatedAt = Date()
+        persistKeepingPassword()
+    }
+
+    /// All wishlist items for the family, optionally filtered to one child.
+    func wishlistItems(forChild childId: String?) -> [WishlistItem] {
+        guard let childId else { return wishlistItems }
+        return wishlistItems.filter { $0.childId == childId }
+    }
+
+    func pendingWishlistItems(forChild childId: String? = nil) -> [WishlistItem] {
+        wishlistItems(forChild: childId).filter(\.isPending)
+    }
+
+    /// Adds a wishlist item locally. Mutates ONLY wishlist docs — no points.
+    @discardableResult
+    func addWishlistItem(
+        id: String = UUID().uuidString,
+        childId: String,
+        title: String,
+        message: String = "",
+        occasion: WishlistOccasion? = nil,
+        createdBy: String? = nil
+    ) throws -> WishlistItem {
+        guard let family else { throw FirebaseError.notAuthenticated }
+        guard children.contains(where: { $0.id == childId }) else {
+            throw FirebaseError.childNotFound
+        }
+        guard family.settings.enableWishlist else {
+            throw FirebaseError.operationFailed("Wishlist is turned off. Ask a parent to enable it.")
+        }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, trimmedTitle.count <= 120 else {
+            throw FirebaseError.operationFailed("Item name is required (max 120 characters).")
+        }
+        let trimmedMessage = String(
+            message.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)
+        )
+        let item = WishlistItem(
+            id: id,
+            familyId: family.id,
+            childId: childId,
+            title: trimmedTitle,
+            message: trimmedMessage,
+            occasion: occasion,
+            status: .pending,
+            parentResponse: nil,
+            createdBy: createdBy ?? parent?.id ?? "kids-session",
+            createdAt: Date(),
+            updatedAt: Date(),
+            reviewedAt: nil,
+            reviewedBy: nil,
+            version: 1
+        )
+        if let existingIndex = wishlistItems.firstIndex(where: { $0.id == id }) {
+            wishlistItems[existingIndex] = item
+        } else {
+            wishlistItems.append(item)
+        }
+        removedWishlistItems.remove(id)
+        persistKeepingPassword()
+        return item
+    }
+
+    /// Updates title/message/occasion on a wishlist item. Does not change status
+    /// or touch points.
+    func updateWishlistItem(
+        _ itemId: String,
+        title: String,
+        message: String,
+        occasion: WishlistOccasion?
+    ) throws {
+        guard let item = wishlistItems.first(where: { $0.id == itemId }) else {
+            throw FirebaseError.documentNotFound
+        }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, trimmedTitle.count <= 120 else {
+            throw FirebaseError.operationFailed("Item name is required (max 120 characters).")
+        }
+        item.title = trimmedTitle
+        item.message = String(message.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+        item.occasion = occasion
+        item.updatedAt = Date()
+        item.version += 1
+        persistKeepingPassword()
+    }
+
+    /// Deletes a wishlist item and tombstones it for cloud delete propagation.
+    func deleteWishlistItem(_ itemId: String) throws {
+        guard let index = wishlistItems.firstIndex(where: { $0.id == itemId }) else {
+            throw FirebaseError.documentNotFound
+        }
+        wishlistItems.remove(at: index)
+        removedWishlistItems.insert(itemId)
+        persistKeepingPassword()
+    }
+
+    /// Parent approve/reject. CRITICAL: only mutates wishlist fields —
+    /// NEVER writes children.activePoints or pointTransactions.
+    func reviewWishlistItem(
+        _ itemId: String,
+        decision: WishlistStatus,
+        parentResponse: String?,
+        reviewedBy: String? = nil
+    ) throws {
+        guard let parent else { throw FirebaseError.notAuthenticated }
+        guard decision == .approved || decision == .rejected else {
+            throw FirebaseError.operationFailed("Decision must be approved or rejected")
+        }
+        guard let item = wishlistItems.first(where: { $0.id == itemId }) else {
+            throw FirebaseError.documentNotFound
+        }
+        guard item.status == .pending else {
+            throw FirebaseError.alreadyExists
+        }
+        let response = parentResponse?.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.status = decision
+        item.parentResponse = (response?.isEmpty == true) ? nil : response
+        item.reviewedAt = Date()
+        item.reviewedBy = reviewedBy ?? parent.id
+        item.updatedAt = Date()
+        item.version += 1
+        // Explicit: no deductPoints, no PointTransaction, no child balance change.
+        persistKeepingPassword()
+    }
+
     func updateFamilyName(_ name: String) throws {
         guard let family else { throw FirebaseError.notAuthenticated }
         family.name = name
@@ -900,6 +1086,10 @@ final class LocalFamilyDataStore {
         claims.filter { $0.status == .claimed }
     }
 
+    func pendingWishlistCount(forChild childId: String? = nil) -> Int {
+        pendingWishlistItems(forChild: childId).count
+    }
+
     /// Current in-memory state as a snapshot. Used by the sync engine to diff
     /// before applying a cloud pull (free-tier local-notification fallback).
     func currentSnapshot() -> FamilySnapshot? {
@@ -914,7 +1104,8 @@ final class LocalFamilyDataStore {
             rewards: rewards,
             claims: claims,
             transactions: transactions,
-            achievements: achievements
+            achievements: achievements,
+            wishlistItems: wishlistItems
         )
     }
 
@@ -1079,7 +1270,8 @@ final class LocalFamilyDataStore {
             rewards: rewards,
             claims: claims,
             transactions: transactions,
-            achievements: achievements
+            achievements: achievements,
+            wishlistItems: wishlistItems
         )
         if let data = try? JSONEncoder().encode(snapshot) {
             UserDefaults.standard.set(data, forKey: Self.storageKey)
@@ -1111,6 +1303,7 @@ final class LocalFamilyDataStore {
         claims = snapshot.claims.filter { !removedClaims.contains($0.id) }
         transactions = snapshot.transactions.filter { !removedTransactions.contains($0.id) }
         achievements = snapshot.achievements.filter { !removedAchievements.contains($0.id) }
+        wishlistItems = snapshot.wishlistItems.filter { !removedWishlistItems.contains($0.id) }
     }
 
     private struct SyncMeta: Codable {
@@ -1121,6 +1314,7 @@ final class LocalFamilyDataStore {
         var removedClaims: [String] = []
         var removedTransactions: [String] = []
         var removedAchievements: [String] = []
+        var removedWishlistItems: [String] = []
         var hasPendingPush: Bool = false
         var lastSeenServerUpdatedAt: Date?
     }
@@ -1134,6 +1328,7 @@ final class LocalFamilyDataStore {
             removedClaims: Array(removedClaims),
             removedTransactions: Array(removedTransactions),
             removedAchievements: Array(removedAchievements),
+            removedWishlistItems: Array(removedWishlistItems),
             hasPendingPush: hasPendingPush,
             lastSeenServerUpdatedAt: lastSeenServerUpdatedAt
         )
@@ -1144,7 +1339,7 @@ final class LocalFamilyDataStore {
 
     private func restoreSyncMeta() {
         guard let data = UserDefaults.standard.data(forKey: Self.syncMetaKey),
-              let meta = try? JSONDecoder().decode(SyncMeta.self, from: data) else { return }
+              let meta = try? Self.decodeSyncMeta(from: data) else { return }
         removedChildren = Set(meta.removedChildren)
         removedTasks = Set(meta.removedTasks)
         removedCompletions = Set(meta.removedCompletions)
@@ -1152,8 +1347,68 @@ final class LocalFamilyDataStore {
         removedClaims = Set(meta.removedClaims)
         removedTransactions = Set(meta.removedTransactions)
         removedAchievements = Set(meta.removedAchievements)
+        removedWishlistItems = Set(meta.removedWishlistItems)
         hasPendingPush = meta.hasPendingPush
         lastSeenServerUpdatedAt = meta.lastSeenServerUpdatedAt
+    }
+
+    /// Older SyncMeta blobs omit wishlist tombstones — decode them as empty.
+    private static func decodeSyncMeta(from data: Data) throws -> SyncMeta {
+        struct LegacySyncMeta: Codable {
+            var removedChildren: [String] = []
+            var removedTasks: [String] = []
+            var removedCompletions: [String] = []
+            var removedRewards: [String] = []
+            var removedClaims: [String] = []
+            var removedTransactions: [String] = []
+            var removedAchievements: [String] = []
+            var removedWishlistItems: [String] = []
+            var hasPendingPush: Bool = false
+            var lastSeenServerUpdatedAt: Date?
+
+            enum CodingKeys: String, CodingKey {
+                case removedChildren
+                case removedTasks
+                case removedCompletions
+                case removedRewards
+                case removedClaims
+                case removedTransactions
+                case removedAchievements
+                case removedWishlistItems
+                case hasPendingPush
+                case lastSeenServerUpdatedAt
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                removedChildren = try c.decodeIfPresent([String].self, forKey: .removedChildren) ?? []
+                removedTasks = try c.decodeIfPresent([String].self, forKey: .removedTasks) ?? []
+                removedCompletions = try c.decodeIfPresent([String].self, forKey: .removedCompletions) ?? []
+                removedRewards = try c.decodeIfPresent([String].self, forKey: .removedRewards) ?? []
+                removedClaims = try c.decodeIfPresent([String].self, forKey: .removedClaims) ?? []
+                removedTransactions = try c.decodeIfPresent([String].self, forKey: .removedTransactions) ?? []
+                removedAchievements = try c.decodeIfPresent([String].self, forKey: .removedAchievements) ?? []
+                removedWishlistItems = try c.decodeIfPresent([String].self, forKey: .removedWishlistItems) ?? []
+                hasPendingPush = try c.decodeIfPresent(Bool.self, forKey: .hasPendingPush) ?? false
+                lastSeenServerUpdatedAt = try c.decodeIfPresent(Date.self, forKey: .lastSeenServerUpdatedAt)
+            }
+
+            init() {}
+        }
+
+        let legacy = try JSONDecoder().decode(LegacySyncMeta.self, from: data)
+        return SyncMeta(
+            removedChildren: legacy.removedChildren,
+            removedTasks: legacy.removedTasks,
+            removedCompletions: legacy.removedCompletions,
+            removedRewards: legacy.removedRewards,
+            removedClaims: legacy.removedClaims,
+            removedTransactions: legacy.removedTransactions,
+            removedAchievements: legacy.removedAchievements,
+            removedWishlistItems: legacy.removedWishlistItems,
+            hasPendingPush: legacy.hasPendingPush,
+            lastSeenServerUpdatedAt: legacy.lastSeenServerUpdatedAt
+        )
     }
 
     private func restoreSession() {

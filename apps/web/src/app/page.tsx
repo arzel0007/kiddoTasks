@@ -317,6 +317,9 @@ function WelcomePageInner() {
           rewards: unknown[];
           claims: unknown[];
           transactions: unknown[];
+          wishlistItems?: unknown[];
+          wishlistEnabled?: boolean;
+          kidsAccessToken?: string | null;
           familyId: string;
         };
         const family = {
@@ -331,6 +334,9 @@ function WelcomePageInner() {
           rewards: data.rewards as never,
           claims: data.claims as never,
           transactions: data.transactions as never,
+          wishlistItems: (data.wishlistItems ?? []) as never,
+          kidsAccessToken: data.kidsAccessToken ?? null,
+          wishlistEnabled: data.wishlistEnabled === true,
         });
         toast.success("Kids Station unlocked. Have fun!");
       }

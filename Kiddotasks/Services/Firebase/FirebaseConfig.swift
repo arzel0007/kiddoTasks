@@ -125,4 +125,6 @@ struct FirestoreCollections {
     static let rewardClaims = "rewardClaims"
     static let pointTransactions = "pointTransactions"
     static let achievements = "achievements"
+    /// Gift wishes — separate from rewards/points. Never awards or deducts stars.
+    static let wishlistItems = "wishlistItems"
 }

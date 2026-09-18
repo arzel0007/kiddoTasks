@@ -215,6 +215,22 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // MARK: - Wishlist items (gift requests — never points)
+    // Kid create/edit/delete + parent approve go through Cloud Functions.
+    // Parents may read their family's wishlist from the client.
+    // List queries filter familyId == parent family — same pattern as tasks/rewards.
+    match /wishlistItems/{itemId} {
+      allow read: if isAuthenticated()
+        && isParent(request.auth.uid)
+        && (
+          // Point get
+          parentBelongsToFamily(request.auth.uid, resource.data.familyId)
+        );
+
+      // No direct client writes — Functions Admin SDK only (kid token / parent review).
+      allow create, update, delete: if false;
+    }
+
     // MARK: - Default: Deny all
 
     match /{document=**} {

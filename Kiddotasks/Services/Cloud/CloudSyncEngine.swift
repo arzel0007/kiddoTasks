@@ -73,6 +73,13 @@ final class CloudSyncEngine {
     /// Current sync status, observable by the UI.
     private(set) var status: CloudSyncStatus = .unavailable
 
+    /// HMAC token from `openKidsSession` — used for wishlist callables when
+    /// there is no parent Firebase Auth session (shared iPad PIN unlock).
+    private(set) var kidsAccessToken: String?
+
+    /// Wishlist flag returned by `openKidsSession` (mirrors family settings).
+    private(set) var kidsSessionWishlistEnabled: Bool = false
+
     init(store: LocalFamilyDataStore) {
         self.store = store
     }
@@ -470,6 +477,7 @@ final class CloudSyncEngine {
         familyListener = nil
         refreshTask?.cancel()
         refreshTask = nil
+        clearKidsSessionAuth()
         pendingPush?.cancel()
         pendingPush = nil
         retryTask?.cancel()
@@ -536,6 +544,11 @@ final class CloudSyncEngine {
         let claims = decodeList(RewardClaim.self, key: "claims")
         let transactions = decodeList(PointTransaction.self, key: "transactions")
         let achievements = decodeList(Achievement.self, key: "achievements")
+        let wishlistItems = decodeList(WishlistItem.self, key: "wishlistItems")
+        let wishlistEnabled = (data["wishlistEnabled"] as? Bool)
+            ?? family.settings.enableWishlist
+        kidsAccessToken = data["kidsAccessToken"] as? String
+        kidsSessionWishlistEnabled = wishlistEnabled
 
         // Lightweight parent shell so the store treats the device as signed-in
         // for kids-only mutations (completions/claims need a family, not a real UID).
@@ -557,11 +570,130 @@ final class CloudSyncEngine {
             rewards: rewards,
             claims: claims,
             transactions: transactions,
-            achievements: achievements
+            achievements: achievements,
+            wishlistItems: wishlistItems
         )
         store.clearSyncMeta()
         store.applyRemote(snapshot)
         store.markPushAcknowledged()
+        #endif
+    }
+
+    // MARK: - Wishlist callables
+
+    /// Clears the kids-session token (parent sign-in/out path).
+    func clearKidsSessionAuth() {
+        kidsAccessToken = nil
+        kidsSessionWishlistEnabled = false
+    }
+
+    private func wishlistCallablePayload(
+        familyId: String,
+        childId: String? = nil,
+        itemId: String? = nil
+    ) -> [String: Any] {
+        var payload: [String: Any] = ["familyId": familyId]
+        if let childId { payload["childId"] = childId }
+        if let itemId { payload["itemId"] = itemId }
+        #if canImport(FirebaseAuth)
+        // Prefer parent Auth when present; otherwise attach the kids HMAC token.
+        if Auth.auth().currentUser == nil, let token = kidsAccessToken, !token.isEmpty {
+            payload["kidsAccessToken"] = token
+        }
+        #else
+        if let token = kidsAccessToken, !token.isEmpty {
+            payload["kidsAccessToken"] = token
+        }
+        #endif
+        return payload
+    }
+
+    /// Kid/parent add — NEVER touches points. Returns the server document id.
+    @discardableResult
+    func addWishlistItem(
+        familyId: String,
+        childId: String,
+        title: String,
+        message: String,
+        occasion: String?
+    ) async throws -> (id: String, status: String) {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        var payload = wishlistCallablePayload(familyId: familyId, childId: childId)
+        payload["title"] = title
+        payload["message"] = message
+        if let occasion { payload["occasion"] = occasion }
+        let result = try await Functions.functions()
+            .httpsCallable("addWishlistItem")
+            .call(payload)
+        let data = result.data as? [String: Any]
+        let id = data?["id"] as? String ?? UUID().uuidString
+        let status = data?["status"] as? String ?? WishlistStatus.pending.rawValue
+        return (id, status)
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    /// Kid/parent update of title/message/occasion (status unchanged).
+    func updateWishlistItem(
+        familyId: String,
+        itemId: String,
+        title: String,
+        message: String,
+        occasion: String?,
+        version: Int?
+    ) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        var payload = wishlistCallablePayload(familyId: familyId, itemId: itemId)
+        payload["title"] = title
+        payload["message"] = message
+        if let occasion { payload["occasion"] = occasion }
+        if let version { payload["version"] = version }
+        _ = try await Functions.functions()
+            .httpsCallable("updateWishlistItem")
+            .call(payload)
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    /// Delete a wishlist item. Does not touch points.
+    func deleteWishlistItem(familyId: String, itemId: String, childId: String?) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        let payload = wishlistCallablePayload(familyId: familyId, childId: childId, itemId: itemId)
+        _ = try await Functions.functions()
+            .httpsCallable("deleteWishlistItem")
+            .call(payload)
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    /// Parent approve/reject. Server-side: no points, no child balance changes.
+    @discardableResult
+    func reviewWishlistItem(
+        familyId: String,
+        itemId: String,
+        decision: String,
+        parentResponse: String?,
+        version: Int?
+    ) async throws -> String {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        var payload = wishlistCallablePayload(familyId: familyId, itemId: itemId)
+        payload["decision"] = decision
+        if let parentResponse { payload["parentResponse"] = parentResponse }
+        if let version { payload["version"] = version }
+        let result = try await Functions.functions()
+            .httpsCallable("reviewWishlistItem")
+            .call(payload)
+        let data = result.data as? [String: Any]
+        return data?["status"] as? String ?? decision
+        #else
+        throw FirebaseError.authNotAvailable
         #endif
     }
 
@@ -709,7 +841,8 @@ final class CloudSyncEngine {
                     rewards: deleted["rewards"] as? [String] ?? [],
                     claims: deleted["claims"] as? [String] ?? [],
                     transactions: deleted["transactions"] as? [String] ?? [],
-                    achievements: deleted["achievements"] as? [String] ?? []
+                    achievements: deleted["achievements"] as? [String] ?? [],
+                    wishlistItems: deleted["wishlistItems"] as? [String] ?? []
                 )
             } else {
                 store.acknowledgeRemovals(
@@ -719,7 +852,8 @@ final class CloudSyncEngine {
                     rewards: removals.rewards,
                     claims: removals.claims,
                     transactions: removals.transactions,
-                    achievements: removals.achievements
+                    achievements: removals.achievements,
+                    wishlistItems: removals.wishlistItems
                 )
             }
 
@@ -781,6 +915,7 @@ final class CloudSyncEngine {
         async let claims = fetch(RewardClaim.self, collection: FirestoreCollections.rewardClaims, familyId: familyId)
         async let transactions = fetch(PointTransaction.self, collection: FirestoreCollections.pointTransactions, familyId: familyId)
         async let achievements = fetch(Achievement.self, collection: FirestoreCollections.achievements, familyId: familyId)
+        async let wishlistItems = fetch(WishlistItem.self, collection: FirestoreCollections.wishlistItems, familyId: familyId)
 
         let parentDoc = try? await db.collection(FirestoreCollections.parents).document(uid).getDocument()
         let parentData = parentDoc?.data() ?? [:]
@@ -803,7 +938,8 @@ final class CloudSyncEngine {
             rewards: try await rewards,
             claims: try await claims,
             transactions: try await transactions,
-            achievements: try await achievements
+            achievements: try await achievements,
+            wishlistItems: try await wishlistItems
         )
         #else
         throw FirebaseError.authNotAvailable
@@ -861,7 +997,16 @@ final class CloudSyncEngine {
 
     private func makePushPayload(
         _ snapshot: FamilySnapshot,
-        removals: (children: [String], tasks: [String], completions: [String], rewards: [String], claims: [String], transactions: [String], achievements: [String])
+        removals: (
+            children: [String],
+            tasks: [String],
+            completions: [String],
+            rewards: [String],
+            claims: [String],
+            transactions: [String],
+            achievements: [String],
+            wishlistItems: [String]
+        )
     ) throws -> [String: Any] {
         #if canImport(FirebaseFirestore)
         let encoder = JSONEncoder()
@@ -898,6 +1043,7 @@ final class CloudSyncEngine {
             "claims": try enc(snapshot.claims),
             "transactions": try enc(snapshot.transactions),
             "achievements": try enc(snapshot.achievements),
+            "wishlistItems": try enc(snapshot.wishlistItems),
             "removedChildren": removals.children,
             "removedTasks": removals.tasks,
             "removedCompletions": removals.completions,
@@ -905,6 +1051,7 @@ final class CloudSyncEngine {
             "removedClaims": removals.claims,
             "removedTransactions": removals.transactions,
             "removedAchievements": removals.achievements,
+            "removedWishlistItems": removals.wishlistItems,
         ]
         #else
         throw FirebaseError.authNotAvailable
