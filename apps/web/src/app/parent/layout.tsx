@@ -7,6 +7,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { PageSkeleton } from "@/components/skeleton";
+import { toast } from "@/components/toast";
 import {
   ArzAvatar,
   arzHandle,
@@ -89,9 +90,14 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
             type="button"
             className="shrink-0 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-ink-secondary"
             onClick={async () => {
-              if (isFirebaseConfigured) await signOut(firebaseAuth());
-              reset();
-              router.push("/");
+              try {
+                if (isFirebaseConfigured) await signOut(firebaseAuth());
+                reset();
+                toast.success("Signed out.");
+                router.push("/");
+              } catch {
+                toast.error("Couldn’t sign out — try again.");
+              }
             }}
           >
             Sign out

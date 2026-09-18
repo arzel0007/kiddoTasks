@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { getAuth } from "firebase/auth";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
+import { toast } from "@/components/toast";
 
 function SuccessInner() {
   const params = useSearchParams();
@@ -24,12 +25,14 @@ function SuccessInner() {
       if (cancelled || !isFirebaseConfigured) {
         setState("error");
         setNote("Billing isn’t configured.");
+        toast.error("Billing isn’t configured.");
         return;
       }
       const user = getAuth().currentUser;
       if (!user) {
         setState("error");
         setNote("Sign in to confirm your subscription.");
+        toast.error("Sign in to confirm your subscription.");
         return;
       }
       while (attempts < 12 && !cancelled) {
@@ -45,6 +48,7 @@ function SuccessInner() {
             if (data.premium || data.status === "active") {
               if (parentUid) await loadFamily(parentUid);
               setState("active");
+              if (!cancelled) toast.success("You’re Premium!");
               return;
             }
           }
@@ -53,7 +57,10 @@ function SuccessInner() {
         }
         await new Promise((r) => setTimeout(r, 1500));
       }
-      if (!cancelled) setState("pending");
+      if (!cancelled) {
+        setState("pending");
+        toast.info("Payment still processing — check Billing in a moment.");
+      }
     }
 
     void poll();

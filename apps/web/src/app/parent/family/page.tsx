@@ -6,6 +6,7 @@ import { FREE_LIMITS } from "@/lib/entitlements";
 import { ChildAvatar } from "@/lib/ui";
 import { PageSkeleton } from "@/components/skeleton";
 import { ALLOWANCE_MODES, type AllowanceMode } from "@/lib/entitlements";
+import { toast } from "@/components/toast";
 
 export default function FamilyPage() {
   const { family, children, loading } = useFamilyStore();
@@ -120,7 +121,10 @@ export default function FamilyPage() {
                   ? "bg-primary text-white"
                   : "bg-surface text-ink-secondary"
               }`}
-              onClick={() => setMode(m.id)}
+              onClick={() => {
+                setMode(m.id);
+                toast.success(`Allowance mode set to ${m.label}.`);
+              }}
             >
               {m.label}
             </button>
@@ -135,6 +139,7 @@ export default function FamilyPage() {
               className="field-input mt-1"
               value={flatAmount}
               onChange={(e) => setFlatAmount(e.target.value)}
+              onBlur={() => toast.success("Daily amount saved.")}
             />
           </label>
         )}
@@ -152,7 +157,11 @@ export default function FamilyPage() {
           className="field-input mt-2"
           placeholder="Full week!"
           defaultValue={weekBonus}
-          onBlur={(e) => setWeekBonus(e.target.value || "Full week!")}
+          onBlur={(e) => {
+            const next = e.target.value || "Full week!";
+            setWeekBonus(next);
+            toast.success("Week bonus saved.");
+          }}
         />
       </div>
 

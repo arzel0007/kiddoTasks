@@ -4,12 +4,46 @@ import { useState } from "react";
 import { useFamilyStore } from "@/lib/family-store";
 import { IconTile } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
+import { toast } from "@/components/toast";
 
 export default function RewardsPage() {
   const { rewards, loading, setRewardActive, removeReward } = useFamilyStore();
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const active = rewards.filter((r) => r.isActive);
   const archived = rewards.filter((r) => !r.isActive);
+
+  function archiveReward(id: string, name: string) {
+    try {
+      setRewardActive(id, false);
+      toast.success(`Archived “${name}”.`);
+    } catch {
+      toast.error("Couldn’t archive reward.");
+    }
+  }
+
+  function restoreReward(id: string, name: string) {
+    try {
+      setRewardActive(id, true);
+      toast.success(`Restored “${name}”.`);
+    } catch {
+      toast.error("Couldn’t restore reward.");
+    }
+  }
+
+  function deleteReward(id: string) {
+    try {
+      const reward = rewards.find((r) => r.id === id);
+      if (!reward) {
+        toast.error("Couldn’t find that reward.");
+        return;
+      }
+      removeReward(id);
+      setPendingDelete(null);
+      toast.success(`Deleted “${reward.name}”.`);
+    } catch {
+      toast.error("Couldn’t delete reward.");
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -40,7 +74,7 @@ export default function RewardsPage() {
                     <button
                       type="button"
                       className="btn-secondary !px-2 !py-1 !text-xs"
-                      onClick={() => setRewardActive(r.id, false)}
+                      onClick={() => archiveReward(r.id, r.name)}
                     >
                       Archive
                     </button>
@@ -73,7 +107,7 @@ export default function RewardsPage() {
                   <button
                     type="button"
                     className="btn-secondary !px-2 !py-1 !text-xs"
-                    onClick={() => setRewardActive(r.id, true)}
+                    onClick={() => restoreReward(r.id, r.name)}
                   >
                     Restore
                   </button>
@@ -109,10 +143,7 @@ export default function RewardsPage() {
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => {
-                  removeReward(pendingDelete);
-                  setPendingDelete(null);
-                }}
+                onClick={() => deleteReward(pendingDelete)}
               >
                 Delete
               </button>

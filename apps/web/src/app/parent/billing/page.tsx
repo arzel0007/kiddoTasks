@@ -7,6 +7,7 @@ import { isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { PREMIUM_BENEFITS, PLANS } from "@/lib/billing/plans";
 import { Modal } from "@/components/ui/modal";
+import { toast } from "@/components/toast";
 
 type SubStatus = {
   premium: boolean;
@@ -63,7 +64,9 @@ export default function BillingPage() {
     try {
       const headers = await authHeaders();
       if (!headers) {
-        setError("Sign in to upgrade.");
+        const msg = "Sign in to upgrade.";
+        setError(msg);
+        toast.error(msg);
         return;
       }
       const res = await fetch("/api/billing/checkout", {
@@ -73,12 +76,17 @@ export default function BillingPage() {
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (data.url) {
+        toast.info("Opening secure checkout…");
         window.location.href = data.url;
         return;
       }
-      setError(data.error ?? "Checkout isn’t available yet.");
+      const msg = data.error ?? "Checkout isn’t available yet.";
+      setError(msg);
+      toast.error(msg);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Checkout failed");
+      const msg = e instanceof Error ? e.message : "Checkout failed";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -89,18 +97,28 @@ export default function BillingPage() {
     setError(null);
     try {
       const headers = await authHeaders();
-      if (!headers) return;
+      if (!headers) {
+        const msg = "Sign in to manage billing.";
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
       const res = await fetch("/api/billing/cancel", { method: "POST", headers });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Could not cancel.");
+        const msg = data.error ?? "Could not cancel.";
+        setError(msg);
+        toast.error(msg);
         return;
       }
       setCancelConfirm(false);
       await refresh();
       if (parentUid) await loadFamily(parentUid);
+      toast.success("Subscription canceled.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not cancel.");
+      const msg = e instanceof Error ? e.message : "Could not cancel.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }

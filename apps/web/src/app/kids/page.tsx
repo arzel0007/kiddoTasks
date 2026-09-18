@@ -23,6 +23,7 @@ import type {
 import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
 import { ArzAvatar, arzHandle } from "@/components/arz-companion";
+import { toast } from "@/components/toast";
 
 type UnlockTab = "pin" | "parent";
 
@@ -107,12 +108,16 @@ export default function KidsPage() {
   async function unlockWithPin(e: React.FormEvent) {
     e.preventDefault();
     if (!isFirebaseConfigured) {
-      setUnlockError("Firebase isn’t configured.");
+      const msg = "Firebase isn’t configured.";
+      setUnlockError(msg);
+      toast.error(msg);
       return;
     }
     const value = pin.trim();
     if (!/^\d{4,6}$/.test(value)) {
-      setUnlockError("Enter the family PIN (4–6 digits).");
+      const msg = "Enter the family PIN (4–6 digits).";
+      setUnlockError(msg);
+      toast.error(msg);
       return;
     }
     setBusy(true);
@@ -142,8 +147,11 @@ export default function KidsPage() {
       useFamilyStore.getState().loadKidsSession(payload);
       setPin("");
       setSelectedChildId(null);
+      toast.success("Kids Station unlocked. Have fun!");
     } catch (err) {
-      setUnlockError(err instanceof Error ? err.message : "Wrong PIN — try again.");
+      const msg = err instanceof Error ? err.message : "Wrong PIN — try again.";
+      setUnlockError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -152,7 +160,9 @@ export default function KidsPage() {
   async function unlockWithParent(e: React.FormEvent) {
     e.preventDefault();
     if (!isFirebaseConfigured) {
-      setUnlockError("Firebase isn’t configured.");
+      const msg = "Firebase isn’t configured.";
+      setUnlockError(msg);
+      toast.error(msg);
       return;
     }
     setBusy(true);
@@ -161,19 +171,26 @@ export default function KidsPage() {
       const auth = firebaseAuth();
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       if (!cred.user.emailVerified) {
-        setUnlockError("Confirm your parent email first, then try again.");
+        const msg = "Confirm your parent email first, then try again.";
+        setUnlockError(msg);
+        toast.error(msg);
         return;
       }
       await useFamilyStore.getState().loadFamilyForParent(cred.user.uid);
       const after = useFamilyStore.getState();
       if (!after.family) {
-        setUnlockError(after.error || "Couldn’t load this family.");
+        const msg = after.error || "Couldn’t load this family.";
+        setUnlockError(msg);
+        toast.error(msg);
         return;
       }
       setPassword("");
       setSelectedChildId(null);
+      toast.success("Signed in — Kids Station is ready.");
     } catch (err) {
-      setUnlockError(err instanceof Error ? err.message : "Sign in failed.");
+      const msg = err instanceof Error ? err.message : "Sign in failed.";
+      setUnlockError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }

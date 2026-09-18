@@ -14,6 +14,7 @@ import { firebaseAuth, firebaseFunctions, isFirebaseConfigured } from "@/lib/fir
 import { useFamilyStore } from "@/lib/family-store";
 import { BrandLogo } from "@/components/brand-logo";
 import { Modal } from "@/components/ui/modal";
+import { toast } from "@/components/toast";
 import { canJoinWithCode, PREMIUM_PRICE } from "@/lib/entitlements";
 
 type AuthMode = "signin" | "signup" | "join" | "kids";
@@ -192,8 +193,11 @@ function WelcomePageInner() {
     try {
       await sendEmailVerification(user as never);
       setResendNote("Confirmation email sent.");
+      toast.success("Confirmation email sent.");
     } catch {
-      setResendNote("Couldn’t send email — try again.");
+      const msg = "Couldn’t send email — try again.";
+      setResendNote(msg);
+      toast.error(msg);
     }
   }
 
@@ -237,7 +241,9 @@ function WelcomePageInner() {
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     if (!isFirebaseConfigured) {
-      setError("Set Firebase env vars in apps/web/.env.local first.");
+      const msg = "Set Firebase env vars in apps/web/.env.local first.";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     setBusy(true);
@@ -255,15 +261,20 @@ function WelcomePageInner() {
           email,
         });
         setPendingVerifyEmail(email);
+        toast.success("Family created. Check your email to confirm.");
         return;
       } else if (mode === "signin") {
         const cred = await signInWithEmailAndPassword(auth, email, password);
         if (!cred.user.emailVerified) {
           await sendVerification(cred.user);
           setPendingVerifyEmail(cred.user.email ?? email);
+          toast.info("Confirmation email sent — verify to continue.");
           return;
         }
         await loadFamily(cred.user.uid);
+        toast.success(
+          postAuthPath === "/kids" ? "Signed in — opening Kids Station." : "Welcome back!"
+        );
       } else if (mode === "join") {
         // Co-parent join is Premium; founder email always allowed (payments not live).
         const joinEmail = (email || firebaseAuth().currentUser?.email || "").trim();
@@ -272,9 +283,9 @@ function WelcomePageInner() {
           useFamilyStore.getState().entitlements.plan !== "free"
         );
         if (!joinAllowed) {
-          setError(
-            `Joining another parent’s family with a code is Premium (${PREMIUM_PRICE.display}). See Plans.`
-          );
+          const msg = `Joining another parent’s family with a code is Premium (${PREMIUM_PRICE.display}). See Plans.`;
+          setError(msg);
+          toast.error(msg);
           setBusy(false);
           return;
         }
@@ -287,11 +298,13 @@ function WelcomePageInner() {
         if (!cred.user.emailVerified) {
           await sendVerification(cred.user);
           setPendingVerifyEmail(cred.user.email ?? email);
+          toast.info("Confirmation email sent — verify to continue.");
           return;
         }
         const join = httpsCallable(firebaseFunctions(), "joinFamilyWithCode");
         await join({ familyCode: familyCode.trim().toUpperCase() });
         await loadFamily(cred.user.uid);
+        toast.success("Joined the family.");
       } else if (mode === "kids") {
         const open = httpsCallable(firebaseFunctions(), "openKidsSession");
         const res = await open({ pin: pin.trim() });
@@ -318,10 +331,13 @@ function WelcomePageInner() {
           claims: data.claims as never,
           transactions: data.transactions as never,
         });
+        toast.success("Kids Station unlocked. Have fun!");
       }
       router.push(postAuthPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBusy(false);
     }
@@ -365,8 +381,11 @@ function WelcomePageInner() {
                 setBusy(true);
                 await sendVerification(u);
                 setBusy(false);
+                toast.success("Confirmation email sent.");
               } else {
-                setResendNote("Sign in again to resend the email.");
+                const msg = "Sign in again to resend the email.";
+                setResendNote(msg);
+                toast.error(msg);
               }
             }}
           >
@@ -391,12 +410,17 @@ function WelcomePageInner() {
                 const fresh = firebaseAuth().currentUser;
                 if (fresh?.emailVerified) {
                   await loadFamily(fresh.uid);
+                  toast.success("Email confirmed — welcome!");
                   router.replace("/parent/today");
                 } else {
-                  setResendNote("Not confirmed yet — open the link in your email first.");
+                  const msg = "Not confirmed yet — open the link in your email first.";
+                  setResendNote(msg);
+                  toast.error(msg);
                 }
               } catch {
-                setResendNote("Couldn’t refresh — try again.");
+                const msg = "Couldn’t refresh — try again.";
+                setResendNote(msg);
+                toast.error(msg);
               } finally {
                 setBusy(false);
               }
@@ -411,6 +435,7 @@ function WelcomePageInner() {
               await firebaseAuth().signOut();
               setPendingVerifyEmail(null);
               setResendNote(null);
+              toast.info("Signed out.");
             }}
           >
             ← Back to sign in
