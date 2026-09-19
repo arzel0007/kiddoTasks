@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 /// App-level events Arz can react to. Keep free of business logic —
 /// UI layers emit events; the controller maps them to expressions.
@@ -26,11 +27,15 @@ final class ArzCompanionController {
     private(set) var expression: ArzExpression = .idle
     private(set) var isBlinking = false
     private(set) var playToken = 0
+    /// Active speech-bubble line. Rendered by `ArzPhraseLayer` above page
+    /// content so List/ScrollView never clips the bubble.
+    private(set) var phrase: ArzPhrases.Line?
 
     private let cooldown: TimeInterval = 0.45
     private var lastAcceptedPlayAt: Date = .distantPast
     private var activePriority: Int = 0
     private var returnTask: Task<Void, Never>?
+    private var phraseTask: Task<Void, Never>?
 
     private init() {}
 
@@ -88,12 +93,36 @@ final class ArzCompanionController {
 
     func returnToIdle() {
         returnTask?.cancel()
+        dismissPhrase()
         isBlinking = false
         activePriority = 0
         lastAcceptedPlayAt = .distantPast
         if expression != .idle {
             expression = .idle
             playToken &+= 1
+        }
+    }
+
+    /// Show the speech bubble above all page content.
+    func presentPhrase(_ line: ArzPhrases.Line) {
+        phraseTask?.cancel()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            phrase = line
+        }
+        phraseTask = Task { [weak self] in
+            let nanos = UInt64(ArzAvatarMetrics.phraseVisibleDuration * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanos)
+            guard !Task.isCancelled else { return }
+            self?.dismissPhrase()
+        }
+    }
+
+    func dismissPhrase() {
+        phraseTask?.cancel()
+        phraseTask = nil
+        guard phrase != nil else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            phrase = nil
         }
     }
 
@@ -137,5 +166,13 @@ enum Arz {
 
     static func returnToIdle() {
         ArzCompanionController.shared.returnToIdle()
+    }
+
+    static func presentPhrase(_ line: ArzPhrases.Line) {
+        ArzCompanionController.shared.presentPhrase(line)
+    }
+
+    static func dismissPhrase() {
+        ArzCompanionController.shared.dismissPhrase()
     }
 }

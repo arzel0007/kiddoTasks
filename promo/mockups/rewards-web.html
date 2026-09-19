@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Kiddotasks — Rewards (web)</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>body { display: grid; place-items: center; padding: 24px; }</style>
+</head>
+<body>
+  <div class="browser-frame" id="shot">
+    <div class="browser-bar">
+      <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="browser-url">kiddotasks-app.web.app/parent/rewards</div>
+    </div>
+    <div class="browser-body">
+      <header class="parent-header">
+        <div class="arz" aria-hidden="true"></div>
+        <div class="titles">
+          <h1>Rewards</h1>
+          <p class="family">The Santos Family</p>
+        </div>
+        <span class="chip-primary">Kids Station</span>
+        <span class="chip-ghost">Sign out</span>
+      </header>
+
+      <nav style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem;">
+        <span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>
+          Today
+        </span>
+        <span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h11M8 12h11M8 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
+          Tasks
+        </span>
+        <span class="nav-item is-active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="16" height="11" rx="2"/><path d="M4 13h16M12 9v11"/><path d="M12 9c-2 0-3.5-1-3.5-2.5S10 4.5 12 6.5c2-2 3.5-1 3.5.5S14 9 12 9z"/></svg>
+          Rewards
+        </span>
+        <span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="10" width="17" height="10.5" rx="2"/><path d="M3.5 14.5h17M12 10v10.5"/><path d="M12 10c-2.2 0-3.8-1.2-3.8-2.8C8.2 5.8 9.6 5 10.7 5.8c1 .7 1.3 2.2 1.3 4.2z"/><path d="M12 10c2.2 0 3.8-1.2 3.8-2.8 0-1.4-1.4-2.2-2.5-1.4-1 .7-1.3 2.2-1.3 4.2z"/></svg>
+          Wishlist
+        </span>
+        <span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="2.5"/><circle cx="16" cy="9.5" r="2"/><path d="M4 18c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5"/><path d="M14 18c0-1.8 1.3-3.2 3-3.2s3 1.4 3 3.2"/></svg>
+          Family
+        </span>
+        <span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          History
+        </span>
+        <span class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.2 4.5 5 .7-3.6 3.5.9 5L12 15.2 7.5 17.2l.9-5L4.8 8.7l5-.7L12 3.5z"/></svg>
+          Plan
+        </span>
+      </nav>
+
+      <section class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;">
+          <h3 style="font-size:0.95rem;">Active rewards</h3>
+          <span class="chip-primary">+ Add reward</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div class="reward-row">
+            <div class="icon-tile" style="width:48px;height:48px;background:#D59A3A;font-size:22px;">🎬</div>
+            <div style="flex:1;min-width:0;">
+              <div class="name">Movie night</div>
+              <div class="desc">Family pick on Friday</div>
+              <div class="cost">★ 40</div>
+            </div>
+            <div class="actions">
+              <span class="btn-compact">Edit</span>
+              <span class="btn-compact">Archive</span>
+            </div>
+          </div>
+          <div class="reward-row">
+            <div class="icon-tile" style="width:48px;height:48px;background:#D59A3A;font-size:22px;">🎁</div>
+            <div style="flex:1;min-width:0;">
+              <div class="name">Ice cream trip</div>
+              <div class="desc">All kids · weekend</div>
+              <div class="cost">★ 55</div>
+            </div>
+            <div class="actions">
+              <span class="btn-compact">Edit</span>
+              <span class="btn-compact">Archive</span>
+            </div>
+          </div>
+          <div class="reward-row">
+            <div class="icon-tile" style="width:48px;height:48px;background:#D59A3A;font-size:22px;">🎮</div>
+            <div style="flex:1;min-width:0;">
+              <div class="name">Extra game time</div>
+              <div class="desc">Maya, Leo</div>
+              <div class="cost">★ 30</div>
+            </div>
+            <div class="actions">
+              <span class="btn-compact">Edit</span>
+              <span class="btn-compact">Archive</span>
+            </div>
+          </div>
+          <div class="reward-row">
+            <div class="icon-tile" style="width:48px;height:48px;background:#D59A3A;font-size:22px;">📚</div>
+            <div style="flex:1;min-width:0;">
+              <div class="name">New comic book</div>
+              <div class="desc">Maya</div>
+              <div class="cost">★ 70</div>
+            </div>
+            <div class="actions">
+              <span class="btn-compact">Edit</span>
+              <span class="btn-compact">Archive</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card list-card">
+        <h3>Pending claims</h3>
+        <div class="list-row">
+          <div class="child-avatar" style="width:44px;height:44px;background:#3F8B7040;font-size:21px;">👦</div>
+          <div class="meta"><strong>Leo · Movie night</strong><span>Requested today · ★ 40 on hold</span></div>
+          <span class="pill attention">Approve?</span>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

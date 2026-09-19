@@ -30,7 +30,12 @@ struct RootView: View {
         // No root `.animation`/`.transaction` — those overrode NavigationStack
         // push/pop and tab transitions (janky navigation).
         // Arz lives in each page header (ArzPageHeader / arzNavigationTitle) —
-        // not as a shell overlay.
+        // not as a shell overlay. The speech bubble is app-level so scroll
+        // content never clips it.
+        .overlay(alignment: .topLeading) {
+            ArzPhraseLayer()
+                .zIndex(20)
+        }
         .overlay(alignment: .bottom) {
             if let toast = toastCenter.current {
                 ToastBannerView(
@@ -55,6 +60,7 @@ struct RootView: View {
             Text(appState.errorMessage ?? "")
         }
         .onChange(of: mode) { _, newMode in
+            Arz.dismissPhrase()
             switch newMode {
             case .login:
                 Arz.returnToIdle()

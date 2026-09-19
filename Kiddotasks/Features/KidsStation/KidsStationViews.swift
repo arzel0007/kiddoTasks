@@ -47,6 +47,22 @@ struct ChildSelectionView: View {
             .padding(.top, 12)
             .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
         }
+        // Bubble lives on the page ZStack so later children (player grid)
+        // never paint over it.
+        .overlay(alignment: .topTrailing) {
+            if showArzIntro {
+                ArzPhraseBubble(phrase: arzPhrase) {
+                    withAnimation { showArzIntro = false }
+                }
+                .frame(maxWidth: 280, alignment: .trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                // Under the top-trailing Arz head (page pad 12 + avatar + gap).
+                .padding(.top, 12 + ArzAvatarMetrics.displaySize + 8)
+                .padding(.trailing, KiddoTasksDesignTokens.Spacing.medium)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+                .zIndex(20)
+            }
+        }
         .animation(
             reduceMotion ? .easeInOut(duration: 0.15) : KiddoTasksDesignTokens.Animation.standard,
             value: previewChild?.id
@@ -90,20 +106,6 @@ struct ChildSelectionView: View {
                         }
                     }
                 )
-            }
-            // Overlay bubble so the picker grid does not shift.
-            .overlay(alignment: .topTrailing) {
-                if showArzIntro {
-                    ArzPhraseBubble(phrase: arzPhrase) {
-                        withAnimation { showArzIntro = false }
-                    }
-                    .frame(maxWidth: 280, alignment: .trailing)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, ArzAvatarMetrics.displaySize - 8)
-                    .padding(.trailing, 4)
-                    .transition(.opacity)
-                    .zIndex(5)
-                }
             }
 
             Text("Who's playing?")

@@ -8,6 +8,12 @@ enum ArzAvatarMetrics {
     static let phraseVisibleDuration: TimeInterval = 2.5
     /// Gap under the header before page content starts.
     static let headerBottomGap: CGFloat = 12
+    /// Vertical padding above the avatar inside `ArzPageHeader`.
+    static let headerTopPadding: CGFloat = 12
+    /// Phrase bubble top inset from the header's top edge so the bubble
+    /// sits just under the Arz avatar (pad + avatar + gap) — matches web
+    /// `top: calc(100% + 8px)` and keeps the date/subtitle uncovered.
+    static let phraseTopInset: CGFloat = headerTopPadding + displaySize + 8
 }
 
 /// Auto-dismissing speech/thinking bubble shown when Arz is tapped.
@@ -47,6 +53,33 @@ struct ArzPhraseBubble: View {
     }
 }
 
+/// App-level phrase bubble. Drawn above page chrome (List/ScrollView) so
+/// scroll content never clips the speech bubble.
+struct ArzPhraseLayer: View {
+    @State private var controller = ArzCompanionController.shared
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let phrase = controller.phrase {
+                // Full-window coordinates: add the status-bar/notch inset so
+                // the bubble lands just under the Arz avatar in the header.
+                let top = proxy.safeAreaInsets.top + ArzAvatarMetrics.phraseTopInset
+                ArzPhraseBubble(phrase: phrase) {
+                    controller.dismissPhrase()
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, KiddoTasksDesignTokens.Spacing.medium + 4)
+                .padding(.top, top)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
+                .zIndex(30)
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(controller.phrase == nil)
+    }
+}
+
 /// Flat inline page header matching Today: [Arz] Title (+ subtitle)  [actions]
 /// Participates in normal layout flow — no floating card.
 struct ArzPageHeader<Trailing: View>: View {
@@ -58,8 +91,6 @@ struct ArzPageHeader<Trailing: View>: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pressed = false
-    @State private var phrase: ArzPhrases.Line?
-    @State private var dismissWork: DispatchWorkItem?
 
     var body: some View {
         // Fixed header height — the phrase bubble overlays content and never
@@ -97,44 +128,15 @@ struct ArzPageHeader<Trailing: View>: View {
         .padding(.vertical, 12)
         .frame(minHeight: 96, alignment: .center)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Thinking-bubble overlay — does not change header/content layout.
-        .overlay(alignment: .topLeading) {
-            if let phrase {
-                ArzPhraseBubble(phrase: phrase) {
-                    hidePhrase()
-                }
-                .padding(.leading, KiddoTasksDesignTokens.Spacing.medium + 4)
-                .padding(.top, ArzAvatarMetrics.displaySize - 12)
-                .fixedSize(horizontal: false, vertical: true)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
-                .zIndex(5)
-            }
-        }
     }
 
     private func sayHello() {
         pressed = true
         // Do not swap the sprite on tap — only show the bubble.
         let next: ArzPhrases.Line = if let greeting { greeting() } else { ArzPhrases.next() }
-        withAnimation(reduceMotion ? .easeInOut(duration: 0.1) : .spring(response: 0.3, dampingFraction: 0.8)) {
-            phrase = next
-        }
+        Arz.presentPhrase(next)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             pressed = false
-        }
-        dismissWork?.cancel()
-        let work = DispatchWorkItem { hidePhrase() }
-        dismissWork = work
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + ArzAvatarMetrics.phraseVisibleDuration,
-            execute: work
-        )
-    }
-
-    private func hidePhrase() {
-        dismissWork?.cancel()
-        withAnimation(.easeOut(duration: 0.2)) {
-            phrase = nil
         }
     }
 }
