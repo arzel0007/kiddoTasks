@@ -19,7 +19,7 @@ export default function HowToPage() {
       </p>
       <ol className="mt-8 list-decimal space-y-6 pl-6">
         <li>
-          <p className="font-bold">Create your family</p>
+          <p className="font-bold">Set up your family space</p>
           <p className="text-ink-secondary">
             Sign up with email. Add your kids with names and avatars. Set a Kids PIN for the shared iPad.
           </p>

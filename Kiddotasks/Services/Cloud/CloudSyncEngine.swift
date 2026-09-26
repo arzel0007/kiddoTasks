@@ -44,6 +44,10 @@ final class CloudSyncEngine {
     private var retryTask: Task<Void, Never>?
     private var isRefreshing = false
     private var isPushing = false
+    /// Set when a push is requested while one is already in flight. Without this,
+    /// concurrent local edits (e.g. approving several missions in a row) were
+    /// silently dropped and then marked synced — leaving cloud one approval behind.
+    private var pushQueuedWhileBusy = false
     private var pushRetryAttempt = 0
     private var lastFetchedFingerprint: String?
 
@@ -807,9 +811,22 @@ final class CloudSyncEngine {
         guard isAvailable,
               let user = Auth.auth().currentUser,
               let snapshot = store.currentSnapshot() else { return }
-        guard !isPushing else { return }
+        // Never drop a requested push — queue a follow-up instead.
+        guard !isPushing else {
+            pushQueuedWhileBusy = true
+            return
+        }
         isPushing = true
-        defer { isPushing = false }
+        // Local edits that land while this call is in flight must not be
+        // marked synced by the ack below.
+        let revisionAtCapture = store.dataRevision
+        defer {
+            isPushing = false
+            if pushQueuedWhileBusy {
+                pushQueuedWhileBusy = false
+                schedulePush()
+            }
+        }
 
         pendingPush?.cancel()
         status = .syncing
@@ -857,7 +874,14 @@ final class CloudSyncEngine {
                 )
             }
 
-            store.markPushAcknowledged()
+            // Only clear the dirty flag when nothing changed mid-push.
+            if store.dataRevision == revisionAtCapture {
+                store.markPushAcknowledged()
+            } else {
+                // Approvals/edits landed while the callable was in flight —
+                // keep dirty and push again so they aren't lost.
+                pushQueuedWhileBusy = true
+            }
             status = .signedIn
         } catch {
             status = .error(error.localizedDescription)

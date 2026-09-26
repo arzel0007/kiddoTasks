@@ -196,6 +196,31 @@ type FamilyState = {
     }
   ) => Promise<void>;
   setTaskActive: (id: string, isActive: boolean) => Promise<void>;
+  /** Approve a task completion and award points (server-authoritative). */
+  approveTaskCompletion: (input: {
+    completionId: string;
+    taskId: string;
+    childId: string;
+    taskName?: string;
+  }) => Promise<void>;
+  /** Decline a task completion (no points). */
+  rejectTaskCompletion: (input: {
+    completionId: string;
+    reason?: string;
+  }) => Promise<void>;
+  /** Approve a reward claim and deduct points (server-authoritative). */
+  approveRewardClaim: (input: {
+    claimId: string;
+    rewardId: string;
+    childId: string;
+    pointCost: number;
+    rewardName?: string;
+  }) => Promise<void>;
+  /** Decline a reward claim (no point change). */
+  rejectRewardClaim: (input: {
+    claimId: string;
+    reason?: string;
+  }) => Promise<void>;
   loadFamilyForParent: (uid: string) => Promise<void>;
   loadKidsSession: (payload: {
     family: Family;
@@ -661,6 +686,189 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     } catch (e) {
       set({ tasks: previous });
       throw new Error(errorMessage(e, "Failed to update chore"));
+    }
+  },
+
+  approveTaskCompletion: async (input) => {
+    const { family, parentUid, tasks, children, completions, transactions } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const completion = completions.find((c) => c.id === input.completionId);
+    if (!completion) throw new Error("Couldn’t find that mission.");
+    if (completion.status === "APPROVED") return;
+    const task = tasks.find((t) => t.id === input.taskId);
+    const points = Math.max(1, task?.pointValue ?? 1);
+    const now = new Date().toISOString();
+    const txId = crypto.randomUUID();
+
+    // Optimistic: flip status + points immediately so rapid approvals stay snappy.
+    const prevCompletions = completions;
+    const prevChildren = children;
+    const prevTransactions = transactions;
+    set({
+      completions: completions.map((c) =>
+        c.id === input.completionId
+          ? { ...c, status: "APPROVED" as const, approvedAt: now, pointsAwarded: points }
+          : c
+      ),
+      children: children.map((ch) =>
+        ch.id === input.childId
+          ? {
+              ...ch,
+              activePoints: ch.activePoints + points,
+              totalPointsEarned: ch.totalPointsEarned + points,
+            }
+          : ch
+      ),
+      transactions: [
+        ...transactions,
+        {
+          id: txId,
+          familyId: family.id,
+          childId: input.childId,
+          amount: points,
+          type: "TASK_COMPLETION",
+          description: `Task completed: ${input.taskName || task?.name || ""}`,
+          createdAt: now,
+        },
+      ],
+    });
+
+    try {
+      const fn = httpsCallable(firebaseFunctions(), "approveTaskCompletion");
+      await fn({
+        completionId: input.completionId,
+        taskId: input.taskId,
+        childId: input.childId,
+        familyId: family.id,
+        pointValue: points,
+        taskName: input.taskName || task?.name || "",
+      });
+    } catch (e) {
+      set({
+        completions: prevCompletions,
+        children: prevChildren,
+        transactions: prevTransactions,
+      });
+      throw new Error(errorMessage(e, "Couldn’t approve mission"));
+    }
+  },
+
+  rejectTaskCompletion: async (input) => {
+    const { family, parentUid, completions } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const completion = completions.find((c) => c.id === input.completionId);
+    if (!completion) throw new Error("Couldn’t find that mission.");
+    const now = new Date().toISOString();
+    const previous = completions;
+    set({
+      completions: completions.map((c) =>
+        c.id === input.completionId
+          ? {
+              ...c,
+              status: "REJECTED" as const,
+              notes: input.reason || "",
+              approvedAt: c.approvedAt ?? now,
+            }
+          : c
+      ),
+    });
+    try {
+      const fn = httpsCallable(firebaseFunctions(), "rejectTaskCompletion");
+      await fn({
+        completionId: input.completionId,
+        familyId: family.id,
+        reason: input.reason || "",
+      });
+    } catch (e) {
+      set({ completions: previous });
+      throw new Error(errorMessage(e, "Couldn’t decline mission"));
+    }
+  },
+
+  approveRewardClaim: async (input) => {
+    const { family, parentUid, claims, children, transactions, rewards } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const claim = claims.find((c) => c.id === input.claimId);
+    if (!claim) throw new Error("Couldn’t find that request.");
+    if (claim.status === "APPROVED") return;
+    const reward = rewards.find((r) => r.id === input.rewardId);
+    const cost = Math.max(0, reward?.pointCost ?? input.pointCost ?? 0);
+    const now = new Date().toISOString();
+
+    const prevClaims = claims;
+    const prevChildren = children;
+    const prevTransactions = transactions;
+    set({
+      claims: claims.map((c) =>
+        c.id === input.claimId
+          ? { ...c, status: "APPROVED" as const, claimedAt: c.claimedAt ?? now }
+          : c
+      ),
+      children: children.map((ch) =>
+        ch.id === input.childId
+          ? { ...ch, activePoints: Math.max(0, ch.activePoints - cost) }
+          : ch
+      ),
+      transactions: [
+        ...transactions,
+        {
+          id: crypto.randomUUID(),
+          familyId: family.id,
+          childId: input.childId,
+          amount: -cost,
+          type: "REWARD_REDEMPTION",
+          description: `Reward: ${input.rewardName || reward?.name || ""}`,
+          createdAt: now,
+        },
+      ],
+    });
+
+    try {
+      const fn = httpsCallable(firebaseFunctions(), "approveRewardClaim");
+      await fn({
+        claimId: input.claimId,
+        rewardId: input.rewardId,
+        childId: input.childId,
+        familyId: family.id,
+        pointCost: cost,
+      });
+    } catch (e) {
+      set({
+        claims: prevClaims,
+        children: prevChildren,
+        transactions: prevTransactions,
+      });
+      throw new Error(errorMessage(e, "Couldn’t approve reward"));
+    }
+  },
+
+  rejectRewardClaim: async (input) => {
+    const { family, parentUid, claims } = get();
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    if (!family || !parentUid) throw new Error("Sign in as a parent first.");
+    const claim = claims.find((c) => c.id === input.claimId);
+    if (!claim) throw new Error("Couldn’t find that request.");
+    const previous = claims;
+    set({
+      claims: claims.map((c) =>
+        c.id === input.claimId
+          ? { ...c, status: "REJECTED" as const, notes: input.reason || "" }
+          : c
+      ),
+    });
+    try {
+      const fn = httpsCallable(firebaseFunctions(), "rejectRewardClaim");
+      await fn({
+        claimId: input.claimId,
+        familyId: family.id,
+        reason: input.reason || "",
+      });
+    } catch (e) {
+      set({ claims: previous });
+      throw new Error(errorMessage(e, "Couldn’t decline reward"));
     }
   },
 

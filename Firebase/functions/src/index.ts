@@ -860,6 +860,9 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
   const tombstoneId = (collectionKey: string, docId: string) =>
     `${familyId}:${collectionKey}:${docId}`;
 
+  const TERMINAL_STATUSES = new Set(["APPROVED", "REJECTED", "COMPLETED", "RECEIVED"]);
+  const PENDING_STATUSES = new Set(["AWAITING_APPROVAL", "CLAIMED", "PENDING"]);
+
   const upsert = async (collection: string, items: any[], collectionKey: string) => {
     for (const item of items || []) {
       if (!item || typeof item.id !== "string") continue;
@@ -870,9 +873,26 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
         .doc(tombstoneId(collectionKey, item.id))
         .get();
       if (tomb.exists) continue;
+
+      let payload = { ...item, familyId };
+
+      // Approval statuses are terminal: a stale full-snapshot push must never
+      // flip APPROVED/REJECTED back to AWAITING_APPROVAL / CLAIMED.
+      if (collectionKey === "completions" || collectionKey === "claims") {
+        const existing = await db.collection(collection).doc(item.id).get();
+        if (existing.exists) {
+          const prev = String(existing.data()?.status || "");
+          const next = String(item.status || "");
+          if (TERMINAL_STATUSES.has(prev) && PENDING_STATUSES.has(next)) {
+            const { status: _drop, ...rest } = item;
+            payload = { ...rest, familyId, status: prev };
+          }
+        }
+      }
+
       batch.set(
         db.collection(collection).doc(item.id),
-        toFirestoreValue({ ...item, familyId }),
+        toFirestoreValue(payload),
         { merge: true }
       );
       batchCount += 1;

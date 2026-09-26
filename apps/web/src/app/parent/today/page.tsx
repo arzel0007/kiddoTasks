@@ -1,16 +1,31 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useFamilyStore } from "@/lib/family-store";
 import { ChildAvatar } from "@/lib/ui";
 import { PageSkeleton } from "@/components/skeleton";
 import { IconCheck, IconGift, IconList, IconUsers } from "@/components/icons";
 import { birthdayMessage, upcomingBirthdays } from "@/lib/birthdays";
+import { toast } from "@/components/toast";
+import { errorMessage } from "@/lib/errors";
 
 export default function TodayPage() {
-  const { family, children, tasks, completions, claims, rewards, loading, error } =
-    useFamilyStore();
+  const {
+    family,
+    children,
+    tasks,
+    completions,
+    claims,
+    rewards,
+    loading,
+    error,
+    approveTaskCompletion,
+    rejectTaskCompletion,
+    approveRewardClaim,
+    rejectRewardClaim,
+  } = useFamilyStore();
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const pendingApprovals = useMemo(
     () => completions.filter((c) => c.status === "AWAITING_APPROVAL"),
@@ -22,6 +37,75 @@ export default function TodayPage() {
   );
   const activeTasks = tasks.filter((t) => t.isActive);
   const birthdays = useMemo(() => upcomingBirthdays(children), [children]);
+
+  async function onApproveCompletion(c: {
+    id: string;
+    taskId: string;
+    childId: string;
+  }) {
+    setBusyId(c.id);
+    try {
+      const task = tasks.find((t) => t.id === c.taskId);
+      await approveTaskCompletion({
+        completionId: c.id,
+        taskId: c.taskId,
+        childId: c.childId,
+        taskName: task?.name,
+      });
+      toast.success("Mission approved ★");
+    } catch (e) {
+      toast.error(errorMessage(e, "Couldn’t approve mission"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onRejectCompletion(c: { id: string }) {
+    setBusyId(c.id);
+    try {
+      await rejectTaskCompletion({ completionId: c.id });
+      toast.success("Mission declined");
+    } catch (e) {
+      toast.error(errorMessage(e, "Couldn’t decline mission"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onApproveClaim(c: {
+    id: string;
+    rewardId: string;
+    childId: string;
+  }) {
+    setBusyId(c.id);
+    try {
+      const reward = rewards.find((r) => r.id === c.rewardId);
+      await approveRewardClaim({
+        claimId: c.id,
+        rewardId: c.rewardId,
+        childId: c.childId,
+        pointCost: reward?.pointCost ?? 0,
+        rewardName: reward?.name,
+      });
+      toast.success("Reward approved 🎁");
+    } catch (e) {
+      toast.error(errorMessage(e, "Couldn’t approve reward"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onRejectClaim(c: { id: string }) {
+    setBusyId(c.id);
+    try {
+      await rejectRewardClaim({ claimId: c.id });
+      toast.success("Reward declined");
+    } catch (e) {
+      toast.error(errorMessage(e, "Couldn’t decline reward"));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (loading) {
     return <PageSkeleton rows={3} />;
@@ -180,6 +264,24 @@ export default function TodayPage() {
                     </p>
                     <p className="text-xs text-ink-secondary">Needs your approval</p>
                   </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onRejectCompletion(c)}
+                    >
+                      {busyId === c.id ? "…" : "Decline"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onApproveCompletion(c)}
+                    >
+                      {busyId === c.id ? "…" : "Approve"}
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -200,11 +302,37 @@ export default function TodayPage() {
               const child = children.find((k) => k.id === c.childId);
               const reward = rewards.find((r) => r.id === c.rewardId);
               return (
-                <li key={c.id} className="rounded-xl bg-surface p-3">
-                  <p className="text-sm font-semibold">
-                    {child?.name ?? "Child"}
-                    {reward ? ` wants “${reward.name}”` : " wants a reward"}
-                  </p>
+                <li
+                  key={c.id}
+                  className="flex items-center gap-3 rounded-xl bg-surface p-3"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold">
+                      {child?.name ?? "Child"}
+                      {reward ? ` wants “${reward.name}”` : " wants a reward"}
+                    </p>
+                    <p className="text-xs text-ink-secondary">
+                      {reward ? `★ ${reward.pointCost}` : "Needs your approval"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onRejectClaim(c)}
+                    >
+                      {busyId === c.id ? "…" : "Decline"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onApproveClaim(c)}
+                    >
+                      {busyId === c.id ? "…" : "Approve"}
+                    </button>
+                  </div>
                 </li>
               );
             })}

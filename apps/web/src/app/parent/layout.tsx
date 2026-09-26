@@ -69,6 +69,18 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     arzHandle("dashboardOpened");
   }, [pathname]);
 
+  // Re-pull family data when the tab regains focus so approvals made on
+  // another device (e.g. iOS) show up without a full reload.
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    const refresh = () => {
+      const user = firebaseAuth().currentUser;
+      if (user) void loadFamilyForParent(user.uid);
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [loadFamilyForParent]);
+
   return (
     <div className="min-h-screen bg-page">
       <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pb-10 pt-3">

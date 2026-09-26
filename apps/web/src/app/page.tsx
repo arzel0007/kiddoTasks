@@ -23,7 +23,7 @@ type InfoKey = "how" | "pricing" | "summer";
 
 const AUTH_TABS: { key: AuthMode; label: string; short: string }[] = [
   { key: "signin", label: "Sign in", short: "Sign in" },
-  { key: "signup", label: "Create family", short: "Create" },
+  { key: "signup", label: "Create", short: "Create" },
   { key: "join", label: "Join family", short: "Join" },
   { key: "kids", label: "Kids PIN", short: "Kids PIN" },
 ];
@@ -35,7 +35,7 @@ const AUTH_COPY: Record<AuthMode, { title: string; blurb: string; badge: string 
     badge: "Parent",
   },
   signup: {
-    title: "Create your family",
+    title: "Set up your family space",
     blurb: "Start free — free plan stays free.",
     badge: "Start free",
   },
@@ -135,8 +135,8 @@ function WelcomePageInner() {
   const [mode, setMode] = useState<AuthMode>(authPref === "kids" ? "kids" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [familyName, setFamilyName] = useState("Our family");
-  const [parentName, setParentName] = useState("Parent");
+  const [familyName, setFamilyName] = useState("");
+  const [parentName, setParentName] = useState("");
   const [familyCode, setFamilyCode] = useState("");
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -168,7 +168,7 @@ function WelcomePageInner() {
   const submitLabel = useMemo(() => {
     if (busy) return "Please wait…";
     if (mode === "signin") return "Sign in";
-    if (mode === "signup") return "Create family";
+    if (mode === "signup") return "Create free space";
     if (mode === "join") return "Join family";
     return "Open Kids Station";
   }, [busy, mode]);
@@ -257,8 +257,8 @@ function WelcomePageInner() {
         await sendVerification(cred.user);
         const bootstrap = httpsCallable(firebaseFunctions(), "bootstrapFamily");
         await bootstrap({
-          familyName,
-          displayName: parentName,
+          familyName: familyName.trim() || "Our family",
+          displayName: parentName.trim() || "Parent",
           email,
         });
         setPendingVerifyEmail(email);
@@ -631,9 +631,9 @@ function WelcomePageInner() {
 
         {/* Bottom CTA */}
         <section className="animate-rise delay-4 mt-10 text-center">
-          <p className="text-sm text-ink-secondary">Ready when your family is.</p>
+          <p className="text-sm text-ink-secondary">Your family space is ready when you are.</p>
           <button type="button" className="btn-primary mt-3 sm:w-auto sm:px-8" onClick={() => openAuth("signup")}>
-            Create your family
+            Set up your family space
           </button>
         </section>
       </main>
@@ -689,6 +689,7 @@ function WelcomePageInner() {
                   <input
                     className="field-input"
                     value={familyName}
+                    placeholder="Our family"
                     autoComplete="organization"
                     onChange={(e) => setFamilyName(e.target.value)}
                   />
@@ -697,6 +698,7 @@ function WelcomePageInner() {
                   <input
                     className="field-input"
                     value={parentName}
+                    placeholder="Parent"
                     autoComplete="name"
                     onChange={(e) => setParentName(e.target.value)}
                   />
@@ -790,7 +792,7 @@ function WelcomePageInner() {
         {infoModal === "how" && (
           <ol className="list-decimal space-y-4 pl-5">
             <li>
-              <p className="font-bold text-ink">Create your family</p>
+              <p className="font-bold text-ink">Set up your family space</p>
               <p>
                 Sign up with email. Add your kids with names and avatars. Set a Kids PIN for
                 the shared iPad.
