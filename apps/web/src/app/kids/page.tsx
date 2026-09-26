@@ -84,6 +84,7 @@ export default function KidsPage() {
   const [wishBusyId, setWishBusyId] = useState<string | null>(null);
   const [wishSaving, setWishSaving] = useState(false);
   const [pendingWishDelete, setPendingWishDelete] = useState<string | null>(null);
+  const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
 
   const canOpen = Boolean(family) || store.kidsMode;
   const selected = children.find((c) => c.id === selectedChildId) ?? null;
@@ -583,6 +584,28 @@ export default function KidsPage() {
                       <span className="rounded-pill bg-surface px-2.5 py-1 text-xs font-bold text-primary">
                         ★ {t.pointValue}
                       </span>
+                      {!done ? (
+                        <button
+                          type="button"
+                          className="chip-btn chip-btn--primary shrink-0"
+                          disabled={submittingTaskId === t.id}
+                          onClick={() => {
+                            if (!selected) return;
+                            setSubmittingTaskId(t.id);
+                            void store
+                              .submitTaskCompletion({ taskId: t.id, childId: selected.id })
+                              .then(() => toast.success("Mission sent to a parent!"))
+                              .catch((e) =>
+                                toast.error(
+                                  e instanceof Error ? e.message : "Couldn’t submit mission"
+                                )
+                              )
+                              .finally(() => setSubmittingTaskId(null));
+                          }}
+                        >
+                          {submittingTaskId === t.id ? "Sending…" : "I did it!"}
+                        </button>
+                      ) : null}
                     </li>
                   );
                 })}

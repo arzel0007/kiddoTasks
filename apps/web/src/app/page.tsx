@@ -278,11 +278,12 @@ function WelcomePageInner() {
           postAuthPath === "/kids" ? "Signed in — opening Kids Station." : "Welcome back!"
         );
       } else if (mode === "join") {
-        // Co-parent join is Premium; founder email always allowed (payments not live).
+        // Co-parent join is Premium; founder email always allowed.
+        // Gate on server premium only — settings.plan is client-writable.
         const joinEmail = (email || firebaseAuth().currentUser?.email || "").trim();
         const joinAllowed = canJoinWithCode(
           joinEmail,
-          useFamilyStore.getState().entitlements.plan !== "free"
+          useFamilyStore.getState().serverPremium === true
         );
         if (!joinAllowed) {
           const msg = `Joining another parent’s family with a code is Premium (${PREMIUM_PRICE.display}). See Plans.`;

@@ -30,8 +30,11 @@ function ensureAdminApp(): App {
     });
     return app;
   }
-  // ADC (local gcloud / Cloud Functions default credentials)
-  app = initializeApp();
+  // ADC only works when it belongs to THIS Firebase project. Pin the project
+  // so a leftover gcloud login for another project can't verify KiddoTasks tokens.
+  app = initializeApp({
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "kiddotasks-app",
+  });
   return app;
 }
 

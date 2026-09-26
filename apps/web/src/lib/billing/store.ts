@@ -147,8 +147,16 @@ export async function claimWebhookEvent(
       createdAt: FieldValue.serverTimestamp(),
     });
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    // Only "already exists" means a duplicate delivery — swallow and skip.
+    // Any other Firestore error must propagate so the webhook can 500/retry.
+    const code = (e as { code?: number | string }).code;
+    const isDuplicate =
+      code === 6 ||
+      code === "already-exists" ||
+      (e instanceof Error && /already.?exists/i.test(e.message));
+    if (isDuplicate) return false;
+    throw e;
   }
 }
 

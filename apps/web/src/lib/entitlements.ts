@@ -18,11 +18,18 @@ export function isOwnerEmail(email?: string | null): boolean {
   return OWNER_EMAILS.has(email.trim().toLowerCase());
 }
 
+/**
+ * Premium gate. `family.settings.plan` is client-writable and is NOT
+ * authoritative — pass the server-validated flag from /api/billing/subscription
+ * (family-store `serverPremium`). Without that flag this returns false.
+ */
 export function isPremiumFamily(entitlements: {
   plan: string;
   status?: string;
+  /** Server-validated premium flag from /api/billing/subscription. */
+  premium?: boolean;
 }): boolean {
-  return entitlements.plan === "plus" || entitlements.plan === "pro";
+  return entitlements.premium === true;
 }
 
 /** Co-parent join with family code is Premium (owner exempt). */

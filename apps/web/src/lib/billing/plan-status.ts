@@ -24,7 +24,8 @@ export type PlanDisplay = {
 
 /**
  * Single source for plan copy on Plan tab + Family tab (and anywhere else).
- * Owner / Premium entitlement always wins over a missing billing snapshot.
+ * Owner / server Premium entitlement always wins over a missing billing snapshot.
+ * Client-writable family.settings.plan is display-only legacy — never a gate.
  */
 export function computePlanDisplay(
   ent: Entitlements & { isOwner?: boolean; isPlus?: boolean },
@@ -32,8 +33,9 @@ export function computePlanDisplay(
   sub?: BillingSubscriptionStatus
 ): PlanDisplay {
   const isOwner = ent.isOwner === true || isOwnerEmail(parentEmail);
-  const isPlus = ent.isPlus === true || ent.plan === "plus" || ent.plan === "pro";
-  const isPremium = isOwner || isPlus || sub?.premium === true;
+  // ent.isPlus is server-validated (useEntitlements); sub.premium is /api/billing/subscription.
+  const isPlus = ent.isPlus === true || sub?.premium === true;
+  const isPremium = isOwner || isPlus;
 
   const title = isPremium ? PLANS.premium_monthly.name : "KiddoTasks Free";
   const subtitle = isPremium

@@ -113,17 +113,55 @@ final class AppState {
         interfaceOverride = .kids
     }
 
+    /// Kids PIN session (shared device) — not a signed-in parent.
+    var isKidsSessionOnly: Bool {
+        store.parent?.id == "kids-session"
+    }
+
+    /// True when opening Parent Center must go through the family Kids PIN.
+    private var needsParentGate: Bool {
+        isKidsSessionOnly || !isAuthenticated
+    }
+
+    /// Requests entry to Parent Center. When a real parent is signed in this
+    /// switches immediately; otherwise it returns false so the caller can show
+    /// the Kids PIN gate (see `unlockParentAccess`).
+    @discardableResult
+    func requestParentAccess() -> Bool {
+        if needsParentGate {
+            return false
+        }
+        enterParentMode()
+        return true
+    }
+
+    /// Completes a successful Kids PIN check at the parent gate.
+    /// Kids-session identity stays non-owner even after unlocking.
+    func unlockParentAccess(pin: String) async -> Bool {
+        let ok = await unlockKidsStation(pin: pin)
+        if ok {
+            enterParentMode()
+        }
+        return ok
+    }
+
+    private func enterParentMode() {
+        interfaceOverride = .parent
+        currentChildProfile = nil
+        gamesModeActive = false
+        gamesTabRequested = false
+    }
+
     /// Leaves shared Games mode and returns to Parent Center (or kid picker).
     func exitGamesMode() {
         gamesModeActive = false
         gamesTabRequested = false
         currentChildProfile = nil
-        if isAuthenticated {
-            interfaceOverride = .parent
-        } else {
-            // PIN session: stay unlocked, show kid picker.
-            interfaceOverride = .kids
+        if requestParentAccess() {
+            return
         }
+        // PIN session: stay unlocked, show kid picker until parent gate passes.
+        interfaceOverride = .kids
     }
 
     /// Unlocks Kids Station with the family PIN (local cache or cloud callable).
@@ -151,7 +189,9 @@ final class AppState {
             }
             return false
         } catch {
+            #if DEBUG
             print("[KidsPIN] unlock failed: \(error.localizedDescription)")
+            #endif
             return false
         }
     }
@@ -175,16 +215,21 @@ final class AppState {
     }
 
     func applyDeepLink(_ route: String) {
-        interfaceOverride = .parent
-        currentChildProfile = nil
+        if route == "kids" {
+            interfaceOverride = .kids
+            currentChildProfile = nil
+            return
+        }
+        guard requestParentAccess() else {
+            pendingDeepLink = route
+            return
+        }
         // Future: switch parent tab via a published index.
         switch route {
         case "approvals", "today":
             toastInfo("Open Today to review approvals")
         case "rewards":
             toastInfo("Open Rewards to review requests")
-        case "kids":
-            interfaceOverride = .kids
         default:
             break
         }
@@ -273,7 +318,9 @@ final class AppState {
                     completion?()
                     await registerForPushWhenCloudEnabled()
                 } catch {
+                    #if DEBUG
                     print("[Auth] signIn UI error: \(error.localizedDescription)")
+                    #endif
                     authenticationError = friendlyAuthError(error)
                 }
             } else {
@@ -409,6 +456,48 @@ final class AppState {
 
     func child(id: String) -> Child? {
         store.children.first { $0.id == id }
+    }
+
+    /// Submit a mission. Kids PIN sessions write via cloud callables so the
+    /// parent's devices see the completion; parent sessions stay local-first
+    /// and sync through `pushFamilySnapshot`.
+    func submitMission(taskId: String, childId: String) async throws {
+        guard let familyId = store.family?.id else {
+            throw FirebaseError.invalidFamily
+        }
+        let kidsOnly = isKidsSessionOnly || (!isAuthenticated && cloudSync.isAvailable)
+        if kidsOnly {
+            _ = try await cloudSync.submitTaskCompletion(
+                familyId: familyId,
+                taskId: taskId,
+                childId: childId
+            )
+            // Optimistic local row so Kids UI updates immediately.
+            _ = try? store.submitCompletion(taskId: taskId, childId: childId)
+            return
+        }
+        _ = try store.submitCompletion(taskId: taskId, childId: childId)
+    }
+
+    /// Request a reward. Same split as `submitMission`.
+    @discardableResult
+    func requestReward(rewardId: String, childId: String) async throws -> RewardClaim {
+        guard let familyId = store.family?.id else {
+            throw FirebaseError.invalidFamily
+        }
+        let kidsOnly = isKidsSessionOnly || (!isAuthenticated && cloudSync.isAvailable)
+        if kidsOnly {
+            _ = try await cloudSync.claimReward(
+                familyId: familyId,
+                rewardId: rewardId,
+                childId: childId
+            )
+            if let local = try? store.claimReward(rewardId: rewardId, childId: childId) {
+                return local
+            }
+            return RewardClaim(familyId: familyId, rewardId: rewardId, childId: childId)
+        }
+        return try store.claimReward(rewardId: rewardId, childId: childId)
     }
 
     func task(id: String) -> KiddoTask? {

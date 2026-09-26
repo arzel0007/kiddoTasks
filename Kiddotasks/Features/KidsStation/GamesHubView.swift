@@ -216,6 +216,7 @@ struct GamesHubView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedGame: MiniGameID?
     @State private var launch: GameLaunch?
+    @State private var showParentGate = false
 
     var body: some View {
         NavigationStack {
@@ -228,7 +229,13 @@ struct GamesHubView: View {
                         Spacer()
                         if appState.currentChildProfile == nil {
                             Button("Parent") {
-                                appState.exitGamesMode()
+                                appState.gamesModeActive = false
+                                appState.gamesTabRequested = false
+                                if appState.requestParentAccess() {
+                                    // Real parent session — Parent Center already shown.
+                                } else {
+                                    showParentGate = true
+                                }
                             }
                             .font(KiddoTasksDesignTokens.Typography.captionLarge)
                             .fontWeight(.semibold)
@@ -308,6 +315,9 @@ struct GamesHubView: View {
                 ) {
                     launch = nil
                 }
+            }
+            .sheet(isPresented: $showParentGate) {
+                ParentGatePINView()
             }
         }
     }

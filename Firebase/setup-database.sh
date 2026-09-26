@@ -64,9 +64,14 @@ echo "   ✅ Logged in to Firebase"
 
 # 4. Deploy rules + functions
 echo ""
-echo "5. Deploying Firestore rules and Cloud Functions..."
-(cd "$REPO_ROOT" && firebase deploy --only firestore:rules,functions)
+echo "5. Deploying Firestore rules, indexes, Storage rules, and Cloud Functions..."
+(cd "$REPO_ROOT" && firebase deploy --only firestore:rules,firestore:indexes,storage,functions)
 echo "   ✅ Deployed"
+
+echo ""
+echo "6. Ensure KID_SESSION_SECRET is set in production:"
+echo "   firebase functions:config:set OR set env KID_SESSION_SECRET (min 16 chars)"
+echo "   Production functions refuse to mint kid tokens without it."
 
 cat <<'EOF'
 

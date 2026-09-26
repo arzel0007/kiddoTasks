@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useFamilyStore } from "@/lib/family-store";
+import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { IconTile, ChildAvatar } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
@@ -54,12 +54,12 @@ export default function TasksPage() {
     children,
     loading,
     parentEmail,
-    entitlements,
     error,
     addTask,
     updateTask,
     setTaskActive,
   } = useFamilyStore();
+  const ent = useEntitlements();
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export default function TasksPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const premium = entitlements.plan === "plus" || entitlements.plan === "pro";
+  const premium = ent.isPlus;
   const canCreate = canAddTask(tasks.length, parentEmail, premium);
 
   const filtered = useMemo(() => {

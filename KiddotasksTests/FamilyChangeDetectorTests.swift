@@ -23,7 +23,7 @@ final class FamilyChangeDetectorTests: XCTestCase {
             pointCost: 30, createdBy: "parent-1"
         )
         return FamilySnapshot(
-            family: family, parent: parent, passwordHash: "",
+            family: family, parent: parent, passwordHash: "", passwordSalt: "",
             children: [child], tasks: [task],
             completions: [], rewards: [reward],
             claims: [], transactions: [], achievements: []

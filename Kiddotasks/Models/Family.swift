@@ -38,7 +38,7 @@ final class Family: Identifiable, Codable {
         familyCode: String = LocalFamilyDataStore.generateFamilyCode(),
         photoData: Data? = nil,
         photoURL: String? = nil,
-        settings: FamilySettings = .default,
+        settings: FamilySettings = FamilySettings(),
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         serverUpdatedAt: Date? = nil
@@ -63,7 +63,7 @@ struct FamilySettings: Codable {
     var celebrationAnimationsEnabled: Bool = true
     var requireApprovalByDefault: Bool = true
     var weekStartsOn: Int = 1 // 1 = Monday
-    var kidsStationPIN: String = "1234"
+    var kidsStationPIN: String = FamilySettings.randomPIN()
     /// When true, Kids Space shows the Play tab (basketball mini-game).
     var enableMiniGames: Bool = true
     /// Max minutes for basketball per session (0 = unlimited / default game length).
@@ -81,6 +81,11 @@ struct FamilySettings: Codable {
     var enableWishlist: Bool = false
 
     static let `default` = FamilySettings()
+
+    /// Fresh random 6-digit Kids Station PIN. Never a fixed default like "1234".
+    static func randomPIN() -> String {
+        String(format: "%06d", Int.random(in: 0...999_999))
+    }
 
     enum CodingKeys: String, CodingKey {
         case pointDisplaySymbol
@@ -104,7 +109,7 @@ struct FamilySettings: Codable {
         celebrationAnimationsEnabled: Bool = true,
         requireApprovalByDefault: Bool = true,
         weekStartsOn: Int = 1,
-        kidsStationPIN: String = "1234",
+        kidsStationPIN: String = FamilySettings.randomPIN(),
         enableMiniGames: Bool = true,
         basketballMaxMinutes: Int = 0,
         allowanceMode: AllowanceMode = .starsOnly,
@@ -135,7 +140,7 @@ struct FamilySettings: Codable {
         celebrationAnimationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .celebrationAnimationsEnabled) ?? true
         requireApprovalByDefault = try c.decodeIfPresent(Bool.self, forKey: .requireApprovalByDefault) ?? true
         weekStartsOn = try c.decodeIfPresent(Int.self, forKey: .weekStartsOn) ?? 1
-        kidsStationPIN = try c.decodeIfPresent(String.self, forKey: .kidsStationPIN) ?? "1234"
+        kidsStationPIN = try c.decodeIfPresent(String.self, forKey: .kidsStationPIN) ?? FamilySettings.randomPIN()
         enableMiniGames = try c.decodeIfPresent(Bool.self, forKey: .enableMiniGames) ?? true
         basketballMaxMinutes = try c.decodeIfPresent(Int.self, forKey: .basketballMaxMinutes) ?? 0
         allowanceMode = try c.decodeIfPresent(AllowanceMode.self, forKey: .allowanceMode) ?? .starsOnly

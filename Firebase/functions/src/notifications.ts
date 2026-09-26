@@ -19,6 +19,7 @@
  */
 import * as functions from "firebase-functions";
 import { admin, db } from "./firebase-init";
+import { sendWebPushToFamily } from "./webpush";
 
 const RECENCY_WINDOW_MS = 5 * 60 * 1000;
 const SKIPPED_LEDGER_TYPES = new Set(["TASK_COMPLETION", "REWARD_REDEMPTION"]);
@@ -97,37 +98,45 @@ async function notifyFamily(args: {
       .collection("deviceTokens")
       .where("familyId", "==", args.familyId)
       .get();
-    if (tokensSnapshot.empty) return;
 
-    const tokens = tokensSnapshot.docs.map((doc) => doc.id);
-    const response = await admin.messaging().sendEachForMulticast({
-      tokens,
-      notification: { title: args.title, body: args.body },
-      data: args.data ?? {},
-    });
+    if (!tokensSnapshot.empty) {
+      const tokens = tokensSnapshot.docs.map((doc) => doc.id);
+      const response = await admin.messaging().sendEachForMulticast({
+        tokens,
+        notification: { title: args.title, body: args.body },
+        data: args.data ?? {},
+      });
 
-    // Prune dead tokens so registries stay clean over time.
-
-    const deadTokens: string[] = [];
-    response.responses.forEach((result, index) => {
-      const code = result.error?.code ?? "";
-      if (
-        !result.success &&
-        (code.includes("registration-token-not-registered") ||
-          code.includes("unregistered") ||
-          code.includes("invalid-registration") ||
-          code.includes("sender-id-mismatch") ||
-          code.includes("mismatched-credential"))
-      ) {
-        const tok = tokens[index];
-        if (tok) deadTokens.push(tok);
+      // Prune dead tokens so registries stay clean over time.
+      const deadTokens: string[] = [];
+      response.responses.forEach((result, index) => {
+        const code = result.error?.code ?? "";
+        if (
+          !result.success &&
+          (code.includes("registration-token-not-registered") ||
+            code.includes("unregistered") ||
+            code.includes("invalid-registration") ||
+            code.includes("sender-id-mismatch") ||
+            code.includes("mismatched-credential"))
+        ) {
+          const tok = tokens[index];
+          if (tok) deadTokens.push(tok);
+        }
+      });
+      if (deadTokens.length > 0) {
+        const batch = db.batch();
+        deadTokens.forEach((tok) => batch.delete(db.collection("deviceTokens").doc(tok)));
+        await batch.commit();
       }
-    });
-    if (deadTokens.length > 0) {
-      const batch = db.batch();
-      deadTokens.forEach((tok) => batch.delete(db.collection("deviceTokens").doc(tok)));
-      await batch.commit();
     }
+
+    // Web Push (VAPID) — works without a paid Apple Developer / APNs setup.
+    await sendWebPushToFamily({
+      familyId: args.familyId,
+      title: args.title,
+      body: args.body,
+      data: args.data,
+    });
   } catch (error) {
     console.error("notifyFamily failed:", error);
   }
@@ -227,7 +236,7 @@ export const notifyOnTaskCompletionUpdated = functions.firestore
       await notifyFamily({
         familyId: after.familyId,
         title: "Task needs another try",
-        body: `${kid}: "${task}" — ${safeString(after.notes, "Parent asked to try again")}`,
+        body: `${kid}: "${task}" — needs another try`,
         data: {
           type: "taskRejected",
           familyId: after.familyId,
@@ -309,11 +318,10 @@ export const notifyOnRewardClaimUpdated = functions.firestore
         },
       });
     } else {
-      const reward = safeString(names.rewardName, "the reward");
       await notifyFamily({
         familyId: after.familyId,
         title: "Reward request declined",
-        body: `${kid}: "${reward}" — ${safeString(after.notes, "Parent said not this time")}`,
+        body: `${kid}'s reward request was declined`,
         data: {
           type: "rewardRejected",
           familyId: after.familyId,
@@ -351,7 +359,7 @@ export const notifyOnPointTransactionCreated = functions.firestore
     await notifyFamily({
       familyId: tx.familyId,
       title: amount >= 0 ? "Points added" : "Points deducted",
-      body: `${kid} ${amount >= 0 ? "earned" : "lost"} ${delta} — ${safeString(tx.description, "Points updated")}`,
+      body: `${kid} ${amount >= 0 ? "earned" : "lost"} ${delta}`,
       data: {
         type: "pointsAdjusted",
         familyId: tx.familyId,
@@ -391,7 +399,23 @@ export const registerDeviceToken = functions.https.onCall(async (data, context) 
   }
 
   const now = admin.firestore.FieldValue.serverTimestamp();
-  await db.collection("deviceTokens").doc(token).set({
+  const tokenRef = db.collection("deviceTokens").doc(token);
+  const existing = await tokenRef.get();
+  if (existing.exists) {
+    const prev = existing.data() || {};
+    // Same owner re-register (family switch) is OK; do not let another user
+    // steal a known token into their family.
+    if (prev.ownerUid && prev.ownerUid !== context.auth.uid) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "This device is registered to another account"
+      );
+    }
+    if (prev.familyId && prev.familyId !== familyId && prev.ownerUid === context.auth.uid) {
+      // Owner switched families — allow re-home.
+    }
+  }
+  await tokenRef.set({
     familyId,
     ownerUid: context.auth.uid,
     platform,

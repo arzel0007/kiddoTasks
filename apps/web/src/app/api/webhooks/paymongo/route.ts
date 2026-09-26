@@ -5,7 +5,6 @@ import {
   retrieveSubscription,
   verifyPayMongoSignature,
 } from "@/lib/billing/paymongo";
-import { resolvePlan } from "@/lib/billing/plans";
 import {
   claimWebhookEvent,
   getSubscriptionByCheckoutSession,
@@ -71,7 +70,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true, skipped: true }, { status: 200 });
   }
 
-  const claimed = await claimWebhookEvent(eventId, eventType);
+  let claimed: boolean;
+  try {
+    claimed = await claimWebhookEvent(eventId, eventType);
+  } catch (e) {
+    // Non-duplicate claim failure (Firestore down, etc.) — 500 so PayMongo retries.
+    console.error("[webhook/paymongo] claim", eventType, e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "Claim failed" }, { status: 500 });
+  }
   if (!claimed) {
     return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
   }
@@ -82,11 +88,26 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("[webhook/paymongo]", eventType, e instanceof Error ? e.message : e);
     await markWebhookProcessed(eventId, false);
-    // 200 to avoid infinite retries for permanent errors; PayMongo still logs
-    return NextResponse.json({ received: true, error: true }, { status: 200 });
+    // 500 so PayMongo retries; claim keeps the retry idempotent.
+    return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true }, { status: 200 });
+}
+
+/**
+ * A paid amount must cover the subscription amount (PayMongo integer centavos)
+ * and match currency when present. Under/unknown payments never unlock Premium.
+ */
+function paymentCoversSubscription(
+  paidAmount: number | null | undefined,
+  paidCurrency: string | null | undefined,
+  sub: { amount: number; currency: string }
+): boolean {
+  if (typeof paidAmount !== "number" || !Number.isFinite(paidAmount)) return false;
+  if (paidAmount < sub.amount) return false;
+  if (paidCurrency && sub.currency && paidCurrency !== sub.currency) return false;
+  return true;
 }
 
 async function handleEvent(eventType: string, payload: PayMongoEvent) {
@@ -117,6 +138,12 @@ async function handleEvent(eventType: string, payload: PayMongoEvent) {
       typeof attrs.amount === "number"
         ? attrs.amount
         : (attrs.total_amount as number) ?? sub.amount;
+    const currency = ((attrs.currency as string) ?? sub.currency) as string;
+    // Explicit paid amount from the event (no fallback) — used for the premium gate.
+    const paidAmount =
+      typeof attrs.amount === "number"
+        ? attrs.amount
+        : (attrs.total_amount as number | undefined);
 
     await recordPayment({
       subscriptionId: sub.providerSubscriptionId,
@@ -167,6 +194,13 @@ async function handleEvent(eventType: string, payload: PayMongoEvent) {
     });
 
     if (status === "active" || status === "incomplete") {
+      if (!paymentCoversSubscription(paidAmount, currency, sub)) {
+        console.warn(
+          "[webhook] paid amount does not cover plan; not unlocking Premium",
+          { paidAmount, currency, expected: sub.amount, expectedCurrency: sub.currency }
+        );
+        return;
+      }
       await setFamilyPlan(sub.familyId, "plus");
     }
     return;
@@ -180,6 +214,8 @@ async function handleEvent(eventType: string, payload: PayMongoEvent) {
     if (!subId) return;
     const sub = await getSubscriptionByPayMongoId(subId);
     if (!sub) return;
+    const amount = attrs.amount as number | undefined;
+    const currency = attrs.currency as string | undefined;
     await recordPayment({
       subscriptionId: sub.providerSubscriptionId,
       familyId: sub.familyId,
@@ -191,9 +227,14 @@ async function handleEvent(eventType: string, payload: PayMongoEvent) {
       status: "paid",
       paidAt: new Date().toISOString(),
     });
-    const plan = resolvePlan(sub.planId);
+    if (!paymentCoversSubscription(amount, currency, sub)) {
+      console.warn(
+        "[webhook] payment.paid amount does not cover plan; not unlocking Premium",
+        { amount, currency, expected: sub.amount, expectedCurrency: sub.currency }
+      );
+      return;
+    }
     await setFamilyPlan(sub.familyId, "plus");
-    void plan;
     return;
   }
 

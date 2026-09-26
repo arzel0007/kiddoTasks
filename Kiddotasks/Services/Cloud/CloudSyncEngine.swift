@@ -187,7 +187,7 @@ final class CloudSyncEngine {
             // in — signIn re-bootstraps a family if the docs are gone.
             if Self.isEmailAlreadyInUse(error) {
                 try await signIn(email: email, password: password)
-                return store.family?.settings.kidsStationPIN ?? "1234"
+                return store.family?.settings.kidsStationPIN ?? FamilySettings.randomPIN()
             }
             throw error
         }
@@ -198,7 +198,9 @@ final class CloudSyncEngine {
             do {
                 try await createdUser.sendEmailVerification()
             } catch {
+                #if DEBUG
                 print("[Auth] sendEmailVerification failed: \(error.localizedDescription)")
+                #endif
             }
         }
 
@@ -213,7 +215,7 @@ final class CloudSyncEngine {
               let familyId = data["familyId"] as? String else {
             throw FirebaseError.operationFailed("Family bootstrap failed")
         }
-        let pin = (data["kidsStationPIN"] as? String) ?? "1234"
+        let pin = (data["kidsStationPIN"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? FamilySettings.randomPIN()
         let familyCode = data["familyCode"] as? String
 
         try store.seedLocalFamilyAfterCloudBootstrap(
@@ -249,12 +251,18 @@ final class CloudSyncEngine {
     func signIn(email: String, password: String) async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
-        print("[Auth] signIn begin email=\(email)")
+        #if DEBUG
+        print("[Auth] signIn begin")
+        #endif
         do {
             _ = try await Auth.auth().signIn(withEmail: email, password: password)
-            print("[Auth] Firebase Auth ok uid=\(Auth.auth().currentUser?.uid ?? "?")")
+            #if DEBUG
+            print("[Auth] Firebase Auth ok")
+            #endif
         } catch {
+            #if DEBUG
             print("[Auth] Firebase Auth failed: \(error.localizedDescription)")
+            #endif
             throw FirebaseError.invalidCredentials
         }
         guard let user = Auth.auth().currentUser else {
@@ -281,20 +289,28 @@ final class CloudSyncEngine {
         // Keep unpushed local work when we have a family; never block restore
         // when local is empty (post-reset) — cloud must win in that case.
         if store.family != nil, hasUnsyncedLocalChanges {
+            #if DEBUG
             print("[Auth] pushing dirty local work before pull")
+            #endif
             try? await pushSnapshotAndWait()
         }
 
         let snapshot: FamilySnapshot
         do {
             snapshot = try await fetchSnapshot(uid: uid, email: email)
+            #if DEBUG
             print("[Auth] fetched family=\(snapshot.family.id) kids=\(snapshot.children.count) tasks=\(snapshot.tasks.count)")
+            #endif
         } catch {
+            #if DEBUG
             print("[Auth] fetch failed: \(error.localizedDescription)")
+            #endif
             // Only recreate family docs when they are actually missing/unreadable.
             // A network blip must NOT create a duplicate family.
             if Self.isMissingCloudFamily(error) {
+                #if DEBUG
                 print("[Auth] missing cloud family — rebootstrap")
+                #endif
                 try await rebootstrapFamilyAfterMissingDocs(
                     uid: uid,
                     email: email,
@@ -306,7 +322,9 @@ final class CloudSyncEngine {
                 guard store.isAuthenticated else {
                     throw FirebaseError.operationFailed("Could not restore your family. Try again.")
                 }
+                #if DEBUG
                 print("[Auth] rebootstrap done family=\(store.family?.id ?? "nil")")
+                #endif
                 return
             }
             throw error
@@ -317,7 +335,9 @@ final class CloudSyncEngine {
         } else {
             // Still dirty after push attempt — keep local, but only succeed
             // if this device actually has a signed-in family to show.
+            #if DEBUG
             print("[Auth] still dirty after push; keeping local")
+            #endif
             startListening()
             startPeriodicRefresh()
             status = .pending
@@ -335,7 +355,9 @@ final class CloudSyncEngine {
         guard store.isAuthenticated else {
             throw FirebaseError.operationFailed("Sign-in did not load your family. Try again.")
         }
+        #if DEBUG
         print("[Auth] signIn success family=\(store.family?.id ?? "nil")")
+        #endif
         #else
         throw FirebaseError.authNotAvailable
         #endif
@@ -350,7 +372,9 @@ final class CloudSyncEngine {
     /// and duplicate next to newly created ones.
     private func rebootstrapFamilyAfterMissingDocs(uid: String, email: String, reason: String = "") async throws {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
-        print("[Auth] rebootstrap start reason=\(reason)")
+        #if DEBUG
+        print("[Auth] rebootstrap start")
+        #endif
         let displayName = store.parent?.displayName ?? "Parent"
         let familyName = store.family?.name ?? "Our family"
         store.clearSyncMeta()
@@ -366,12 +390,16 @@ final class CloudSyncEngine {
             ])
         guard let data = callResult.data as? [String: Any],
               let familyId = data["familyId"] as? String else {
-            print("[Auth] bootstrapFamily bad response: \(String(describing: callResult.data))")
+            #if DEBUG
+            print("[Auth] bootstrapFamily bad response")
+            #endif
             throw FirebaseError.operationFailed("Could not restore your family. Try again.")
         }
-        let pin = (data["kidsStationPIN"] as? String) ?? "1234"
+        let pin = (data["kidsStationPIN"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? FamilySettings.randomPIN()
         let familyCode = data["familyCode"] as? String
-        print("[Auth] bootstrapFamily ok familyId=\(familyId)")
+        #if DEBUG
+        print("[Auth] bootstrapFamily ok")
+        #endif
 
         try store.seedLocalFamilyAfterCloudBootstrap(
             familyId: familyId,
@@ -561,13 +589,14 @@ final class CloudSyncEngine {
             email: "",
             displayName: "Kids Station",
             familyId: familyId,
-            role: .owner,
+            role: .kidsSession,
             lastSignInAt: Date()
         )
         let snapshot = FamilySnapshot(
             family: family,
             parent: parent,
             passwordHash: "",
+            passwordSalt: "",
             children: children,
             tasks: tasks,
             completions: completions,
@@ -580,6 +609,46 @@ final class CloudSyncEngine {
         store.clearSyncMeta()
         store.applyRemote(snapshot)
         store.markPushAcknowledged()
+        #endif
+    }
+
+    // MARK: - Kid/parent mission + reward callables (cloud source of truth)
+
+    /// Submit a task completion for the family (parent Auth or kids HMAC token).
+    @discardableResult
+    func submitTaskCompletion(familyId: String, taskId: String, childId: String) async throws -> (id: String, status: String) {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        let payload = wishlistCallablePayload(familyId: familyId, childId: childId)
+        var body = payload
+        body["taskId"] = taskId
+        let result = try await Functions.functions()
+            .httpsCallable("submitTaskCompletion")
+            .call(body)
+        let data = result.data as? [String: Any]
+        return (
+            data?["completionId"] as? String ?? UUID().uuidString,
+            data?["status"] as? String ?? "AWAITING_APPROVAL"
+        )
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    /// Request a reward claim (parent Auth or kids HMAC token).
+    @discardableResult
+    func claimReward(familyId: String, rewardId: String, childId: String) async throws -> String {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        var body = wishlistCallablePayload(familyId: familyId, childId: childId)
+        body["rewardId"] = rewardId
+        let result = try await Functions.functions()
+            .httpsCallable("claimReward")
+            .call(body)
+        let data = result.data as? [String: Any]
+        return data?["claimId"] as? String ?? UUID().uuidString
+        #else
+        throw FirebaseError.authNotAvailable
         #endif
     }
 
@@ -956,6 +1025,7 @@ final class CloudSyncEngine {
             family: family,
             parent: parent,
             passwordHash: "",
+            passwordSalt: "",
             children: try await children,
             tasks: try await tasks,
             completions: try await completions,

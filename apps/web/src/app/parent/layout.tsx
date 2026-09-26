@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { useEffect, useState } from "react";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { PageSkeleton } from "@/components/skeleton";
@@ -33,30 +33,62 @@ const tabs = [
   { href: "/parent/billing", label: "Plan", Icon: IconPlan },
 ];
 
+/** Shown when the device is in Kids Mode — parent UI must not render. */
+function ParentLocked() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-page px-4">
+      <div className="card w-full max-w-sm text-center">
+        <p className="text-3xl" aria-hidden>
+          🔒
+        </p>
+        <h1 className="mt-3 text-xl font-bold text-ink">Parent area locked</h1>
+        <p className="mt-2 text-sm text-ink-secondary">
+          This device is in Kids Mode. Ask a parent to unlock, or open Kids Station.
+        </p>
+        <Link href="/kids" className="btn-primary mt-4 inline-flex w-auto px-5">
+          Go to Kids Station
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function ParentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { family, loading, loadFamilyForParent, reset } = useFamilyStore();
+  const { family, loading, kidsMode, loadFamilyForParent, reset } = useFamilyStore();
+  // Initialize to null — never call firebaseAuth() during SSR prerender.
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  // True once Firebase has reported auth state at least once (or Firebase is off).
+  const [authReady, setAuthReady] = useState(!isFirebaseConfigured);
   const pageTitle = arzTitleFromPath(pathname);
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
     const auth = firebaseAuth();
     if (auth.currentUser) {
+      setAuthUser(auth.currentUser);
+      setAuthReady(true);
       void loadFamilyForParent(auth.currentUser.uid);
     }
     let logoutTimer: ReturnType<typeof setTimeout> | undefined;
     const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthReady(true);
       if (user) {
         if (logoutTimer) clearTimeout(logoutTimer);
         void loadFamilyForParent(user.uid);
       } else {
+        // Redirect immediately — the render guard below already withholds
+        // parent UI. Timer is only a safety net if replace() is interrupted.
         logoutTimer = setTimeout(() => {
           if (!firebaseAuth().currentUser) {
             reset();
             router.replace("/");
           }
         }, 600);
+        reset();
+        router.replace("/");
       }
     });
     return () => {
@@ -80,6 +112,22 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [loadFamilyForParent]);
+
+  // Redirect as soon as auth resolves signed-out (not only after the 600ms timer).
+  useEffect(() => {
+    if (authReady && !authUser) {
+      reset();
+      router.replace("/");
+    }
+  }, [authReady, authUser, reset, router]);
+
+  // Synchronous guards — never render parent chrome for kids or signed-out users.
+  if (kidsMode) {
+    return <ParentLocked />;
+  }
+  if (!authReady || !authUser) {
+    return <PageSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-page">

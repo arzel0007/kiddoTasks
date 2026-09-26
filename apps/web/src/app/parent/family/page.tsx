@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { FREE_LIMITS } from "@/lib/entitlements";
 import { ChildAvatar } from "@/lib/ui";
@@ -12,6 +12,12 @@ import { isWishlistEnabled } from "@/lib/wishlist";
 import { computePlanDisplay } from "@/lib/billing/plan-status";
 import { PlanStatusSummary } from "@/components/plan-status-summary";
 import { Modal } from "@/components/ui/modal";
+import {
+  isWebPushSupported,
+  subscribeWebPush,
+  unsubscribeWebPush,
+  webPushSubscriptionStatus,
+} from "@/lib/web-push";
 import {
   ABOUT_CLOSING,
   ABOUT_PARAGRAPHS,
@@ -35,7 +41,43 @@ export default function FamilyPage() {
   );
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [pushStatus, setPushStatus] = useState<string>("…");
+  const [pushBusy, setPushBusy] = useState(false);
   const wishlistOn = isWishlistEnabled(family);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const s = await webPushSubscriptionStatus();
+      if (alive) setPushStatus(s);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function toggleWebPush() {
+    setPushBusy(true);
+    try {
+      if (pushStatus === "subscribed") {
+        const res = await unsubscribeWebPush();
+        if (!res.ok) toast.error(res.error || "Couldn’t turn off notifications.");
+        else {
+          toast.success("Browser notifications turned off.");
+          setPushStatus("unsubscribed");
+        }
+      } else {
+        const res = await subscribeWebPush();
+        if (!res.ok) toast.error(res.error || "Couldn’t enable notifications.");
+        else {
+          toast.success("Browser notifications on — even when this tab is closed.");
+          setPushStatus("subscribed");
+        }
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   async function toggleWishlist() {
     const next = !wishlistOn;
@@ -242,6 +284,44 @@ export default function FamilyPage() {
       </div>
 
       <PlanStatusSummary plan={planDisplay} compact />
+
+      <div className="card">
+        <h3 className="mb-2 font-bold">Browser notifications</h3>
+        <p className="text-xs text-ink-secondary">
+          Get alerts for mission approvals and reward requests — even when this
+          tab is closed. Works on iPhone (Add to Home Screen), Android, and desktop.
+        </p>
+        {!isWebPushSupported() ? (
+          <p className="mt-2 text-xs text-ink-tertiary">
+            This browser doesn’t support push notifications.
+          </p>
+        ) : (
+          <>
+            <p className="mt-2 text-xs font-semibold text-ink-secondary">
+              Status:{" "}
+              {pushStatus === "subscribed"
+                ? "On"
+                : pushStatus === "denied"
+                  ? "Blocked in browser settings"
+                  : pushStatus === "…"
+                    ? "…"
+                    : "Off"}
+            </p>
+            <button
+              type="button"
+              className="btn-primary mt-3 inline-flex w-auto px-4"
+              disabled={pushBusy || pushStatus === "denied"}
+              onClick={() => void toggleWebPush()}
+            >
+              {pushBusy
+                ? "Working…"
+                : pushStatus === "subscribed"
+                  ? "Turn off"
+                  : "Enable browser notifications"}
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="card">
         <h3 className="mb-2 font-bold">About KiddoTasks</h3>

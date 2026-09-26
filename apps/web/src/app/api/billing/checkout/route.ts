@@ -18,6 +18,20 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const checkoutHits = new Map<string, { count: number; resetAt: number }>();
+
+function allowCheckout(key: string): boolean {
+  const now = Date.now();
+  const entry = checkoutHits.get(key);
+  if (!entry || now > entry.resetAt) {
+    checkoutHits.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (entry.count >= 5) return false;
+  entry.count += 1;
+  return true;
+}
+
 function baseUrl(req: Request): string {
   const env = process.env.NEXT_PUBLIC_APP_URL;
   if (env) return env.replace(/\/$/, "");
@@ -56,6 +70,12 @@ export async function POST(req: Request) {
     const user = await requireAuth(req);
     if (!user) {
       return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    }
+    if (!allowCheckout(user.uid)) {
+      return NextResponse.json(
+        { error: "Too many checkout attempts. Try again in a minute." },
+        { status: 429 }
+      );
     }
 
     const body = (await req.json().catch(() => ({}))) as { plan?: string };
@@ -148,12 +168,7 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("[billing/checkout]", e instanceof Error ? e.message : e);
     return NextResponse.json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Could not start checkout. Try again.",
-      },
+      { error: "Could not start checkout. Try again." },
       { status: 500 }
     );
   }

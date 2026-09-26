@@ -42,6 +42,7 @@ final class CloudSyncStoreTests: XCTestCase {
             family: family,
             parent: parent,
             passwordHash: "",
+            passwordSalt: "",
             children: [child],
             tasks: [task],
             completions: [],

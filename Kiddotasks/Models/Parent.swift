@@ -45,15 +45,18 @@ final class Parent: Identifiable, Codable {
 enum ParentRole: String, Codable, CaseIterable {
     case owner = "owner"      // Can manage family, all settings
     case manager = "manager"  // Can manage tasks and approve
-    
+    case kidsSession = "kidsSession" // Shared-device kids PIN session — never a real parent
+
     var description: String {
         switch self {
         case .owner:
             return "Owner"
         case .manager:
             return "Manager"
+        case .kidsSession:
+            return "Kids Session"
         }
     }
-    
+
     var isOwner: Bool { self == .owner }
 }

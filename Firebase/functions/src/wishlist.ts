@@ -21,13 +21,23 @@ export const WISHLIST_OCCASIONS = [
   "OTHER",
 ] as const;
 
+function isEmulator(): boolean {
+  return Boolean(process.env.FUNCTIONS_EMULATOR || process.env.FIRESTORE_EMULATOR_HOST);
+}
+
 function kidSessionSecret(): string {
   const configured = process.env.KID_SESSION_SECRET;
   if (configured && configured.length >= 16) return configured;
-  const projectId =
-    process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "kiddotasks-app";
-  // Emulator / missing config only — set KID_SESSION_SECRET in production.
-  return `dev-kid-session-${projectId}`;
+  // Predictable fallback is emulator-only. Production must set KID_SESSION_SECRET.
+  if (isEmulator()) {
+    const projectId =
+      process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "kiddotasks-app";
+    return `dev-kid-session-${projectId}`;
+  }
+  throw new functions.https.HttpsError(
+    "failed-precondition",
+    "KID_SESSION_SECRET is not configured"
+  );
 }
 
 function b64url(input: string | Buffer): string {

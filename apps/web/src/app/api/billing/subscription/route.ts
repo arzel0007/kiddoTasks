@@ -16,7 +16,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
   try {
-    const user = await verifyIdToken(match[1]!);
+    let user: Awaited<ReturnType<typeof verifyIdToken>>;
+    try {
+      user = await verifyIdToken(match[1]!);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Wrong Admin project / missing service account — not the caller's fault.
+      if (/incorrect "aud"|audience|credential|project/i.test(msg)) {
+        console.warn("[billing/subscription] admin credentials mismatch — returning free", msg);
+        return NextResponse.json({ plan: "free", status: "none", premium: false });
+      }
+      console.warn("[billing/subscription] invalid token", msg);
+      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    }
     const { familyId, email } = await resolveFamilyId(user.uid);
     if (!familyId) {
       return NextResponse.json({ plan: "free", status: "none" });
@@ -46,7 +58,14 @@ export async function GET(req: Request) {
       liveStatus: live?.attributes.status ?? null,
     });
   } catch (e) {
-    console.error("[billing/subscription]", e instanceof Error ? e.message : e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[billing/subscription]", msg);
+    // Missing/mismatched Admin credentials must not 500 the client.
+    if (
+      /incorrect "aud"|audience|credential|unauthenticated|project|ENOENT|initializeApp|Decoding Firebase/i.test(msg)
+    ) {
+      return NextResponse.json({ plan: "free", status: "none", premium: false });
+    }
     return NextResponse.json({ error: "Could not load subscription." }, { status: 500 });
   }
 }

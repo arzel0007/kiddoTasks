@@ -89,14 +89,28 @@ The cloud functions and Firestore rules live in `Firebase/` in this repo.
    ```bash
    cd Firebase/functions && npm install && cd ../..
    ```
-4. Deploy rules and functions:
+4. Deploy rules, indexes, storage rules, and functions:
    ```bash
-   firebase deploy --only firestore:rules,functions
+   firebase deploy --only firestore:rules,firestore:indexes,storage,functions
+   ```
+
+5. **Production secrets (required):**
+
+   | Secret | Purpose |
+   |---|---|
+   | `KID_SESSION_SECRET` | HMAC key for Kids Station session tokens (`openKidsSession` / wishlist). **Must be ≥16 chars.** Production functions refuse to mint kid tokens if unset. |
+   | `PAYMONGO_SECRET_KEY` / `PAYMONGO_WEBHOOK_SECRET` | Billing (web) |
+   | `FIREBASE_SERVICE_ACCOUNT_JSON` | Web billing Admin SDK |
+
+   Set `KID_SESSION_SECRET` in Cloud Functions environment (Secret Manager / `firebase functions:secrets:set` or env config) before going live.
+
 **What gets deployed:**
 
 | Piece | File | Role |
 |---|---|---|
 | Firestore security rules | `Firebase/firestore.rules` | Parents only; kids data protected; ledger writes restricted to Cloud Functions |
+| Firestore indexes | `Firebase/firestore.indexes.json` | Required composites for recurring tasks, billing, completion queries |
+| Storage rules | `Firebase/storage.rules` | Family-scoped photo access only |
 | `bootstrapFamily` | `Firebase/functions/src/index.ts` | Creates `families/{id}` + `parents/{uid}` after sign-up, returns the Kids PIN |
 | `pushFamilySnapshot` | `Firebase/functions/src/index.ts` | The app pushes local changes here; writes with admin privileges |
 | `createChildProfile`, approvals, claims | `Firebase/functions/src/index.ts` | Server-enforced task approval + reward point transactions |

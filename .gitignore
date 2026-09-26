@@ -5,9 +5,11 @@ DerivedData/
 .build/
 
 # Firebase secrets
-GoogleService-Info.plist    
+GoogleService-Info.plist
 .firebaserc
 *.p8
+Firebase/functions/.env
+Firebase/functions/.env.*
 
 # OS
 .DS_Store

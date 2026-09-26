@@ -1,14 +1,26 @@
 import * as functions from "firebase-functions";
+import * as crypto from "crypto";
 import { admin, db } from "./firebase-init";
 import {
   addWishlistItem,
   deleteWishlistItem,
   reviewWishlistItem,
   signKidToken,
+  verifyKidToken,
   updateWishlistItem,
 } from "./wishlist";
+import {
+  getWebPushPublicKey,
+  registerWebPushSubscription,
+  unregisterWebPushSubscription,
+} from "./webpush";
 
 export { addWishlistItem, updateWishlistItem, deleteWishlistItem, reviewWishlistItem };
+export {
+  getWebPushPublicKey,
+  registerWebPushSubscription,
+  unregisterWebPushSubscription,
+};
 
 /** Create family + parent docs after Auth signup. Client cannot write these collections. */
 export const bootstrapFamily = functions.https.onCall(async (data, context) => {
@@ -35,8 +47,16 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
   const previousFamilyId = existing.exists
     ? String(existing.data()?.familyId || "")
     : "";
-  if (previousFamilyId) {
+  if (previousFamilyId && forceNewFamily) {
+    const previousRole = String(existing.data()?.role || "parent");
+    if (previousRole !== "owner") {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Only the family owner can reset this family"
+      );
+    }
     await deleteAllDocsForFamily(previousFamilyId);
+    await db.collection("parents").doc(uid).delete().catch(() => {});
   }
 
   const familyRef = db.collection("families").doc();
@@ -84,16 +104,50 @@ export const bootstrapFamily = functions.https.onCall(async (data, context) => {
   return { familyId: familyRef.id, parentId: uid, kidsStationPIN, familyCode };
 });
 
+/** Simple Firestore-backed throttle for unauthenticated PIN attempts. */
+async function assertPinAttemptAllowed(scope: string): Promise<void> {
+  const ref = db.collection("pinAttemptGuards").doc(scope.slice(0, 120));
+  const snap = await ref.get();
+  const now = Date.now();
+  const data = snap.data() || {};
+  const windowStart = Number(data.windowStart || 0);
+  const count = Number(data.count || 0);
+  const WINDOW_MS = 15 * 60 * 1000;
+  const MAX_ATTEMPTS = 20;
+  if (now - windowStart > WINDOW_MS) {
+    await ref.set({ windowStart: now, count: 1 }, { merge: true });
+    return;
+  }
+  if (count >= MAX_ATTEMPTS) {
+    throw new functions.https.HttpsError(
+      "resource-exhausted",
+      "Too many attempts. Try again later."
+    );
+  }
+  await ref.set({ windowStart, count: count + 1 }, { merge: true });
+}
+
+async function clearPinAttemptGuard(scope: string): Promise<void> {
+  await db.collection("pinAttemptGuards").doc(scope.slice(0, 120)).delete().catch(() => {});
+}
+
 /**
  * Kids Station PIN unlock (no parent password).
- * Looks up the family by Kids PIN and returns a snapshot the iPad can use
- * without a parent Firebase Auth session.
+ * Looks up the family by Kids PIN and returns a kid-safe snapshot the iPad can
+ * use without a parent Firebase Auth session.
  */
 export const openKidsSession = functions.https.onCall(async (data, context) => {
   const pin = String(data?.pin || "").trim();
   if (!/^\d{4,6}$/.test(pin)) {
     throw new functions.https.HttpsError("invalid-argument", "Enter the family PIN");
   }
+
+  const ip =
+    (context.rawRequest?.headers?.["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+    (context.rawRequest?.ip as string | undefined) ||
+    "unknown";
+  await assertPinAttemptAllowed(`pin:${pin}`);
+  await assertPinAttemptAllowed(`ip:${ip}`);
 
   const pinDoc = await db.collection("kidsPins").doc(pin).get();
   if (!pinDoc.exists) {
@@ -105,6 +159,7 @@ export const openKidsSession = functions.https.onCall(async (data, context) => {
     if (scan.empty) {
       throw new functions.https.HttpsError("not-found", "Wrong PIN");
     }
+    await clearPinAttemptGuard(`ip:${ip}`);
     return buildKidsSnapshot(scan.docs[0].id, scan.docs[0].data());
   }
 
@@ -113,19 +168,39 @@ export const openKidsSession = functions.https.onCall(async (data, context) => {
   if (!familyDoc.exists) {
     throw new functions.https.HttpsError("not-found", "Family not found");
   }
+  await clearPinAttemptGuard(`ip:${ip}`);
   return buildKidsSnapshot(familyId, familyDoc.data() || {});
 });
 
-async function buildKidsSnapshot(familyId: string, familyData: any) {
-  const family = { id: familyId, ...familyData };
-  // Firestore timestamps → ISO for the client decoder
+/** Strip server/parent-only fields before returning data to a kids session. */
+function sanitizeKidsFamily(familyId: string, familyData: any) {
   const iso = (v: any) => {
     if (v && typeof v.toDate === "function") return v.toDate().toISOString();
     return v ?? null;
   };
-  family.createdAt = iso(family.createdAt);
-  family.updatedAt = iso(family.updatedAt);
-  family.serverUpdatedAt = iso(family.serverUpdatedAt);
+  const settings = { ...(familyData?.settings || {}) };
+  delete settings.kidsStationPIN;
+  delete settings.plan;
+  return {
+    id: familyId,
+    name: familyData?.name,
+    memberIds: familyData?.memberIds ?? familyData?.members ?? [],
+    settings: {
+      pointDisplaySymbol: settings.pointDisplaySymbol ?? "⭐",
+      enableNotifications: settings.enableNotifications ?? true,
+      celebrationAnimationsEnabled: settings.celebrationAnimationsEnabled ?? true,
+      requireApprovalByDefault: settings.requireApprovalByDefault ?? true,
+      weekStartsOn: settings.weekStartsOn ?? 1,
+      enableWishlist: settings.enableWishlist === true,
+    },
+    createdAt: iso(familyData?.createdAt),
+    updatedAt: iso(familyData?.updatedAt),
+    serverUpdatedAt: iso(familyData?.serverUpdatedAt),
+  };
+}
+
+async function buildKidsSnapshot(familyId: string, familyData: any) {
+  const family = sanitizeKidsFamily(familyId, familyData);
 
   const col = async (name: string) => {
     const snap = await db.collection(name).where("familyId", "==", familyId).get();
@@ -136,6 +211,10 @@ async function buildKidsSnapshot(familyId: string, familyData: any) {
           row[key] = row[key].toDate().toISOString();
         }
       }
+      // Parent UIDs are not needed by kids clients.
+      delete row.createdBy;
+      delete row.approvedBy;
+      delete row.reviewedBy;
       return row;
     });
   };
@@ -194,6 +273,15 @@ export const updateKidsStationPIN = functions.https.onCall(async (data, context)
     throw new functions.https.HttpsError("not-found", "Family not found");
   }
 
+  // Ownership: never steal another family's PIN mapping.
+  const existingPinDoc = await db.collection("kidsPins").doc(pin).get();
+  if (existingPinDoc.exists && existingPinDoc.data()?.familyId !== familyId) {
+    throw new functions.https.HttpsError(
+      "already-exists",
+      "That PIN is already in use. Choose another."
+    );
+  }
+
   const batch = db.batch();
   batch.update(db.collection("families").doc(familyId), {
     "settings.kidsStationPIN": pin,
@@ -205,7 +293,10 @@ export const updateKidsStationPIN = functions.https.onCall(async (data, context)
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   if (previousPin && previousPin !== pin) {
-    batch.delete(db.collection("kidsPins").doc(previousPin));
+    const stale = await db.collection("kidsPins").doc(previousPin).get();
+    if (stale.exists && stale.data()?.familyId === familyId) {
+      batch.delete(db.collection("kidsPins").doc(previousPin));
+    }
   }
   await batch.commit();
   return { ok: true, pin };
@@ -310,10 +401,31 @@ export const joinFamilyWithCode = functions.https.onCall(async (data, context) =
 
   const email = String(context.auth.token.email || "").trim().toLowerCase();
   const OWNER_EMAILS = new Set(["xxarzelxx@gmail.com"]);
-  // Client enforces Premium for co-parent join; owner/founder is always allowed.
-  // (Payments are not live yet — owner exemption unblocks real-device testing.)
   const displayName = String(data?.displayName || "Parent");
   const now = admin.firestore.FieldValue.serverTimestamp();
+
+  // Server-side premium check (owner exempt). Client UI gates are UX only.
+  const isOwner = OWNER_EMAILS.has(email);
+  if (!isOwner) {
+    const plan = String(familyDoc.data()?.settings?.plan || "").toLowerCase();
+    const premiumPlan = plan === "plus" || plan === "pro";
+    let hasActiveSub = false;
+    if (!premiumPlan) {
+      const subs = await db
+        .collection("subscriptions")
+        .where("familyId", "==", familyId)
+        .where("status", "==", "active")
+        .limit(1)
+        .get();
+      hasActiveSub = !subs.empty;
+    }
+    if (!premiumPlan && !hasActiveSub) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Co-parent join requires Premium on this family."
+      );
+    }
+  }
 
   await db.runTransaction(async (tx) => {
     tx.set(db.collection("parents").doc(uid), {
@@ -335,7 +447,7 @@ export const joinFamilyWithCode = functions.https.onCall(async (data, context) =
     familyId,
     parentId: uid,
     alreadyMember: false,
-    ownerAllowed: OWNER_EMAILS.has(email),
+    ownerAllowed: isOwner,
   };
 });
 
@@ -348,9 +460,34 @@ export const createChildProfile = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError("permission-denied", "Not a parent");
   }
   const familyId = parentDoc.data()?.familyId;
+  const name = String(data.name || "Kid").trim().slice(0, 60);
+  if (!name) {
+    throw new functions.https.HttpsError("invalid-argument", "Name is required");
+  }
+
+  // Free-plan child limit (server-side). Owner / premium unlimited.
+  const email = String(context.auth.token.email || "").toLowerCase();
+  const isOwner = ["xxarzelxx@gmail.com"].includes(email);
+  const familySnap = await db.collection("families").doc(familyId).get();
+  const plan = String(familySnap.data()?.settings?.plan || "").toLowerCase();
+  const premium = isOwner || plan === "plus" || plan === "pro";
+  if (!premium) {
+    const kidsSnap = await db
+      .collection("children")
+      .where("familyId", "==", familyId)
+      .limit(50)
+      .get();
+    if (kidsSnap.size >= 1) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "Free plan includes 1 kid. Upgrade to Premium for more."
+      );
+    }
+  }
+
   const childRef = db.collection("children").doc();
   await childRef.set({
-    name: String(data.name || "Kid"),
+    name,
     familyId,
     avatar: data.avatar || { emoji: "👧", colorHex: "#EC4899" },
     dateOfBirth: data.dateOfBirth || null,
@@ -366,25 +503,113 @@ export const createChildProfile = functions.https.onCall(async (data, context) =
   return { childId: childRef.id };
 });
 
+/** Resolve parent Auth or kids HMAC session to a familyId. */
+async function resolveFamilyActor(
+  data: any,
+  context: functions.https.CallableContext
+): Promise<{ familyId: string; parentUid: string | null }> {
+  const familyId = String(data?.familyId || "").trim();
+  const tokenPayload = verifyKidToken(data?.kidsAccessToken);
+  if (context.auth) {
+    if (!familyId) {
+      throw new functions.https.HttpsError("invalid-argument", "familyId is required");
+    }
+    const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
+    if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
+      throw new functions.https.HttpsError("permission-denied", "Not authorized");
+    }
+    return { familyId, parentUid: context.auth.uid };
+  }
+  if (!tokenPayload) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Sign in as a parent or unlock Kids Station"
+    );
+  }
+  if (familyId && tokenPayload.familyId !== familyId) {
+    throw new functions.https.HttpsError("permission-denied", "Session family mismatch");
+  }
+  return { familyId: tokenPayload.familyId, parentUid: null };
+}
+
 export const submitTaskCompletion = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+  const actor = await resolveFamilyActor(data, context);
+  const familyId = actor.familyId;
+  const { taskId, childId } = data;
+  if (!taskId || !childId) {
+    throw new functions.https.HttpsError("invalid-argument", "taskId and childId are required");
   }
-  const { taskId, childId, familyId } = data;
-  const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
-  if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
-    throw new functions.https.HttpsError("permission-denied", "Not authorized");
-  }
-  const taskDoc = await db.collection("tasks").doc(taskId).get();
-  if (!taskDoc.exists) {
+  const taskDoc = await db.collection("tasks").doc(String(taskId)).get();
+  if (!taskDoc.exists || taskDoc.data()?.familyId !== familyId) {
     throw new functions.https.HttpsError("not-found", "Task not found");
   }
+  const childCheck = await db.collection("children").doc(String(childId)).get();
+  if (!childCheck.exists || childCheck.data()?.familyId !== familyId) {
+    throw new functions.https.HttpsError("permission-denied", "Child not in family");
+  }
   const requiresApproval = taskDoc.data()?.requiresApproval !== false;
+
+  // Reject duplicate open completions for the same task/child (point-farm guard).
+  const dupSnap = await db
+    .collection("taskCompletions")
+    .where("familyId", "==", familyId)
+    .where("taskId", "==", String(taskId))
+    .where("childId", "==", String(childId))
+    .limit(20)
+    .get();
+  const openDup = dupSnap.docs.find((d) => {
+    const s = String(d.data()?.status || "");
+    return s === "AWAITING_APPROVAL" || s === "COMPLETED" || s === "APPROVED";
+  });
+  if (openDup) {
+    throw new functions.https.HttpsError(
+      "already-exists",
+      "Already submitted for this mission"
+    );
+  }
+
   const completionRef = db.collection("taskCompletions").doc();
+  const autoApprove = !requiresApproval;
+  const pointValue = Number(taskDoc.data()?.pointValue ?? 0);
+
+  if (autoApprove && pointValue > 0) {
+    const txId = db.collection("pointTransactions").doc().id;
+    await db.runTransaction(async (tx) => {
+      tx.set(completionRef, {
+        familyId,
+        taskId: String(taskId),
+        childId: String(childId),
+        status: "APPROVED",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+        approvedBy: actor.parentUid || "kids-session",
+        pointsAwarded: pointValue,
+        pointTransactionId: txId,
+      });
+      tx.set(db.collection("pointTransactions").doc(txId), {
+        familyId,
+        childId: String(childId),
+        amount: pointValue,
+        type: "TASK_COMPLETION",
+        relatedId: completionRef.id,
+        description: `Task completed: ${taskDoc.data()?.name || ""}`,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: actor.parentUid || "kids-session",
+        isReversed: false,
+      });
+      tx.update(db.collection("children").doc(String(childId)), {
+        activePoints: admin.firestore.FieldValue.increment(pointValue),
+        totalPointsEarned: admin.firestore.FieldValue.increment(pointValue),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    return { completionId: completionRef.id, status: "APPROVED", pointsAwarded: pointValue };
+  }
+
   await completionRef.set({
     familyId,
-    taskId,
-    childId,
+    taskId: String(taskId),
+    childId: String(childId),
     status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED",
     completedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -392,16 +617,11 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
 });
 
 export const claimReward = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
-  }
-  const { rewardId, childId, familyId } = data;
-  if (!rewardId || !childId || !familyId) {
+  const actor = await resolveFamilyActor(data, context);
+  const familyId = actor.familyId;
+  const { rewardId, childId } = data;
+  if (!rewardId || !childId) {
     throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
-  }
-  const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
-  if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
-    throw new functions.https.HttpsError("permission-denied", "Not authorized");
   }
   // Security: child and reward must belong to the caller's family.
   const childDoc = await db.collection("children").doc(String(childId)).get();
@@ -412,6 +632,31 @@ export const claimReward = functions.https.onCall(async (data, context) => {
   if (!rewardDoc.exists || rewardDoc.data()?.familyId !== familyId) {
     throw new functions.https.HttpsError("permission-denied", "Reward not in family");
   }
+  const activePoints = Number(childDoc.data()?.activePoints ?? 0);
+  const pointCost = Number(rewardDoc.data()?.pointCost ?? 0);
+  if (pointCost > 0 && activePoints < pointCost) {
+    throw new functions.https.HttpsError("failed-precondition", "Insufficient points");
+  }
+
+  // One open claim per reward/child.
+  const openClaims = await db
+    .collection("rewardClaims")
+    .where("familyId", "==", familyId)
+    .where("rewardId", "==", String(rewardId))
+    .where("childId", "==", String(childId))
+    .limit(10)
+    .get();
+  const openClaim = openClaims.docs.find((d) => {
+    const s = String(d.data()?.status || "");
+    return s === "CLAIMED" || s === "APPROVED";
+  });
+  if (openClaim) {
+    throw new functions.https.HttpsError(
+      "already-exists",
+      "Already requested this reward"
+    );
+  }
+
   const claimRef = db.collection("rewardClaims").doc();
   await claimRef.set({
     familyId,
@@ -473,8 +718,9 @@ export const approveTaskCompletion = functions.https.onCall(
     }
 
     try {
+      const uid = context.auth.uid;
       // Verify parent owns this family
-      const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
+      const parentDoc = await db.collection("parents").doc(uid).get();
       if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
         throw new functions.https.HttpsError(
           "permission-denied",
@@ -542,40 +788,44 @@ export const approveTaskCompletion = functions.https.onCall(
         );
       }
 
-      // In a transaction, update completion and create point transaction
-      const batch = db.batch();
-
-      // Create point transaction
+      // Transaction: re-check status so concurrent approvals cannot double-award.
       const transactionId = db.collection("pointTransactions").doc().id;
-      batch.set(db.collection("pointTransactions").doc(transactionId), {
-        familyId,
-        childId,
-        amount: awardedPoints,
-        type: "TASK_COMPLETION",
-        relatedId: completionId,
-        description: `Task completed: ${data.taskName || ""}`,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: context.auth.uid,
-        isReversed: false,
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(db.collection("taskCompletions").doc(completionId));
+        if (!snap.exists) {
+          throw new functions.https.HttpsError("not-found", "Completion not found");
+        }
+        const current = snap.data() || {};
+        if (current.status === "APPROVED") {
+          throw new functions.https.HttpsError("already-exists", "Task already approved");
+        }
+        if (typeof current.familyId === "string" && current.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Completion not in family");
+        }
+        tx.set(db.collection("pointTransactions").doc(transactionId), {
+          familyId,
+          childId,
+          amount: awardedPoints,
+          type: "TASK_COMPLETION",
+          relatedId: completionId,
+          description: `Task completed: ${data.taskName || ""}`,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: uid,
+          isReversed: false,
+        });
+        tx.update(db.collection("taskCompletions").doc(completionId), {
+          status: "APPROVED",
+          approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          approvedBy: uid,
+          pointsAwarded: awardedPoints,
+          pointTransactionId: transactionId,
+        });
+        tx.update(db.collection("children").doc(childId), {
+          activePoints: admin.firestore.FieldValue.increment(awardedPoints),
+          totalPointsEarned: admin.firestore.FieldValue.increment(awardedPoints),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       });
-
-      // Update completion status
-      batch.update(db.collection("taskCompletions").doc(completionId), {
-        status: "APPROVED",
-        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        approvedBy: context.auth.uid,
-        pointsAwarded: awardedPoints,
-        pointTransactionId: transactionId,
-      });
-
-      // Update child points
-      batch.update(db.collection("children").doc(childId), {
-        activePoints: admin.firestore.FieldValue.increment(awardedPoints),
-        totalPointsEarned: admin.firestore.FieldValue.increment(awardedPoints),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
 
       return {
         success: true,
@@ -583,10 +833,11 @@ export const approveTaskCompletion = functions.https.onCall(
         message: "Task approved and points awarded",
       };
     } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
       console.error("Error approving task:", error);
       throw new functions.https.HttpsError(
         "internal",
-        "Error approving task: " + error.message
+        "Could not approve task"
       );
     }
   }
@@ -667,8 +918,9 @@ export const approveRewardClaim = functions.https.onCall(
     const { claimId, rewardId, childId, familyId, pointCost } = data;
 
     try {
+      const uid = context.auth.uid;
       // Verify parent owns this family
-      const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
+      const parentDoc = await db.collection("parents").doc(uid).get();
       if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
         throw new functions.https.HttpsError(
           "permission-denied",
@@ -732,38 +984,49 @@ export const approveRewardClaim = functions.https.onCall(
         );
       }
 
-      // In a transaction, update claim and create point transaction
-      const batch = db.batch();
-
-      // Create point deduction transaction
       const deductionTransactionId = db.collection("pointTransactions").doc().id;
-      batch.set(db.collection("pointTransactions").doc(deductionTransactionId), {
-        familyId,
-        childId,
-        amount: -deductionCost,
-        type: "REWARD_REDEMPTION",
-        relatedId: claimId,
-        description: `Reward claimed: ${data.rewardName || ""}`,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: context.auth.uid,
-        isReversed: false,
+      await db.runTransaction(async (tx) => {
+        const claimSnap = await tx.get(db.collection("rewardClaims").doc(String(claimId)));
+        if (!claimSnap.exists) {
+          throw new functions.https.HttpsError("not-found", "Claim not found");
+        }
+        const claim = claimSnap.data() || {};
+        if (claim.status === "APPROVED") {
+          throw new functions.https.HttpsError(
+            "already-exists",
+            "Reward claim already approved"
+          );
+        }
+        if (typeof claim.familyId === "string" && claim.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Claim not in family");
+        }
+        const childSnap = await tx.get(db.collection("children").doc(String(childId)));
+        const balance = Number(childSnap.data()?.activePoints ?? 0);
+        if (balance < deductionCost) {
+          throw new functions.https.HttpsError("failed-precondition", "Insufficient points");
+        }
+        tx.set(db.collection("pointTransactions").doc(deductionTransactionId), {
+          familyId,
+          childId,
+          amount: -deductionCost,
+          type: "REWARD_REDEMPTION",
+          relatedId: claimId,
+          description: `Reward claimed: ${data.rewardName || ""}`,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdBy: uid,
+          isReversed: false,
+        });
+        tx.update(db.collection("rewardClaims").doc(String(claimId)), {
+          status: "APPROVED",
+          approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+          approvedBy: uid,
+          pointDeductionTransactionId: deductionTransactionId,
+        });
+        tx.update(db.collection("children").doc(String(childId)), {
+          activePoints: admin.firestore.FieldValue.increment(-deductionCost),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       });
-
-      // Update reward claim
-      batch.update(db.collection("rewardClaims").doc(claimId), {
-        status: "APPROVED",
-        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        approvedBy: context.auth.uid,
-        pointDeductionTransactionId: deductionTransactionId,
-      });
-
-      // Deduct points from child
-      batch.update(db.collection("children").doc(childId), {
-        activePoints: admin.firestore.FieldValue.increment(-deductionCost),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
 
       return {
         success: true,
@@ -771,8 +1034,9 @@ export const approveRewardClaim = functions.https.onCall(
         message: "Reward approved",
       };
     } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
       console.error("Error approving reward:", error);
-      throw new functions.https.HttpsError("internal", error.message);
+      throw new functions.https.HttpsError("internal", "Could not approve reward");
     }
   }
 );
@@ -874,6 +1138,15 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
         .get();
       if (tomb.exists) continue;
 
+      // Never overwrite another family's document by ID (cross-tenant write).
+      const existingOwned = await db.collection(collection).doc(item.id).get();
+      if (existingOwned.exists) {
+        const existingFamily = existingOwned.data()?.familyId;
+        if (typeof existingFamily === "string" && existingFamily !== familyId) {
+          continue;
+        }
+      }
+
       let payload = { ...item, familyId };
 
       // Approval statuses are terminal: a stale full-snapshot push must never
@@ -904,6 +1177,12 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
 
   if (data?.family && typeof data.family.id === "string") {
     const familyPayload = toFirestoreValue(data.family);
+    // Server-owned fields: never accept plan/billing from clients.
+    if (familyPayload.settings && typeof familyPayload.settings === "object") {
+      delete familyPayload.settings.plan;
+      delete familyPayload.settings.billing;
+    }
+    delete familyPayload.familyCode;
     batch.set(
       db.collection("families").doc(familyId),
       { ...familyPayload, updatedAt: now, serverUpdatedAt: now },
@@ -911,24 +1190,34 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
     );
     batchCount += 1;
 
-    // Keep familyCode index in sync for co-parent join.
+    // Keep familyCode index in sync for co-parent join (never steal another family's code).
     const code = typeof data.family.familyCode === "string"
       ? String(data.family.familyCode).trim().toUpperCase()
       : "";
     if (code) {
-      batch.set(
-        db.collection("familyCodes").doc(code),
-        { familyId, updatedAt: now },
-        { merge: true }
-      );
-      batchCount += 1;
+      const codeDoc = await db.collection("familyCodes").doc(code).get();
+      if (!codeDoc.exists || codeDoc.data()?.familyId === familyId) {
+        batch.set(
+          db.collection("familyCodes").doc(code),
+          { familyId, updatedAt: now },
+          { merge: true }
+        );
+        batchCount += 1;
+      }
     }
 
-    // Keep kidsPins index in sync when the client pushes a PIN (cross-device Kids Station).
+    // Keep kidsPins index in sync when the client pushes a PIN (ownership-checked).
     const pushedPin = data.family?.settings?.kidsStationPIN
       ? String(data.family.settings.kidsStationPIN).trim()
       : "";
     if (/^\d{4,6}$/.test(pushedPin)) {
+      const existingPinSnap = await db.collection("kidsPins").doc(pushedPin).get();
+      if (existingPinSnap.exists && existingPinSnap.data()?.familyId !== familyId) {
+        throw new functions.https.HttpsError(
+          "already-exists",
+          "That PIN is already in use. Choose another."
+        );
+      }
       const existingFamilySnap = await db.collection("families").doc(familyId).get();
       const previousPin = String(existingFamilySnap.data()?.settings?.kidsStationPIN || "").trim();
       batch.set(
@@ -945,6 +1234,17 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
         }
       }
     }
+  }
+
+  // Free-plan task limit (count after upsert would be too late — check payload).
+  const familyForLimits = await db.collection("families").doc(familyId).get();
+  const plan = String(familyForLimits.data()?.settings?.plan || "").toLowerCase();
+  const isPremium = plan === "plus" || plan === "pro";
+  if (!isPremium && Array.isArray(data?.tasks) && data.tasks.length > 20) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Free plan includes 20 chores. Upgrade to Premium for more."
+    );
   }
 
   await upsert("children", data?.children, "children");
@@ -974,6 +1274,13 @@ export const deleteFamilyData = functions.https.onCall(async (_data, context) =>
   const parentDoc = await db.collection("parents").doc(uid).get();
   if (!parentDoc.exists) {
     throw new functions.https.HttpsError("not-found", "Parent not found");
+  }
+  const role = String(parentDoc.data()?.role || "parent");
+  if (role !== "owner") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Only the family owner can delete all family data"
+    );
   }
   const familyId = parentDoc.data()?.familyId;
   if (!familyId || typeof familyId !== "string") {
@@ -1041,6 +1348,7 @@ export const generateRecurringTasks = functions.pubsub
 
       for (const taskDoc of tasksSnapshot.docs) {
         const task = taskDoc.data();
+        const taskId = taskDoc.id;
 
         // Determine if task should be created for today
         let shouldCreate = false;
@@ -1054,17 +1362,20 @@ export const generateRecurringTasks = functions.pubsub
             shouldCreate = dayOfWeek !== 0 && dayOfWeek !== 6; // Not weekend
             break;
           case "weekly":
-            // TODO: Implement day-of-week checking
-            shouldCreate = true;
+            // Weekly on Mondays (calendar week start).
+            shouldCreate = today.getDay() === 1;
             break;
         }
 
-        if (shouldCreate && task.assignedChildIds && task.assignedChildIds.length > 0) {
-          // Create task instance for each child
+        if (shouldCreate && Array.isArray(task.assignedChildIds) && task.assignedChildIds.length > 0) {
+          const dateKey = today.toISOString().split("T")[0];
           for (const childId of task.assignedChildIds) {
-            const instanceId = `${task.id}_${today.toISOString().split("T")[0]}`;
-            await db.collection("taskInstances").doc(instanceId).set({
-              taskId: task.id,
+            const instanceId = `${taskId}_${childId}_${dateKey}`;
+            const instanceRef = db.collection("taskInstances").doc(instanceId);
+            const existing = await instanceRef.get();
+            if (existing.exists) continue;
+            await instanceRef.create({
+              taskId,
               familyId: task.familyId,
               childId,
               dueDate: today,
@@ -1087,18 +1398,18 @@ export const generateRecurringTasks = functions.pubsub
 // MARK: - Utilities
 
 /**
- * Generate a random 6-digit Kids Station PIN.
+ * Generate a random 6-digit Kids Station PIN (CSPRNG).
  */
 function generateKidsPIN(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
 }
 
 /** Human-friendly co-parent join code, e.g. KDO-4F7X. */
 function generateFamilyCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let suffix = "";
-  for (let i = 0; i < 4; i++) {
-    suffix += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+  for (let i = 0; i < 5; i++) {
+    suffix += alphabet.charAt(crypto.randomInt(0, alphabet.length));
   }
   return `KDO-${suffix}`;
 }

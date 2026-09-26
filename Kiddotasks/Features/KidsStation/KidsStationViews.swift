@@ -10,6 +10,7 @@ struct ChildSelectionView: View {
     @State private var previewChild: Child?
     @State private var showArzIntro = false
     @State private var arzPhrase = ArzPhrases.all[0]
+    @State private var showParentGate = false
 
     private var pageTheme: ChildPlayerTheme {
         ChildPlayerTheme.theme(for: previewChild, colorScheme: colorScheme)
@@ -67,6 +68,9 @@ struct ChildSelectionView: View {
             reduceMotion ? .easeInOut(duration: 0.15) : KiddoTasksDesignTokens.Animation.standard,
             value: previewChild?.id
         )
+        .sheet(isPresented: $showParentGate) {
+            ParentGatePINView()
+        }
     }
 
     private var header: some View {
@@ -74,7 +78,11 @@ struct ChildSelectionView: View {
             HStack {
                 Button {
                     appState.clearChildProfile()
-                    appState.interfaceOverride = .parent
+                    if appState.requestParentAccess() {
+                        // Real parent session — Parent Center already shown.
+                    } else {
+                        showParentGate = true
+                    }
                 } label: {
                     Text("Parent")
                         .font(KiddoTasksDesignTokens.Typography.captionLarge)
@@ -420,22 +428,24 @@ struct MissionsView: View {
     }
 
     private func quickSubmit(task: KiddoTask, child: Child) {
-        do {
-            _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
-            let startOfDay = Calendar.current.startOfDay(for: Date())
-            let todays = appState.store.completions.filter {
-                $0.childId == child.id && $0.completedAt >= startOfDay
-            }.count
-            Arz.handle(todays >= 3 ? .multipleTasksCompleted : .taskCompleted)
-            let needsApproval = task.requiresParentApproval(using: appState.currentFamily?.settings ?? .default)
-            if needsApproval {
-                appState.toastSuccess("Sent to a parent — \(task.name)")
-            } else {
-                appState.toastSuccess("+\(task.pointValue) ★ \(task.name)!")
+        Task { @MainActor in
+            do {
+                try await appState.submitMission(taskId: task.id, childId: child.id)
+                let startOfDay = Calendar.current.startOfDay(for: Date())
+                let todays = appState.store.completions.filter {
+                    $0.childId == child.id && $0.completedAt >= startOfDay
+                }.count
+                Arz.handle(todays >= 3 ? .multipleTasksCompleted : .taskCompleted)
+                let needsApproval = task.requiresParentApproval(using: appState.currentFamily?.settings ?? .default)
+                if needsApproval {
+                    appState.toastSuccess("Sent to a parent — \(task.name)")
+                } else {
+                    appState.toastSuccess("+\(task.pointValue) ★ \(task.name)!")
+                }
+            } catch {
+                Arz.handle(.error)
+                appState.toastError(error.localizedDescription)
             }
-        } catch {
-            Arz.handle(.error)
-            appState.toastError(error.localizedDescription)
         }
     }
 }
@@ -488,13 +498,15 @@ struct TaskDetailView: View {
                             .background(KiddoTasksDesignTokens.Colors.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    PrimaryButton(
-                        title: existing.status == .rejected ? "Try again" : "Submit again",
-                        color: KiddoTasksDesignTokens.Colors.primary
-                    ) {
-                        submitCompletion()
+                    if existing.status == .rejected {
+                        PrimaryButton(
+                            title: "Try again",
+                            color: KiddoTasksDesignTokens.Colors.primary
+                        ) {
+                            submitCompletion()
+                        }
+                        .buttonStyle(ExtraBouncyPressStyle())
                     }
-                    .buttonStyle(ExtraBouncyPressStyle())
                 } else {
                     PrimaryButton(
                         title: "I did it! 🎉",
@@ -520,20 +532,21 @@ struct TaskDetailView: View {
     }
 
     private func submitCompletion() {
-        do {
-            _ = try appState.store.submitCompletion(taskId: task.id, childId: child.id)
-            // Recent completions today → excited; single → happy.
-            let startOfDay = Calendar.current.startOfDay(for: Date())
-            let todays = appState.store.completions.filter {
-                $0.childId == child.id && $0.completedAt >= startOfDay
-            }.count
-            Arz.handle(todays >= 3 ? .multipleTasksCompleted : .taskCompleted)
-            appState.toastSuccess("Mission sent to a parent")
-            onFinish(true)
-        } catch {
-            Arz.handle(.error)
-            appState.toastError(error.localizedDescription)
-            appState.presentError(error)
+        Task { @MainActor in
+            do {
+                try await appState.submitMission(taskId: task.id, childId: child.id)
+                let startOfDay = Calendar.current.startOfDay(for: Date())
+                let todays = appState.store.completions.filter {
+                    $0.childId == child.id && $0.completedAt >= startOfDay
+                }.count
+                Arz.handle(todays >= 3 ? .multipleTasksCompleted : .taskCompleted)
+                appState.toastSuccess("Mission sent to a parent")
+                onFinish(true)
+            } catch {
+                Arz.handle(.error)
+                appState.toastError(error.localizedDescription)
+                appState.presentError(error)
+            }
         }
     }
 }
@@ -656,15 +669,17 @@ struct RewardShopView: View {
     }
 
     private func claim(_ reward: Reward, child: Child) {
-        do {
-            let claim = try appState.store.claimReward(rewardId: reward.id, childId: child.id)
-            if claim.status == .approved {
-                appState.toastSuccess("You got \(reward.name)!")
-            } else {
-                appState.toastSuccess("Asked a parent for \(reward.name)")
+        Task { @MainActor in
+            do {
+                let claim = try await appState.requestReward(rewardId: reward.id, childId: child.id)
+                if claim.status == .approved {
+                    appState.toastSuccess("You got \(reward.name)!")
+                } else {
+                    appState.toastSuccess("Asked a parent for \(reward.name)")
+                }
+            } catch {
+                appState.toastError(error.localizedDescription)
             }
-        } catch {
-            appState.toastError(error.localizedDescription)
         }
     }
 }

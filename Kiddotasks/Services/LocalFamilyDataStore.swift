@@ -7,6 +7,7 @@ struct FamilySnapshot: Codable {
     var family: Family
     var parent: Parent
     var passwordHash: String
+    var passwordSalt: String = ""
     var children: [Child]
     var tasks: [KiddoTask]
     var completions: [TaskCompletion]
@@ -23,6 +24,7 @@ extension FamilySnapshot {
         case family
         case parent
         case passwordHash
+        case passwordSalt
         case children
         case tasks
         case completions
@@ -39,6 +41,7 @@ extension FamilySnapshot {
         family = try c.decode(Family.self, forKey: .family)
         parent = try c.decode(Parent.self, forKey: .parent)
         passwordHash = try c.decodeIfPresent(String.self, forKey: .passwordHash) ?? ""
+        passwordSalt = try c.decodeIfPresent(String.self, forKey: .passwordSalt) ?? ""
         children = try c.decodeIfPresent([Child].self, forKey: .children) ?? []
         tasks = try c.decodeIfPresent([KiddoTask].self, forKey: .tasks) ?? []
         completions = try c.decodeIfPresent([TaskCompletion].self, forKey: .completions) ?? []
@@ -88,6 +91,16 @@ final class LocalFamilyDataStore {
     var lastSeenServerUpdatedAt: Date?
 
     var isAuthenticated: Bool { parent != nil }
+
+    /// Shared-device kids PIN session — allowed to submit completions/claims,
+    /// never allowed to approve, adjust points, or wipe data.
+    private var isKidsSessionOnly: Bool { parent?.id == "kids-session" }
+
+    private func requireRealParent() throws {
+        guard parent != nil, !isKidsSessionOnly else {
+            throw FirebaseError.permissionDenied
+        }
+    }
 
     var pendingRemovals: (
         children: [String],
@@ -144,7 +157,8 @@ final class LocalFamilyDataStore {
         family = newFamily
         parent = newParent
         seedStarterContent(familyId: familyId, parentId: parentId)
-        persist(passwordHash: Self.hash(password))
+        let salt = Self.makeSalt()
+        persist(passwordHash: Self.hash(password, salt: salt), passwordSalt: salt)
         UserDefaults.standard.set(parentId, forKey: Self.sessionKey)
     }
 
@@ -153,12 +167,12 @@ final class LocalFamilyDataStore {
             throw FirebaseError.invalidCredentials
         }
         guard snapshot.parent.email.lowercased() == email.lowercased(),
-              snapshot.passwordHash == Self.hash(password) else {
+              passwordMatches(password, in: snapshot) else {
             throw FirebaseError.invalidCredentials
         }
         apply(snapshot)
         parent?.lastSignInAt = Date()
-        persist(passwordHash: snapshot.passwordHash)
+        persist(passwordHash: snapshot.passwordHash, passwordSalt: snapshot.passwordSalt)
         UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
     }
 
@@ -182,6 +196,7 @@ final class LocalFamilyDataStore {
     /// Adjust a child's points by a positive or negative amount (bad deeds = negative).
     /// Creates a manual-adjustment transaction and updates balances.
     func adjustPoints(for childId: String, amount: Int, reason: String) throws {
+        try requireRealParent()
         guard let child = children.first(where: { $0.id == childId }) else {
             throw FirebaseError.childNotFound
         }
@@ -207,6 +222,7 @@ final class LocalFamilyDataStore {
 
     /// Set a child's points to an absolute value (creates an adjustment for the delta).
     func setPoints(for childId: String, to newTotal: Int, reason: String) throws {
+        try requireRealParent()
         guard let child = children.first(where: { $0.id == childId }) else {
             throw FirebaseError.childNotFound
         }
@@ -216,6 +232,7 @@ final class LocalFamilyDataStore {
 
     /// Reset a child's points to zero.
     func resetPoints(for childId: String) throws {
+        try requireRealParent()
         guard let child = children.first(where: { $0.id == childId }) else {
             throw FirebaseError.childNotFound
         }
@@ -240,12 +257,12 @@ final class LocalFamilyDataStore {
         guard let snapshot = loadSnapshot(),
               snapshot.family.familyCode.uppercased() == code.uppercased(),
               snapshot.parent.email.lowercased() == email.lowercased(),
-              snapshot.passwordHash == Self.hash(password) else {
+              passwordMatches(password, in: snapshot) else {
             throw FirebaseError.invalidCredentials
         }
         apply(snapshot)
         parent?.lastSignInAt = Date()
-        persist(passwordHash: snapshot.passwordHash)
+        persist(passwordHash: snapshot.passwordHash, passwordSalt: snapshot.passwordSalt)
         UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
     }
 
@@ -256,6 +273,7 @@ final class LocalFamilyDataStore {
     ///   SAME family (same familyId) with zeroed points so cloud identity and
     ///   pushes keep working. Old document IDs are tombstoned for cloud delete.
     func resetAllData(retainKids: Bool = false) {
+        if isKidsSessionOnly { return }
         let kidsToRetain = retainKids ? children : []
         let currentFamilyId = family?.id
         let currentFamilyCode = family?.familyCode
@@ -284,6 +302,7 @@ final class LocalFamilyDataStore {
     }
 
     func deleteAllLocalData() {
+        if isKidsSessionOnly { return }
         UserDefaults.standard.removeObject(forKey: Self.storageKey)
         UserDefaults.standard.removeObject(forKey: Self.sessionKey)
         family = nil
@@ -363,12 +382,13 @@ final class LocalFamilyDataStore {
 
     /// Builds a snapshot from the current in-memory state, without any local
     /// password hash. Used by the cloud sync engine to push and pull.
-    func currentSnapshot(passwordHash: String = "") -> FamilySnapshot? {
+    func currentSnapshot(passwordHash: String = "", passwordSalt: String = "") -> FamilySnapshot? {
         guard let family, let parent else { return nil }
         return FamilySnapshot(
             family: family,
             parent: parent,
             passwordHash: passwordHash,
+            passwordSalt: passwordSalt,
             children: children,
             tasks: tasks,
             completions: completions,
@@ -385,7 +405,9 @@ final class LocalFamilyDataStore {
     func applyRemote(_ snapshot: FamilySnapshot) {
         callbacksSuspended = true
         defer { callbacksSuspended = false }
-        let existingHash = loadSnapshot()?.passwordHash ?? ""
+        let existing = loadSnapshot()
+        let existingHash = existing?.passwordHash ?? ""
+        let existingSalt = existing?.passwordSalt ?? ""
         apply(snapshot)
         if let remoteStamp = snapshot.family.serverUpdatedAt {
             lastSeenServerUpdatedAt = remoteStamp
@@ -403,7 +425,7 @@ final class LocalFamilyDataStore {
         removedTransactions.formIntersection(Set(snapshot.transactions.map(\.id)))
         removedAchievements.formIntersection(Set(snapshot.achievements.map(\.id)))
         removedWishlistItems.formIntersection(Set(snapshot.wishlistItems.map(\.id)))
-        persist(passwordHash: existingHash)
+        persist(passwordHash: existingHash, passwordSalt: existingSalt)
         persistSyncMeta()
         UserDefaults.standard.set(snapshot.parent.id, forKey: Self.sessionKey)
     }
@@ -622,6 +644,16 @@ final class LocalFamilyDataStore {
         guard children.contains(where: { $0.id == childId }) else {
             throw FirebaseError.invalidChild
         }
+        let isOneTime = task.recurrence.type == .oneTime
+        let hasOpenCompletion = completions.contains { existing in
+            existing.taskId == taskId
+                && existing.childId == childId
+                && existing.status != .rejected
+                && (isOneTime || Calendar.current.isDateInToday(existing.completedAt))
+        }
+        guard !hasOpenCompletion else {
+            throw FirebaseError.operationFailed("Already submitted — wait for a parent or try again tomorrow.")
+        }
         let requiresApproval = task.requiresParentApproval(using: family.settings)
         let status: CompletionStatus = requiresApproval ? .awaitingApproval : .approved
         var completion = TaskCompletion(
@@ -639,6 +671,7 @@ final class LocalFamilyDataStore {
     }
 
     func approveCompletion(_ completionId: String, message: String? = nil) throws {
+        try requireRealParent()
         guard let parent else { throw FirebaseError.notAuthenticated }
         guard let index = completions.firstIndex(where: { $0.id == completionId }) else {
             throw FirebaseError.documentNotFound
@@ -655,7 +688,7 @@ final class LocalFamilyDataStore {
     }
 
     func rejectCompletion(_ completionId: String, reason: String) throws {
-        guard parent != nil else { throw FirebaseError.notAuthenticated }
+        try requireRealParent()
         guard let completion = completions.first(where: { $0.id == completionId }) else {
             throw FirebaseError.documentNotFound
         }
@@ -740,6 +773,7 @@ final class LocalFamilyDataStore {
     }
 
     func approveClaim(_ claimId: String, message: String? = nil) throws {
+        try requireRealParent()
         guard let parent else { throw FirebaseError.notAuthenticated }
         guard let index = claims.firstIndex(where: { $0.id == claimId }) else {
             throw FirebaseError.documentNotFound
@@ -752,12 +786,12 @@ final class LocalFamilyDataStore {
         guard let child = children.first(where: { $0.id == claim.childId }) else {
             throw FirebaseError.invalidChild
         }
-        claims[index] = deductPoints(for: claim, reward: reward, child: child, parentId: parent.id, message: message)
+        claims[index] = try deductPoints(for: claim, reward: reward, child: child, parentId: parent.id, message: message)
         persistKeepingPassword()
     }
 
     func rejectClaim(_ claimId: String, reason: String) throws {
-        guard parent != nil else { throw FirebaseError.notAuthenticated }
+        try requireRealParent()
         guard let claim = claims.first(where: { $0.id == claimId }) else {
             throw FirebaseError.documentNotFound
         }
@@ -780,6 +814,7 @@ final class LocalFamilyDataStore {
 
     /// Family-level wishlist toggle. Default is OFF; parents opt in.
     func updateWishlistEnabled(_ isEnabled: Bool) throws {
+        try requireRealParent()
         guard let family else { throw FirebaseError.notAuthenticated }
         family.settings.enableWishlist = isEnabled
         family.updatedAt = Date()
@@ -1067,7 +1102,17 @@ final class LocalFamilyDataStore {
     // MARK: - Queries
 
     func tasksForChild(_ childId: String, on date: Date = Date()) -> [KiddoTask] {
-        tasks.filter { $0.isActive && $0.isAssignedTo(childId) && $0.isDue(on: date) }
+        tasks.filter { task in
+            guard task.isActive && task.isAssignedTo(childId) && task.isDue(on: date) else {
+                return false
+            }
+            if task.recurrence.type == .oneTime {
+                return !completions.contains {
+                    $0.taskId == task.id && $0.childId == childId && $0.status != .rejected
+                }
+            }
+            return true
+        }
     }
 
     func todaysCompletion(taskId: String, childId: String) -> TaskCompletion? {
@@ -1098,6 +1143,7 @@ final class LocalFamilyDataStore {
             family: family,
             parent: parent,
             passwordHash: "",
+            passwordSalt: "",
             children: children,
             tasks: tasks,
             completions: completions,
@@ -1143,9 +1189,9 @@ final class LocalFamilyDataStore {
         return completion
     }
 
-    private func deductPoints(for claim: RewardClaim, reward: Reward, child: Child, parentId: String, message: String? = nil) -> RewardClaim {
-        if child.activePoints < reward.pointCost {
-            return claim
+    private func deductPoints(for claim: RewardClaim, reward: Reward, child: Child, parentId: String, message: String? = nil) throws -> RewardClaim {
+        guard child.activePoints >= reward.pointCost else {
+            throw FirebaseError.insufficientPoints
         }
         let tx = PointTransaction(
             familyId: claim.familyId,
@@ -1255,15 +1301,16 @@ final class LocalFamilyDataStore {
             persist(passwordHash: "")
             return
         }
-        persist(passwordHash: snapshot.passwordHash)
+        persist(passwordHash: snapshot.passwordHash, passwordSalt: snapshot.passwordSalt)
     }
 
-    private func persist(passwordHash: String) {
+    private func persist(passwordHash: String, passwordSalt: String = "") {
         guard let family, let parent else { return }
         let snapshot = FamilySnapshot(
             family: family,
             parent: parent,
             passwordHash: passwordHash,
+            passwordSalt: passwordSalt,
             children: children,
             tasks: tasks,
             completions: completions,
@@ -1422,8 +1469,29 @@ final class LocalFamilyDataStore {
         // Keep disk data; just clear in-memory session.
     }
 
-    private static func hash(_ password: String) -> String {
-        let digest = SHA256.hash(data: Data(password.utf8))
+    private static func hash(_ password: String, salt: String) -> String {
+        var digest = Data((salt + password).utf8)
+        for _ in 0..<50_000 {
+            digest = Data(SHA256.hash(data: digest))
+        }
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func makeSalt() -> String {
+        var bytes = [UInt8]()
+        for _ in 0..<16 {
+            bytes.append(UInt8.random(in: 0...255))
+        }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func passwordMatches(_ password: String, in snapshot: FamilySnapshot) -> Bool {
+        // Legacy snapshots stored an unsalted SHA256 and no salt field.
+        if snapshot.passwordSalt.isEmpty {
+            let legacy = SHA256.hash(data: Data(password.utf8))
+            let legacyHex = legacy.map { String(format: "%02x", $0) }.joined()
+            return snapshot.passwordHash == legacyHex
+        }
+        return snapshot.passwordHash == Self.hash(password, salt: snapshot.passwordSalt)
     }
 }

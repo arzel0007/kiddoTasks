@@ -13,7 +13,12 @@ import {
   where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { firebaseFunctions, firestore, isFirebaseConfigured } from "./firebase";
+import {
+  firebaseAuth,
+  firebaseFunctions,
+  firestore,
+  isFirebaseConfigured,
+} from "./firebase";
 import type {
   Child,
   Family,
@@ -123,6 +128,12 @@ type FamilyState = {
   wishlistEnabled: boolean;
   entitlements: Entitlements;
   parentEmail: string | null;
+  /**
+   * Server-validated Premium from /api/billing/subscription.
+   * null = not loaded yet. family.settings.plan is client-writable and must
+   * never unlock features — gate on this flag only.
+   */
+  serverPremium: boolean | null;
   kidsMode: boolean;
   setKidsMode: (on: boolean) => void;
   reset: () => void;
@@ -222,6 +233,16 @@ type FamilyState = {
     reason?: string;
   }) => Promise<void>;
   loadFamilyForParent: (uid: string) => Promise<void>;
+  /** Kid/parent mission submit (cloud). Optimistic local row for kids UI. */
+  submitTaskCompletion: (input: {
+    taskId: string;
+    childId: string;
+  }) => Promise<{ completionId: string; status: string }>;
+  /** Kid/parent reward claim (cloud). */
+  claimReward: (input: {
+    rewardId: string;
+    childId: string;
+  }) => Promise<{ claimId: string }>;
   loadKidsSession: (payload: {
     family: Family;
     children: Child[];
@@ -257,6 +278,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   wishlistEnabled: false,
   entitlements: emptyEntitlements,
   parentEmail: null,
+  serverPremium: null,
   kidsMode: false,
 
   setKidsMode: (on) => set({ kidsMode: on }),
@@ -575,10 +597,10 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   addTask: async (input) => {
-    const { family, parentUid, parentEmail, entitlements, tasks } = get();
+    const { family, parentUid, parentEmail, serverPremium, tasks } = get();
     if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
     if (!family || !parentUid) throw new Error("Sign in as a parent first.");
-    const premium = entitlements.plan === "plus" || entitlements.plan === "pro";
+    const premium = serverPremium === true;
     if (!canAddTask(tasks.length, parentEmail, premium)) {
       throw new Error("Free plan includes up to 20 chores. Upgrade to add more.");
     }
@@ -889,8 +911,104 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       kidsAccessToken: null,
       wishlistEnabled: false,
       entitlements: emptyEntitlements,
+      serverPremium: null,
       kidsMode: false,
     }),
+
+  submitTaskCompletion: async (input) => {
+    const { family, kidsAccessToken, parentUid, completions, children, tasks } = get();
+    if (!family) throw new Error("Family not loaded.");
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    const payload: Record<string, unknown> = {
+      familyId: family.id,
+      taskId: input.taskId,
+      childId: input.childId,
+    };
+    if (!parentUid || get().kidsMode) {
+      if (!kidsAccessToken) {
+        throw new Error("Unlock Kids Station to submit missions.");
+      }
+      payload.kidsAccessToken = kidsAccessToken;
+    }
+    try {
+      const fn = httpsCallable(firebaseFunctions(), "submitTaskCompletion");
+      const res = await fn(payload);
+      const data = (res.data ?? {}) as { completionId?: string; status?: string };
+      const completionId = String(data.completionId ?? crypto.randomUUID());
+      const status = (data.status ?? "AWAITING_APPROVAL") as TaskCompletion["status"];
+      const now = new Date().toISOString();
+      const task = tasks.find((t) => t.id === input.taskId);
+      set({
+        completions: [
+          ...completions,
+          {
+            id: completionId,
+            familyId: family.id,
+            taskId: input.taskId,
+            childId: input.childId,
+            status,
+            completedAt: now,
+            pointsAwarded: status === "APPROVED" ? task?.pointValue ?? 0 : undefined,
+          },
+        ],
+        children:
+          status === "APPROVED"
+            ? children.map((ch) =>
+                ch.id === input.childId
+                  ? {
+                      ...ch,
+                      activePoints: ch.activePoints + (task?.pointValue ?? 0),
+                      totalPointsEarned: ch.totalPointsEarned + (task?.pointValue ?? 0),
+                    }
+                  : ch
+              )
+            : children,
+      });
+      return { completionId, status };
+    } catch (e) {
+      throw new Error(errorMessage(e, "Couldn’t submit mission"));
+    }
+  },
+
+  claimReward: async (input) => {
+    const { family, kidsAccessToken, parentUid, claims } = get();
+    if (!family) throw new Error("Family not loaded.");
+    if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
+    const payload: Record<string, unknown> = {
+      familyId: family.id,
+      rewardId: input.rewardId,
+      childId: input.childId,
+    };
+    if (!parentUid || get().kidsMode) {
+      if (!kidsAccessToken) {
+        throw new Error("Unlock Kids Station to request rewards.");
+      }
+      payload.kidsAccessToken = kidsAccessToken;
+    }
+    try {
+      const fn = httpsCallable(firebaseFunctions(), "claimReward");
+      const res = await fn(payload);
+      const data = (res.data ?? {}) as { claimId?: string };
+      const claimId = String(data.claimId ?? crypto.randomUUID());
+      const now = new Date().toISOString();
+      set({
+        claims: [
+          ...claims,
+          {
+            id: claimId,
+            familyId: family.id,
+            rewardId: input.rewardId,
+            childId: input.childId,
+            status: "CLAIMED",
+            claimedAt: now,
+          },
+        ],
+      });
+      return { claimId };
+    } catch (e) {
+      throw new Error(errorMessage(e, "Couldn’t request reward"));
+    }
+  },
 
   loadKidsSession: (payload) => {
     const {
@@ -937,10 +1055,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         return;
       }
       const family = { id: familySnap.id, ...(familySnap.data() as Omit<Family, "id">) };
-      const plan = (family.settings?.plan as string) || "free";
+      // settings.plan is client-writable — never treat it as a premium gate.
+      // Server premium is loaded separately from /api/billing/subscription.
       const entitlements: Entitlements = {
-        plan: plan === "plus" || plan === "pro" ? (plan as Entitlements["plan"]) : "free",
-        status: plan === "free" ? "none" : "active",
+        plan: "free",
+        status: "none",
       };
 
       const load = async <T extends { id: string }>(name: string): Promise<T[]> => {
@@ -1002,6 +1121,8 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         entitlements,
         error: null,
       });
+      // Server-validated premium — settings.plan is client-writable and untrusted.
+      void refreshServerPremium();
       if (wishlistLoad.denied) {
         console.warn(
           "[wishlist] parent read denied for wishlistItems — deploy firestore.rules so parents can list wishlist. Family data loaded."
@@ -1016,14 +1137,43 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 }));
 
+/** Fetch /api/billing/subscription and store the server premium flag. */
+async function refreshServerPremium(): Promise<void> {
+  try {
+    // firebaseAuth() throws during SSR — this path is client-only.
+    if (typeof window === "undefined") return;
+    const user = firebaseAuth().currentUser;
+    if (!user) {
+      useFamilyStore.setState({ serverPremium: false });
+      return;
+    }
+    const token = await user.getIdToken();
+    const res = await fetch("/api/billing/subscription", {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      useFamilyStore.setState({ serverPremium: false });
+      return;
+    }
+    const data = (await res.json()) as { premium?: boolean };
+    useFamilyStore.setState({ serverPremium: data.premium === true });
+  } catch {
+    useFamilyStore.setState({ serverPremium: false });
+  }
+}
+
 export function useEntitlements() {
   const entitlements = useFamilyStore((s) => s.entitlements);
   const parentEmail = useFamilyStore((s) => s.parentEmail);
+  const serverPremium = useFamilyStore((s) => s.serverPremium);
   const isOwner = isOwnerEmail(parentEmail);
+  // Gate on server premium only (null = not loaded → free, not settings.plan).
+  const isPlus = isOwner || serverPremium === true;
   return {
     ...entitlements,
     isOwner,
-    isPlus: isOwner || entitlements.plan === "plus" || entitlements.plan === "pro",
-    isPro: isOwner || entitlements.plan === "pro",
+    isPlus,
+    isPro: isOwner,
   };
 }
