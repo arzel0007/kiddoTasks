@@ -295,17 +295,15 @@ struct ParentWishlistView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $reviewTarget) { item in
                 reviewSheet(item)
+                    .kiddoBottomSheetForm()
             }
-            .confirmationDialog(
-                "Delete “\(itemPendingDeletion?.title ?? "")”?",
-                isPresented: Binding(
-                    get: { itemPendingDeletion != nil },
-                    set: { if !$0 { itemPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Delete wish", role: .destructive) {
-                    if let item = itemPendingDeletion {
+            .kiddoActionSheet(
+                item: $itemPendingDeletion,
+                title: "Delete this wish?",
+                message: "This only removes the wishlist item. Points are not affected."
+            ) { item in
+                [
+                    .destructive("Delete “\(item.title)”") {
                         Task {
                             do {
                                 try await WishlistMutationBridge.deleteItem(appState: appState, item: item)
@@ -314,12 +312,9 @@ struct ParentWishlistView: View {
                                 appState.toastError(error.localizedDescription)
                             }
                         }
-                    }
-                    itemPendingDeletion = nil
-                }
-                Button("Cancel", role: .cancel) { itemPendingDeletion = nil }
-            } message: {
-                Text("This only removes the wishlist item. Points are not affected.")
+                    },
+                    .cancel()
+                ]
             }
         }
     }
@@ -566,23 +561,22 @@ struct KidsWishlistView: View {
             .sheet(isPresented: $showAddSheet) {
                 if let child {
                     WishlistEditorSheet(childId: child.id, existing: nil)
+                        .kiddoBottomSheetForm()
                 }
             }
             .sheet(item: $editTarget) { item in
                 if let child {
                     WishlistEditorSheet(childId: child.id, existing: item)
+                        .kiddoBottomSheetForm()
                 }
             }
-            .confirmationDialog(
-                "Remove “\(itemPendingDeletion?.title ?? "")”?",
-                isPresented: Binding(
-                    get: { itemPendingDeletion != nil },
-                    set: { if !$0 { itemPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Remove wish", role: .destructive) {
-                    if let item = itemPendingDeletion {
+            .kiddoActionSheet(
+                item: $itemPendingDeletion,
+                title: "Remove this wish?",
+                message: "Points are not affected."
+            ) { item in
+                [
+                    .destructive("Remove “\(item.title)”") {
                         Task {
                             do {
                                 try await WishlistMutationBridge.deleteItem(appState: appState, item: item)
@@ -591,10 +585,9 @@ struct KidsWishlistView: View {
                                 appState.toastError(error.localizedDescription)
                             }
                         }
-                    }
-                    itemPendingDeletion = nil
-                }
-                Button("Cancel", role: .cancel) { itemPendingDeletion = nil }
+                    },
+                    .cancel()
+                ]
             }
         }
     }

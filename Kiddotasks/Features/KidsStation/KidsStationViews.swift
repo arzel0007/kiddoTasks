@@ -388,6 +388,7 @@ struct MissionsView: View {
                         selectedTask = nil
                         if completed { celebration = task }
                     }
+                    .kiddoBottomSheetForm()
                 }
             }
             .fullScreenCover(item: $celebration) { task in
@@ -400,6 +401,7 @@ struct MissionsView: View {
                 ) {
                     showWeekBonus = false
                 }
+                .kiddoBottomSheetForm()
             }
             .onAppear {
                 Arz.handle(.kidsStationOpened)

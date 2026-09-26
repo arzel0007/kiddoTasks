@@ -9,6 +9,7 @@ struct WelcomeView: View {
     @State private var showSignIn = false
     @State private var showJoinWithCode = false
     @State private var showKidsPIN = false
+    @State private var showAbout = false
 
     var body: some View {
         VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
@@ -53,19 +54,39 @@ struct WelcomeView: View {
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.top, KiddoTasksDesignTokens.Spacing.xxSmall)
+
+            Button {
+                showAbout = true
+            } label: {
+                Text("About KiddoTasks")
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
+            }
+            .buttonStyle(KiddoPressStyle())
+            .padding(.top, KiddoTasksDesignTokens.Spacing.small)
         }
         .padding(KiddoTasksDesignTokens.Spacing.xLarge)
         .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.welcome)
-        .sheet(isPresented: $showSignUp) { SignUpView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible) }
-        .sheet(isPresented: $showSignIn) { SignInView()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible) }
-        .sheet(isPresented: $showJoinWithCode) { JoinWithCodeView() }
+        .sheet(isPresented: $showAbout) {
+            AboutKiddoTasksSheet()
+                .kiddoBottomSheetForm()
+        }
+        .sheet(isPresented: $showSignUp) {
+            SignUpView()
+                .kiddoBottomSheetForm()
+        }
+        .sheet(isPresented: $showSignIn) {
+            SignInView()
+                .kiddoBottomSheetForm()
+        }
+        .sheet(isPresented: $showJoinWithCode) {
+            JoinWithCodeView()
+                .kiddoBottomSheetForm()
+        }
         .sheet(isPresented: $showKidsPIN) {
             KidsPINUnlockView()
-                .presentationDetents([.medium, .large])
+                .kiddoBottomSheet()
         }
         .onChange(of: showSignUp) { _, isShowing in
             if isShowing { appState.clearAuthMessages() }
@@ -172,16 +193,36 @@ struct SignUpView: View {
                     }
                 }
             }
-            .alert("Your Kids Station PIN", isPresented: $showPinAlert) {
-                Button("Got it") { dismiss() }
-            } message: {
-                Text("Shared family PIN: \(appState.familyBootstrapPIN ?? "")\nKids use it once to start a session on the shared iPad.")
+            .sheet(isPresented: $showPinAlert) {
+                VStack(alignment: .leading, spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                    KiddoSheetHeader(title: "Your Kids Station PIN")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Shared family PIN: \(appState.familyBootstrapPIN ?? "")")
+                            .font(KiddoTasksDesignTokens.Typography.headingMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
+                        Text("Kids use it once to start a session on the shared iPad.")
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                    }
+                    .padding(.horizontal, KiddoTasksDesignTokens.Spacing.large)
+
+                    PrimaryButton(title: "Got it") {
+                        dismiss()
+                    }
+                    .padding(.horizontal, KiddoTasksDesignTokens.Spacing.large)
+
+                    Spacer(minLength: 24)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(KiddoTasksDesignTokens.Colors.surface)
+                .kiddoBottomSheetCompact()
             }
             .sheet(item: $pendingVerificationEmail) { addr in
                 EmailVerificationView(email: addr) {
                     pendingVerificationEmail = nil
                     dismiss()
                 }
+                .kiddoBottomSheetForm()
             }
         }
     }

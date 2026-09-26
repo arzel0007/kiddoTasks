@@ -17,6 +17,7 @@ import { Modal } from "@/components/ui/modal";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
 import { canJoinWithCode, PREMIUM_PRICE } from "@/lib/entitlements";
+import { ABOUT_TAGLINE, ABOUT_TEASER } from "@/lib/about";
 
 type AuthMode = "signin" | "signup" | "join" | "kids";
 type InfoKey = "how" | "pricing" | "summer";
@@ -489,6 +490,9 @@ function WelcomePageInner() {
             </div>
           </div>
           <nav aria-label="Account" className="flex items-center justify-end gap-1.5 sm:gap-2">
+            <Link href="/about" className="chip-btn chip-btn--ghost">
+              About
+            </Link>
             <button
               type="button"
               className="chip-btn chip-btn--ghost"
@@ -608,6 +612,9 @@ function WelcomePageInner() {
             <button type="button" className="chip-btn" onClick={() => setInfoModal("summer")}>
               Summer guide
             </button>
+            <Link href="/about" className="chip-btn">
+              About
+            </Link>
             <button type="button" className="chip-btn" onClick={() => openAuth("join")}>
               Join with code
             </button>
@@ -621,6 +628,10 @@ function WelcomePageInner() {
             <Link href="/pricing" className="text-primary underline">
               /pricing
             </Link>
+            ,{" "}
+            <Link href="/about" className="text-primary underline">
+              /about
+            </Link>
             , and{" "}
             <Link href="/blog/summer-missions" className="text-primary underline">
               summer guide
@@ -629,8 +640,24 @@ function WelcomePageInner() {
           </p>
         </section>
 
+        {/* About teaser */}
+        <section className="animate-rise delay-4 card mt-10 text-left">
+          <p className="text-xs font-bold uppercase tracking-wider text-ink-tertiary">
+            Why we built this
+          </p>
+          <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
+            {ABOUT_TAGLINE}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+            {ABOUT_TEASER}
+          </p>
+          <Link href="/about" className="mt-3 inline-flex text-sm font-semibold text-primary underline">
+            Read our story →
+          </Link>
+        </section>
+
         {/* Bottom CTA */}
-        <section className="animate-rise delay-4 mt-10 text-center">
+        <section className="animate-rise delay-5 mt-10 text-center">
           <p className="text-sm text-ink-secondary">Your family space is ready when you are.</p>
           <button type="button" className="btn-primary mt-3 sm:w-auto sm:px-8" onClick={() => openAuth("signup")}>
             Set up your family space

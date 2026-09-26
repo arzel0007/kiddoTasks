@@ -10,7 +10,7 @@ struct KidPointsEditor: View {
     @State private var reason = ""
     @State private var mode: Mode = .add
     @State private var setToValue = ""
-    @State private var showResetConfirm = false
+    @State private var showResetConfirm: ResetConfirmToken?
 
     enum Mode: String, CaseIterable, Identifiable {
         case add, deduct, set
@@ -91,7 +91,7 @@ struct KidPointsEditor: View {
 
                     KiddoFormSection(title: "Danger zone", icon: "exclamationmark.triangle") {
                         Button(role: .destructive) {
-                            showResetConfirm = true
+                            showResetConfirm = ResetConfirmToken()
                         } label: {
                             Label("Reset points to zero", systemImage: "arrow.counterclockwise")
                                 .font(KiddoTasksDesignTokens.Typography.bodyMedium)
@@ -117,19 +117,23 @@ struct KidPointsEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
-            .alert("Reset \(child.name)'s points?", isPresented: $showResetConfirm) {
-                Button("Reset", role: .destructive) {
-                    do {
-                        try appState.store.resetPoints(for: child.id)
-                        appState.toastSuccess("Points reset to zero")
-                    } catch {
-                        appState.toastError(error.localizedDescription)
-                    }
-                    dismiss()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will set their balance to zero. This cannot be undone.")
+            .kiddoActionSheet(
+                item: $showResetConfirm,
+                title: "Reset \(child.name)'s points?",
+                message: "This will set their balance to zero. This cannot be undone."
+            ) { (_: ResetConfirmToken) in
+                [
+                    .destructive("Reset") {
+                        do {
+                            try appState.store.resetPoints(for: child.id)
+                            appState.toastSuccess("Points reset to zero")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
+                        dismiss()
+                    },
+                    .cancel()
+                ]
             }
         }
     }

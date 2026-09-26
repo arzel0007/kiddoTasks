@@ -11,6 +11,14 @@ import { errorMessage } from "@/lib/errors";
 import { isWishlistEnabled } from "@/lib/wishlist";
 import { computePlanDisplay } from "@/lib/billing/plan-status";
 import { PlanStatusSummary } from "@/components/plan-status-summary";
+import { Modal } from "@/components/ui/modal";
+import {
+  ABOUT_CLOSING,
+  ABOUT_PARAGRAPHS,
+  ABOUT_SIGNOFF,
+  ABOUT_TAGLINE,
+  ABOUT_TITLE,
+} from "@/lib/about";
 
 export default function FamilyPage() {
   const { family, children, loading, setEnableWishlist, parentEmail } = useFamilyStore();
@@ -26,6 +34,7 @@ export default function FamilyPage() {
     family?.settings?.weekBonusTitle || "Full week!"
   );
   const [wishlistBusy, setWishlistBusy] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const wishlistOn = isWishlistEnabled(family);
 
   async function toggleWishlist() {
@@ -233,6 +242,42 @@ export default function FamilyPage() {
       </div>
 
       <PlanStatusSummary plan={planDisplay} compact />
+
+      <div className="card">
+        <h3 className="mb-2 font-bold">About KiddoTasks</h3>
+        <p className="text-xs text-ink-secondary">
+          Why we build this — and what we hope kids carry with them.
+        </p>
+        <button
+          type="button"
+          className="btn-secondary mt-3 inline-flex w-auto px-4"
+          onClick={() => setAboutOpen(true)}
+        >
+          Read our story
+        </button>
+      </div>
+
+      <Modal
+        open={aboutOpen}
+        title={ABOUT_TITLE}
+        description={ABOUT_TAGLINE}
+        onClose={() => setAboutOpen(false)}
+      >
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto text-left text-sm leading-relaxed text-ink-secondary">
+          {ABOUT_PARAGRAPHS.map((p, i) => (
+            <p key={i} className={p === "But the goal is bigger than earning points." ? "font-semibold text-ink" : undefined}>
+              {p}
+            </p>
+          ))}
+          <div className="rounded-xl border border-primary/30 bg-primary-light/40 p-3">
+            <p className="font-semibold text-ink">{ABOUT_CLOSING}</p>
+            <p className="mt-2 text-xs font-semibold text-primary">{ABOUT_SIGNOFF}</p>
+          </div>
+        </div>
+        <button type="button" className="btn-primary mt-4" onClick={() => setAboutOpen(false)}>
+          Close
+        </button>
+      </Modal>
     </div>
   );
 }

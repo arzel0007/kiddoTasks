@@ -1,4 +1,9 @@
 import SwiftUI
+
+/// Identifiable token for the reset-all-data action sheet.
+struct ResetConfirmToken: Identifiable {
+    let id = UUID()
+}
 import PhotosUI
 
 struct ParentControlCenter: View {
@@ -180,29 +185,24 @@ struct TaskListView: View {
             .scrollDismissesKeyboard(.interactively)
             .sheet(isPresented: $showEditor) {
                 TaskEditorView()
+                    .kiddoBottomSheetForm()
             }
-            .confirmationDialog(
-                "Delete “\(taskPendingDeletion?.name ?? "")”?",
-                isPresented: Binding(
-                    get: { taskPendingDeletion != nil },
-                    set: { if !$0 { taskPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Delete task", role: .destructive) {
-                    if let task = taskPendingDeletion {
+            .kiddoActionSheet(
+                item: $taskPendingDeletion,
+                title: "Delete this chore?",
+                message: "Past completions and stars stay in History. This cannot be undone."
+            ) { task in
+                [
+                    .destructive("Delete “\(task.name)”") {
                         do {
                             try appState.store.deleteTask(task.id)
                             appState.toastSuccess("Task deleted")
                         } catch {
                             appState.toastError(error.localizedDescription)
                         }
-                    }
-                    taskPendingDeletion = nil
-                }
-                Button("Cancel", role: .cancel) { taskPendingDeletion = nil }
-            } message: {
-                Text("Past completions and stars stay in History. This cannot be undone.")
+                    },
+                    .cancel()
+                ]
             }
         }
     }
@@ -590,29 +590,26 @@ struct RewardListView: View {
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showEditor) { RewardEditorView() }
-            .confirmationDialog(
-                "Delete “\(rewardPendingDeletion?.name ?? "")”?",
-                isPresented: Binding(
-                    get: { rewardPendingDeletion != nil },
-                    set: { if !$0 { rewardPendingDeletion = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Delete reward", role: .destructive) {
-                    if let reward = rewardPendingDeletion {
+            .sheet(isPresented: $showEditor) {
+                RewardEditorView()
+                    .kiddoBottomSheetForm()
+            }
+            .kiddoActionSheet(
+                item: $rewardPendingDeletion,
+                title: "Delete this reward?",
+                message: "Kids can no longer claim this. Past claims stay in History."
+            ) { reward in
+                [
+                    .destructive("Delete “\(reward.name)”") {
                         do {
                             try appState.store.deleteReward(reward.id)
                             appState.toastSuccess("Reward deleted")
                         } catch {
                             appState.toastError(error.localizedDescription)
                         }
-                    }
-                    rewardPendingDeletion = nil
-                }
-                Button("Cancel", role: .cancel) { rewardPendingDeletion = nil }
-            } message: {
-                Text("Kids can no longer claim this. Past claims stay in History.")
+                    },
+                    .cancel()
+                ]
             }
         }
     }
@@ -716,7 +713,8 @@ struct FamilyView: View {
     @State private var childPendingRemoval: Child?
     @State private var showFamilyNameEditor = false
     @State private var pointsEditorChild: Child?
-    @State private var showResetConfirm = false
+    @State private var showResetConfirm: ResetConfirmToken?
+    @State private var showAbout = false
     @State private var showFamilyPhotoPicker = false
     @State private var pickedFamilyPhoto: PhotosPickerItem?
 
@@ -992,6 +990,11 @@ struct FamilyView: View {
                     ThemeAppearancePicker()
                 }
                 Section {
+                    Button {
+                        showAbout = true
+                    } label: {
+                        Label("About KiddoTasks", systemImage: "info.circle")
+                    }
                     Button("Sign out", role: .destructive) {
                         Haptic.warning()
                         appState.signOut()
@@ -999,7 +1002,7 @@ struct FamilyView: View {
                 }
                 Section {
                     Button("Reset all data", role: .destructive) {
-                        showResetConfirm = true
+                        showResetConfirm = ResetConfirmToken()
                     }
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
                 }
@@ -1009,12 +1012,21 @@ struct FamilyView: View {
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showChildEditor) { ChildEditorView() }
+            .sheet(isPresented: $showChildEditor) {
+                ChildEditorView()
+                    .kiddoBottomSheetForm()
+            }
             .sheet(isPresented: $showFamilyNameEditor) {
                 FamilyNameEditor(initialName: appState.currentFamily?.name ?? "")
+                    .kiddoBottomSheetCompact()
             }
             .sheet(item: $pointsEditorChild) { child in
                 KidPointsEditor(child: child)
+                    .kiddoBottomSheetForm()
+            }
+            .sheet(isPresented: $showAbout) {
+                AboutKiddoTasksSheet()
+                    .kiddoBottomSheetForm()
             }
             .photosPicker(isPresented: $showFamilyPhotoPicker, selection: $pickedFamilyPhoto, matching: .images)
             .onChange(of: pickedFamilyPhoto) { _, newValue in
@@ -1051,43 +1063,33 @@ struct FamilyView: View {
                     }
                 }
             }
-            .confirmationDialog(
-                "Remove \(childPendingRemoval?.name ?? "this child")?",
-                isPresented: Binding(
-                    get: { childPendingRemoval != nil },
-                    set: { if !$0 { childPendingRemoval = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button("Remove child", role: .destructive) {
-                    if let child = childPendingRemoval {
+            .kiddoActionSheet(
+                item: $childPendingRemoval,
+                title: "Remove this child?",
+                message: "Their history and earned stars stay in the family record."
+            ) { child in
+                [
+                    .destructive("Remove \(child.name)") {
                         do {
                             try appState.store.removeChild(child.id)
                             appState.toastSuccess("\(child.name) removed")
                         } catch {
                             appState.toastError(error.localizedDescription)
                         }
-                    }
-                    childPendingRemoval = nil
-                }
-                Button("Cancel", role: .cancel) { childPendingRemoval = nil }
-            } message: {
-                Text("Their history and earned stars stay in the family record.")
+                    },
+                    .cancel()
+                ]
             }
-            .confirmationDialog(
-                "Reset all data for “\(appState.currentFamily?.name ?? "this family")”?",
-                isPresented: $showResetConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Reset Everything", role: .destructive) {
-                    performReset(retainKids: false)
-                }
-                Button("Keep Kids", role: .destructive) {
-                    performReset(retainKids: true)
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This permanently deletes tasks, rewards, points, and history from this device and the cloud. You cannot undo this.")
+            .kiddoActionSheet(
+                item: $showResetConfirm,
+                title: "Reset all data?",
+                message: "This permanently deletes tasks, rewards, points, and history from this device and the cloud. You cannot undo this."
+            ) { (_: ResetConfirmToken) in
+                [
+                    .destructive("Reset Everything") { performReset(retainKids: false) },
+                    .destructive("Keep Kids") { performReset(retainKids: true) },
+                    .cancel()
+                ]
             }
         }
     }

@@ -298,6 +298,7 @@ struct GamesHubView: View {
                 } onCancel: {
                     selectedGame = nil
                 }
+                .kiddoBottomSheetForm()
             }
             .fullScreenCover(item: $launch) { item in
                 MiniGameHostView(

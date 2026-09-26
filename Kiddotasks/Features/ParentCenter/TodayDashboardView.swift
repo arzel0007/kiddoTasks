@@ -59,62 +59,74 @@ struct TodayDashboardView: View {
             .onChange(of: appState.store.dataRevision) { _, _ in
                 recomputeAggregates()
             }
-            .alert("Decline mission", isPresented: Binding(
-                get: { rejectingCompletion != nil },
-                set: { if !$0 { rejectingCompletion = nil } }
-            )) {
-                TextField("Reason (optional)", text: $rejectReason)
-                Button("Decline", role: .destructive) {
-                    if let completion = rejectingCompletion {
-                        do {
-                            try appState.store.rejectCompletion(completion.id, reason: rejectReason)
-                            appState.toastInfo("Mission declined")
-                        } catch {
-                            appState.toastError(error.localizedDescription)
-                        }
+            .sheet(item: $rejectingCompletion) { completion in
+                ApprovalSheet(
+                    title: "Decline mission",
+                    subtitle: appState.child(id: completion.childId)?.name ?? "Child",
+                    messageLabel: "Reason (optional)",
+                    message: $rejectReason,
+                    confirmTitle: "Decline",
+                    confirmRole: .destructive
+                ) {
+                    do {
+                        try appState.store.rejectCompletion(completion.id, reason: rejectReason)
+                        appState.toastInfo("Mission declined")
+                    } catch {
+                        appState.toastError(error.localizedDescription)
                     }
                     rejectReason = ""
                     rejectingCompletion = nil
+                } onCancel: {
+                    rejectReason = ""
+                    rejectingCompletion = nil
                 }
-                Button("Cancel", role: .cancel) { rejectingCompletion = nil }
+                .kiddoBottomSheetForm()
             }
-            .alert("Approve mission", isPresented: Binding(
-                get: { approvingCompletion != nil },
-                set: { if !$0 { approvingCompletion = nil } }
-            )) {
-                TextField("Message for child (optional)", text: $approveMessage)
-                Button("Approve") {
-                    if let completion = approvingCompletion {
-                        do {
-                            try appState.store.approveCompletion(completion.id, message: approveMessage.isEmpty ? nil : approveMessage)
-                            appState.toastSuccess("Mission approved")
-                        } catch {
-                            appState.toastError(error.localizedDescription)
-                        }
+            .sheet(item: $approvingCompletion) { completion in
+                ApprovalSheet(
+                    title: "Approve mission",
+                    subtitle: appState.child(id: completion.childId)?.name ?? "Child",
+                    messageLabel: "Message for child (optional)",
+                    message: $approveMessage,
+                    confirmTitle: "Approve",
+                    confirmRole: .default
+                ) {
+                    do {
+                        try appState.store.approveCompletion(completion.id, message: approveMessage.isEmpty ? nil : approveMessage)
+                        appState.toastSuccess("Mission approved")
+                    } catch {
+                        appState.toastError(error.localizedDescription)
                     }
                     approveMessage = ""
                     approvingCompletion = nil
+                } onCancel: {
+                    approveMessage = ""
+                    approvingCompletion = nil
                 }
-                Button("Cancel", role: .cancel) { approvingCompletion = nil }
+                .kiddoBottomSheetForm()
             }
-            .alert("Approve reward", isPresented: Binding(
-                get: { approvingClaim != nil },
-                set: { if !$0 { approvingClaim = nil } }
-            )) {
-                TextField("Message for child (optional)", text: $approveClaimMessage)
-                Button("Approve") {
-                    if let claim = approvingClaim {
-                        do {
-                            try appState.store.approveClaim(claim.id, message: approveClaimMessage.isEmpty ? nil : approveClaimMessage)
-                            appState.toastSuccess("Reward approved")
-                        } catch {
-                            appState.toastError(error.localizedDescription)
-                        }
+            .sheet(item: $approvingClaim) { claim in
+                ApprovalSheet(
+                    title: "Approve reward",
+                    subtitle: appState.child(id: claim.childId)?.name ?? "Child",
+                    messageLabel: "Message for child (optional)",
+                    message: $approveClaimMessage,
+                    confirmTitle: "Approve",
+                    confirmRole: .default
+                ) {
+                    do {
+                        try appState.store.approveClaim(claim.id, message: approveClaimMessage.isEmpty ? nil : approveClaimMessage)
+                        appState.toastSuccess("Reward approved")
+                    } catch {
+                        appState.toastError(error.localizedDescription)
                     }
                     approveClaimMessage = ""
                     approvingClaim = nil
+                } onCancel: {
+                    approveClaimMessage = ""
+                    approvingClaim = nil
                 }
-                Button("Cancel", role: .cancel) { approvingClaim = nil }
+                .kiddoBottomSheetForm()
             }
         }
     }
@@ -545,5 +557,62 @@ struct PendingClaimRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// Bottom-sheet form for approve / decline decisions (missions and rewards).
+struct ApprovalSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    var subtitle: String?
+    let messageLabel: String
+    @Binding var message: String
+    let confirmTitle: String
+    var confirmRole: ConfirmationRole = .default
+    let onConfirm: () -> Void
+    var onCancel: () -> Void = {}
+
+    enum ConfirmationRole {
+        case `default`
+        case destructive
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            KiddoSheetHeader(
+                title: title,
+                subtitle: subtitle,
+                onDismiss: {
+                    onCancel()
+                    dismiss()
+                }
+            )
+
+            VStack(alignment: .leading, spacing: KiddoTasksDesignTokens.Spacing.medium) {
+                KiddoTextField(label: messageLabel, text: $message)
+
+                PrimaryButton(
+                    title: confirmTitle,
+                    color: confirmRole == .destructive
+                        ? KiddoTasksDesignTokens.Colors.error
+                        : KiddoTasksDesignTokens.Colors.primary
+                ) {
+                    onConfirm()
+                    dismiss()
+                }
+
+                SecondaryButton(title: "Cancel") {
+                    onCancel()
+                    dismiss()
+                }
+            }
+            .padding(.horizontal, KiddoTasksDesignTokens.Spacing.large)
+            .padding(.top, KiddoTasksDesignTokens.Spacing.small)
+
+            Spacer(minLength: KiddoTasksDesignTokens.Spacing.large)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(KiddoTasksDesignTokens.Colors.surface)
     }
 }
