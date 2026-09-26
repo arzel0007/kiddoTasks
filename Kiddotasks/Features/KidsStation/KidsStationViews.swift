@@ -251,42 +251,76 @@ struct KidsStationView: View {
         appState.currentFamily?.settings.enableMiniGames ?? true
     }
 
+    /// Visible tabs in floating-bar order (matches content switch below).
+    private var tabItems: [KiddoTabItem] {
+        var items: [KiddoTabItem] = []
+        if child != nil {
+            items.append(KiddoTabItem("Missions", systemImage: "star.fill"))
+            items.append(KiddoTabItem("Shop", systemImage: "gift.fill"))
+            items.append(KiddoTabItem("Wishes", systemImage: "heart.text.square"))
+            items.append(KiddoTabItem("Badges", systemImage: "medal.fill"))
+        }
+        if miniGamesEnabled {
+            items.append(KiddoTabItem("Games", systemImage: "gamecontroller.fill"))
+        }
+        return items
+    }
+
+    private var gamesTabIndex: Int {
+        child != nil ? 4 : 0
+    }
+
     var body: some View {
-        TabView(selection: $selectedTab) {
-            if child != nil {
-                MissionsView()
-                    .tabItem { Label("Missions", systemImage: "star.fill") }
-                    .tag(0)
-                RewardShopView()
-                    .tabItem { Label("Shop", systemImage: "gift.fill") }
-                    .tag(1)
-                KidsWishlistView()
-                    .tabItem { Label("Wishes", systemImage: "heart.text.square") }
-                    .tag(4)
-                AchievementsView()
-                    .tabItem { Label("Badges", systemImage: "medal.fill") }
-                    .tag(2)
+        ZStack(alignment: .bottom) {
+            Group {
+                if child == nil {
+                    GamesHubView()
+                } else {
+                    switch selectedTab {
+                    case 0:
+                        MissionsView()
+                    case 1:
+                        RewardShopView()
+                    case 2:
+                        KidsWishlistView()
+                    case 3:
+                        AchievementsView()
+                    default:
+                        if miniGamesEnabled {
+                            GamesHubView()
+                        } else {
+                            AchievementsView()
+                        }
+                    }
+                }
             }
-            if miniGamesEnabled {
-                GamesHubView()
-                    .tabItem { Label("Games", systemImage: "gamecontroller.fill") }
-                    .tag(3)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if !tabItems.isEmpty {
+                KiddoFloatingTabBar(
+                    selection: $selectedTab,
+                    items: tabItems,
+                    tint: child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary
+                )
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
             }
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary)
         .onAppear {
             // Prefer Games when opened without a child / via "Play games together".
             if child == nil {
-                selectedTab = 3
+                selectedTab = gamesTabIndex
             } else if appState.gamesTabRequested {
-                selectedTab = 3
+                selectedTab = gamesTabIndex
             }
             // One-shot only — do NOT clear gamesModeActive here or RootView
             // bounces back to the kid picker on the same frame.
             appState.gamesTabRequested = false
         }
         .onChange(of: child?.id) { _, _ in
-            if child != nil && selectedTab == 3 {
+            if child != nil && selectedTab >= 3 {
                 selectedTab = 0
             }
         }

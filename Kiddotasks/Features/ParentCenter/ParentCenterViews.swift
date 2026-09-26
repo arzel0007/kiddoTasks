@@ -10,24 +10,37 @@ struct ParentControlCenter: View {
     @Environment(AppState.self) private var appState
     @State private var selectedTab = 0
 
+    private let tabs: [KiddoTabItem] = [
+        KiddoTabItem("Today", systemImage: "checkmark.seal.fill"),
+        KiddoTabItem("Tasks", systemImage: "list.bullet.clipboard"),
+        KiddoTabItem("Rewards", systemImage: "gift"),
+        KiddoTabItem("Family", systemImage: "house.fill"),
+        KiddoTabItem("History", systemImage: "clock"),
+    ]
+
     var body: some View {
-        TabView(selection: $selectedTab) {
-            TodayDashboardView()
-                .tabItem { Label("Today", systemImage: "checkmark.seal.fill") }
-                .tag(0)
-            TaskListView()
-                .tabItem { Label("Tasks", systemImage: "list.bullet.clipboard") }
-                .tag(1)
-            RewardListView()
-                .tabItem { Label("Rewards", systemImage: "gift") }
-                .tag(2)
-            FamilyView()
-                .tabItem { Label("Family", systemImage: "house.fill") }
-                .tag(3)
-            ActivityView()
-                .tabItem { Label("History", systemImage: "clock") }
-                .tag(4)
+        ZStack(alignment: .bottom) {
+            Group {
+                switch selectedTab {
+                case 0:
+                    TodayDashboardView()
+                case 1:
+                    TaskListView()
+                case 2:
+                    RewardListView()
+                case 3:
+                    FamilyView()
+                default:
+                    ActivityView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            KiddoFloatingTabBar(selection: $selectedTab, items: tabs)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .tint(KiddoTasksDesignTokens.Colors.primary)
         .onChange(of: selectedTab) { _, _ in
             Haptic.light()
@@ -54,17 +67,7 @@ struct TaskListView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                ArzPageHeader(title: "Tasks") {
-                    Button { showEditor = true } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(KiddoTasksDesignTokens.Colors.primary))
-                    }
-                    .buttonStyle(KiddoPressStyle())
-                    .accessibilityLabel("Add task")
-                }
+                ArzPageHeader(title: "Tasks")
 
                 List {
                     Section {
@@ -179,10 +182,13 @@ struct TaskListView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                // Keep last rows clear of the floating add button.
+                .safeAreaPadding(.bottom, 72)
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .scrollDismissesKeyboard(.interactively)
+            .kiddoFloatingAdd(title: "Add task") { showEditor = true }
             .sheet(isPresented: $showEditor) {
                 TaskEditorView()
                     .kiddoBottomSheetForm()
@@ -447,17 +453,7 @@ struct RewardListView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                ArzPageHeader(title: "Rewards") {
-                    Button { showEditor = true } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(KiddoTasksDesignTokens.Colors.primary))
-                    }
-                    .buttonStyle(KiddoPressStyle())
-                    .accessibilityLabel("Add reward")
-                }
+                ArzPageHeader(title: "Rewards")
 
                 List {
                     if appState.currentFamily?.settings.enableWishlist == true {
@@ -587,9 +583,11 @@ struct RewardListView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .safeAreaPadding(.bottom, 72)
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
+            .kiddoFloatingAdd(title: "Add reward") { showEditor = true }
             .sheet(isPresented: $showEditor) {
                 RewardEditorView()
                     .kiddoBottomSheetForm()
