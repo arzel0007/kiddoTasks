@@ -232,6 +232,7 @@ private struct PlayerCard: View {
 
 struct KidsStationView: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeStore.self) private var theme
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: Int
@@ -300,7 +301,8 @@ struct KidsStationView: View {
                 KiddoFloatingTabBar(
                     selection: $selectedTab,
                     items: tabItems,
-                    tint: child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary
+                    tint: child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary,
+                    labelStyle: theme.tabBarStyle
                 )
                 .padding(.horizontal, 18)
                 .padding(.bottom, 10)

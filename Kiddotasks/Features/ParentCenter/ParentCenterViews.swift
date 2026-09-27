@@ -8,6 +8,7 @@ import PhotosUI
 
 struct ParentControlCenter: View {
     @Environment(AppState.self) private var appState
+    @Environment(ThemeStore.self) private var theme
     @State private var selectedTab = 0
 
     private let tabs: [KiddoTabItem] = [
@@ -36,9 +37,13 @@ struct ParentControlCenter: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            KiddoFloatingTabBar(selection: $selectedTab, items: tabs)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 10)
+            KiddoFloatingTabBar(
+                selection: $selectedTab,
+                items: tabs,
+                labelStyle: theme.tabBarStyle
+            )
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
         }
         .ignoresSafeArea(.container, edges: .bottom)
         .tint(KiddoTasksDesignTokens.Colors.primary)
@@ -986,6 +991,7 @@ struct FamilyView: View {
                         }
                     }
                     ThemeAppearancePicker()
+                    TabBarStylePicker()
                 }
                 Section {
                     Button {
@@ -1614,6 +1620,21 @@ struct ThemeAppearancePicker: View {
         )) {
             ForEach(KiddoAppearance.allCases) { mode in
                 Text(mode.label).tag(mode)
+            }
+        }
+    }
+}
+
+struct TabBarStylePicker: View {
+    @Environment(ThemeStore.self) private var theme
+
+    var body: some View {
+        Picker("Bottom bar", selection: Binding(
+            get: { theme.tabBarStyle },
+            set: { theme.tabBarStyle = $0 }
+        )) {
+            ForEach(KiddoTabLabelStyle.allCases) { style in
+                Text(style.label).tag(style)
             }
         }
     }

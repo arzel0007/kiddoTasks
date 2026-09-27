@@ -23,10 +23,13 @@ struct KiddoFloatingTabBar: View {
     @Binding var selection: Int
     let items: [KiddoTabItem]
     var tint: Color = KiddoTasksDesignTokens.Colors.primary
+    var labelStyle: KiddoTabLabelStyle = .iconsOnly
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let barHeight: CGFloat = 72
+    private var barHeight: CGFloat {
+        labelStyle == .iconsOnly ? 56 : 72
+    }
     private let selectionFill = Color(hex: "#E8EDF2")
 
     var body: some View {
@@ -61,14 +64,16 @@ struct KiddoFloatingTabBar: View {
                         }
                         .frame(height: 32)
 
-                        Text(item.title)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(
-                                selection == index
-                                    ? tint
-                                    : KiddoTasksDesignTokens.Colors.text
-                            )
-                            .lineLimit(1)
+                        if labelStyle == .iconsAndText {
+                            Text(item.title)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(
+                                    selection == index
+                                        ? tint
+                                        : KiddoTasksDesignTokens.Colors.text
+                                )
+                                .lineLimit(1)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
@@ -79,7 +84,7 @@ struct KiddoFloatingTabBar: View {
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 10)
+        .padding(.vertical, labelStyle == .iconsOnly ? 8 : 10)
         .frame(height: barHeight)
         .background(
             Capsule(style: .continuous)
@@ -99,13 +104,14 @@ extension View {
     func kiddoFloatingTabBar(
         selection: Binding<Int>,
         items: [KiddoTabItem],
-        tint: Color = KiddoTasksDesignTokens.Colors.primary
+        tint: Color = KiddoTasksDesignTokens.Colors.primary,
+        labelStyle: KiddoTabLabelStyle = .iconsOnly
     ) -> some View {
         ZStack {
             self
             VStack {
                 Spacer(minLength: 0)
-                KiddoFloatingTabBar(selection: selection, items: items, tint: tint)
+                KiddoFloatingTabBar(selection: selection, items: items, tint: tint, labelStyle: labelStyle)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 10)
             }

@@ -25,11 +25,27 @@ enum KiddoAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Bottom tab bar label style (device preference).
+enum KiddoTabLabelStyle: String, CaseIterable, Identifiable {
+    case iconsOnly
+    case iconsAndText
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .iconsOnly: return "Icons only"
+        case .iconsAndText: return "Icons + text"
+        }
+    }
+}
+
 /// App-wide appearance preference (persisted).
 @Observable
 @MainActor
 final class ThemeStore {
     static let storageKey = "kiddo.appearance"
+    static let tabBarStyleKey = "kiddo.tabBarStyle"
 
     var appearance: KiddoAppearance {
         didSet {
@@ -37,9 +53,17 @@ final class ThemeStore {
         }
     }
 
+    var tabBarStyle: KiddoTabLabelStyle {
+        didSet {
+            UserDefaults.standard.set(tabBarStyle.rawValue, forKey: Self.tabBarStyleKey)
+        }
+    }
+
     init() {
         let raw = UserDefaults.standard.string(forKey: Self.storageKey) ?? ""
         appearance = KiddoAppearance(rawValue: raw) ?? .system
+        let styleRaw = UserDefaults.standard.string(forKey: Self.tabBarStyleKey) ?? ""
+        tabBarStyle = KiddoTabLabelStyle(rawValue: styleRaw) ?? .iconsOnly
     }
 }
 
