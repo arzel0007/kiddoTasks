@@ -63,7 +63,7 @@ const emptyWishlistForm: WishlistForm = { title: "", message: "", occasion: null
 export default function KidsPage() {
   const router = useRouter();
   const store = useFamilyStore();
-  const { family, children, tasks, completions } = store;
+  const { family, children, tasks, completions, rewards } = store;
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [restoringParent, setRestoringParent] = useState(
     () => isFirebaseConfigured && !store.kidsMode && !store.family
@@ -85,6 +85,7 @@ export default function KidsPage() {
   const [wishSaving, setWishSaving] = useState(false);
   const [pendingWishDelete, setPendingWishDelete] = useState<string | null>(null);
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
+  const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
 
   const canOpen = Boolean(family) || store.kidsMode;
   const selected = children.find((c) => c.id === selectedChildId) ?? null;
@@ -611,6 +612,70 @@ export default function KidsPage() {
                 })}
               </ul>
             )}
+
+            {/* Reward shop — points economy (separate from wishlist). */}
+            <section className="mt-6 card" aria-label="Reward shop">
+              <h2 className="mb-3 font-bold">🎁 Reward shop</h2>
+              {(() => {
+                const shop = rewards.filter(
+                  (r) =>
+                    r.isActive &&
+                    (r.eligibleChildIds?.length === 0 ||
+                      r.eligibleChildIds?.includes(selected.id))
+                );
+                if (shop.length === 0) {
+                  return (
+                    <div className="rounded-xl bg-surface p-3 text-sm text-ink-secondary">
+                      Shop is empty. Parents can add rewards in Parent Center.
+                    </div>
+                  );
+                }
+                return (
+                  <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {shop.map((r) => {
+                      const canAfford = selected.activePoints >= r.pointCost;
+                      return (
+                        <li
+                          key={r.id}
+                          className="rounded-card border border-border p-3 text-center"
+                        >
+                          <p className="text-2xl" aria-hidden>
+                            🎁
+                          </p>
+                          <p className="mt-1 truncate text-sm font-bold">{r.name}</p>
+                          <p className="text-xs font-semibold text-primary">
+                            ★ {r.pointCost}
+                          </p>
+                          <button
+                            type="button"
+                            className="chip-btn chip-btn--primary mt-2 w-full"
+                            disabled={!canAfford || claimingRewardId === r.id}
+                            onClick={() => {
+                              setClaimingRewardId(r.id);
+                              void store
+                                .claimReward({ rewardId: r.id, childId: selected.id })
+                                .then(() => toast.success("Asked a parent for this reward!"))
+                                .catch((e) =>
+                                  toast.error(
+                                    e instanceof Error ? e.message : "Couldn’t request reward"
+                                  )
+                                )
+                                .finally(() => setClaimingRewardId(null));
+                            }}
+                          >
+                            {claimingRewardId === r.id
+                              ? "Sending…"
+                              : canAfford
+                                ? "Ask parent"
+                                : "Need more ★"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              })()}
+            </section>
 
             {/* Wishlist — separate domain from points. selected childId required. */}
             <section className="mt-6 card" aria-label="Wishlist">

@@ -181,10 +181,11 @@ function sanitizeKidsFamily(familyId: string, familyData: any) {
   const settings = { ...(familyData?.settings || {}) };
   delete settings.kidsStationPIN;
   delete settings.plan;
+  // iOS Family Codable reads `members` (not memberIds).
   return {
     id: familyId,
     name: familyData?.name,
-    memberIds: familyData?.memberIds ?? familyData?.members ?? [],
+    members: familyData?.members ?? familyData?.memberIds ?? [],
     settings: {
       pointDisplaySymbol: settings.pointDisplaySymbol ?? "⭐",
       enableNotifications: settings.enableNotifications ?? true,
@@ -211,10 +212,13 @@ async function buildKidsSnapshot(familyId: string, familyData: any) {
           row[key] = row[key].toDate().toISOString();
         }
       }
-      // Parent UIDs are not needed by kids clients.
-      delete row.createdBy;
-      delete row.approvedBy;
-      delete row.reviewedBy;
+      // Only strip parent UIDs from the ledger. Tasks/rewards require
+      // `createdBy` on the client Codable — do not remove those fields.
+      if (name === "pointTransactions") {
+        delete row.createdBy;
+        delete row.approvedBy;
+        delete row.reviewedBy;
+      }
       return row;
     });
   };
