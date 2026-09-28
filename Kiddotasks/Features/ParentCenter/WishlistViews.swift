@@ -295,7 +295,7 @@ struct ParentWishlistView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $reviewTarget) { item in
                 reviewSheet(item)
-                    .kiddoBottomSheetForm()
+                    .kiddoBottomSheetFitted()
             }
             .kiddoActionSheet(
                 item: $itemPendingDeletion,
@@ -414,67 +414,64 @@ struct ParentWishlistView: View {
     }
 
     private func reviewSheet(_ item: WishlistItem) -> some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: KiddoTasksDesignTokens.Spacing.medium) {
-                    SectionCard(title: item.title, icon: "heart.text.square") {
-                        Text("\(childName(item.childId)) · \(item.occasion?.displayName ?? "Wish")")
-                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                        if !item.message.isEmpty {
-                            Text(item.message)
-                                .font(KiddoTasksDesignTokens.Typography.bodyMedium)
-                                .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: KiddoTasksDesignTokens.Spacing.medium) {
+            KiddoSheetHeader(
+                title: "Review wish",
+                subtitle: item.title,
+                onDismiss: { reviewTarget = nil }
+            )
 
-                    KiddoFormSection(title: "Decision", icon: reviewDecision.systemImage) {
-                        Picker("Decision", selection: $reviewDecision) {
-                            Text("Approve").tag(WishlistStatus.approved)
-                            Text("Not now").tag(WishlistStatus.rejected)
-                        }
-                        .pickerStyle(.segmented)
-                        KiddoTextField(
-                            label: "Message to \(childName(item.childId))",
-                            placeholder: "Optional note",
-                            text: $responseText
-                        )
-                        Text("This does not change stars or reward points.")
-                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                    }
-
-                    PrimaryButton(title: reviewDecision == .approved ? "Approve wish" : "Send “not now”") {
-                        let decision = reviewDecision
-                        let response = responseText
-                        Task {
-                            do {
-                                try await WishlistMutationBridge.reviewItem(
-                                    appState: appState,
-                                    item: item,
-                                    decision: decision,
-                                    parentResponse: response
-                                )
-                                appState.toastSuccess(
-                                    decision == .approved ? "Wish approved" : "Marked not now"
-                                )
-                                reviewTarget = nil
-                            } catch {
-                                appState.toastError(error.localizedDescription)
-                            }
-                        }
-                    }
+            SectionCard(title: item.title, icon: "heart.text.square") {
+                Text("\(childName(item.childId)) · \(item.occasion?.displayName ?? "Wish")")
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                if !item.message.isEmpty {
+                    Text(item.message)
+                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 }
-                .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
-            .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
-            .navigationTitle("Review wish")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { reviewTarget = nil }
+
+            KiddoFormSection(title: "Decision", icon: reviewDecision.systemImage) {
+                Picker("Decision", selection: $reviewDecision) {
+                    Text("Approve").tag(WishlistStatus.approved)
+                    Text("Not now").tag(WishlistStatus.rejected)
+                }
+                .pickerStyle(.segmented)
+                KiddoTextField(
+                    label: "Message to \(childName(item.childId))",
+                    placeholder: "Optional note",
+                    text: $responseText
+                )
+                Text("This does not change stars or reward points.")
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+            }
+
+            PrimaryButton(title: reviewDecision == .approved ? "Approve wish" : "Send “not now”") {
+                let decision = reviewDecision
+                let response = responseText
+                Task {
+                    do {
+                        try await WishlistMutationBridge.reviewItem(
+                            appState: appState,
+                            item: item,
+                            decision: decision,
+                            parentResponse: response
+                        )
+                        appState.toastSuccess(
+                            decision == .approved ? "Wish approved" : "Marked not now"
+                        )
+                        reviewTarget = nil
+                    } catch {
+                        appState.toastError(error.localizedDescription)
+                    }
                 }
             }
         }
+        .padding(KiddoTasksDesignTokens.Spacing.medium)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background(KiddoTasksDesignTokens.Colors.surface)
     }
 }
 

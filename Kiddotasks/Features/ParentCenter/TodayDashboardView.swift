@@ -80,7 +80,7 @@ struct TodayDashboardView: View {
                     rejectReason = ""
                     rejectingCompletion = nil
                 }
-                .kiddoBottomSheetForm()
+                .kiddoBottomSheetFitted()
             }
             .sheet(item: $approvingCompletion) { completion in
                 ApprovalSheet(
@@ -103,7 +103,7 @@ struct TodayDashboardView: View {
                     approveMessage = ""
                     approvingCompletion = nil
                 }
-                .kiddoBottomSheetForm()
+                .kiddoBottomSheetFitted()
             }
             .sheet(item: $approvingClaim) { claim in
                 ApprovalSheet(
@@ -126,7 +126,7 @@ struct TodayDashboardView: View {
                     approveClaimMessage = ""
                     approvingClaim = nil
                 }
-                .kiddoBottomSheetForm()
+                .kiddoBottomSheetFitted()
             }
         }
     }
@@ -609,10 +609,9 @@ struct ApprovalSheet: View {
             }
             .padding(.horizontal, KiddoTasksDesignTokens.Spacing.large)
             .padding(.top, KiddoTasksDesignTokens.Spacing.small)
-
-            Spacer(minLength: KiddoTasksDesignTokens.Spacing.large)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .padding(.bottom, KiddoTasksDesignTokens.Spacing.large)
         .background(KiddoTasksDesignTokens.Colors.surface)
     }
 }

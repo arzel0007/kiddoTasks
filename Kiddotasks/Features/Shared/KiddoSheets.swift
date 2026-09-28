@@ -39,6 +39,21 @@ extension View {
     func kiddoBottomSheetForm() -> some View {
         kiddoBottomSheet(detents: [.large])
     }
+
+    /// Content-sized sheet — hugs the controls instead of filling the screen.
+    /// Used for approve/decline and other short decision flows.
+    func kiddoBottomSheetFitted() -> some View {
+        self
+            .presentationDetents([.height(300), .height(380), .medium])
+            .presentationDragIndicator(.visible)
+            .presentationBackground {
+                KiddoTasksDesignTokens.Colors.surface
+                    .ignoresSafeArea()
+            }
+            .presentationCornerRadius(KiddoTasksDesignTokens.CornerRadius.extraLarge)
+            .presentationSizing(.fitted)
+            .interactiveDismissDisabled(false)
+    }
 }
 
 // MARK: - Bottom sheet container (title + optional subtitle + content)
