@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Kiddotasks — 15s Motion Ad</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #0b1c2e;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background: radial-gradient(ellipse 120% 80% at 50% 40%, #16324f 0%, #0b1c2e 55%, #07121f 100%);
+  }
+  canvas#fx { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+  .layer { position: absolute; inset: 0; }
+
+  /* ===== LOGO HERO ===== */
+  #hero {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 28px;
+  }
+  #logoWrap {
+    width: 320px; height: 320px; border-radius: 72px; overflow: hidden;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.55), 0 0 0 3px rgba(255,255,255,0.12);
+    will-change: transform, opacity;
+  }
+  #logoWrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #brand {
+    font-size: 92px; font-weight: 800; letter-spacing: -0.03em; color: #fff;
+    display: flex; gap: 2px;
+  }
+  #brand span { display: inline-block; will-change: transform, opacity; }
+  #brand .gold { color: #f0c14a; }
+  #tagline {
+    font-size: 36px; font-weight: 600; color: #c8d7e6; letter-spacing: 0.02em;
+    opacity: 0; will-change: transform, opacity;
+  }
+
+  /* ===== KINETIC SCENE ===== */
+  #kinetic {
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 24px;
+  }
+  .kline {
+    font-size: 110px; font-weight: 800; letter-spacing: -0.035em; line-height: 1;
+    color: #fff; will-change: transform, opacity, filter;
+  }
+  .kline.blue { color: #6eb6e8; }
+  .kline.gold { color: #f0c14a; }
+  .kstrike {
+    position: relative; display: inline-block; color: #8aa0b5;
+  }
+  .kstrike::after {
+    content: ""; position: absolute; left: -4%; top: 52%; height: 10px; width: 0%;
+    background: #ff6b6b; border-radius: 8px; transform: rotate(-4deg);
+    will-change: width;
+  }
+  #chipsRow {
+    display: flex; gap: 18px; margin-top: 12px;
+  }
+  .chip {
+    padding: 16px 28px; border-radius: 999px; font-size: 28px; font-weight: 700;
+    background: rgba(255,255,255,0.12); color: #eaf2fa;
+    border: 1.5px solid rgba(255,255,255,0.22);
+    backdrop-filter: blur(8px);
+    will-change: transform, opacity;
+  }
+
+  /* ===== FEATURES ===== */
+  #features {
+    display: grid; grid-template-columns: 1fr 1.05fr; align-items: center;
+    padding: 0 100px; gap: 60px;
+  }
+  #featCopy { display: flex; flex-direction: column; gap: 28px; }
+  .eyebrow {
+    font-size: 28px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: #6eb6e8; will-change: transform, opacity;
+  }
+  .featTitle {
+    font-size: 72px; font-weight: 800; letter-spacing: -0.03em; color: #fff; line-height: 1.08;
+    will-change: transform, opacity;
+  }
+  .featTitle em { font-style: normal; color: #f0c14a; }
+  #featCards { display: flex; flex-direction: column; gap: 18px; }
+  .fcard {
+    display: flex; align-items: center; gap: 22px;
+    background: rgba(255,255,255,0.08); border: 1.5px solid rgba(255,255,255,0.14);
+    border-radius: 28px; padding: 26px 30px;
+    will-change: transform, opacity;
+  }
+  .ficon {
+    width: 64px; height: 64px; border-radius: 18px; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 30px; font-weight: 800; color: #fff;
+    background: #3978a8;
+  }
+  .ficon.gold { background: #d59a3a; }
+  .ficon.green { background: #3f8b70; }
+  .ftext h3 { font-size: 32px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+  .ftext p { font-size: 24px; color: #a8bdd0; margin-top: 4px; }
+
+  #phoneCol {
+    position: relative; height: 820px; display: flex; align-items: center; justify-content: center;
+  }
+  .phone {
+    position: absolute; width: 360px; height: 720px;
+    border-radius: 48px; overflow: hidden;
+    border: 6px solid #1a2a3a;
+    box-shadow: 0 50px 100px rgba(0,0,0,0.5);
+    background: #fff;
+    will-change: transform, opacity;
+  }
+  .phone img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+  .phone.p1 { z-index: 3; }
+  .phone.p2 { z-index: 2; width: 320px; height: 640px; }
+  .phone.p3 { z-index: 1; width: 300px; height: 600px; }
+
+  /* ===== PRODUCT REVEAL ===== */
+  #product {
+    display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px;
+    padding: 0 90px; align-items: center;
+  }
+  #prodShot {
+    position: relative; height: 780px; border-radius: 36px; overflow: hidden;
+    background: #12283d;
+    border: 2px solid rgba(255,255,255,0.1);
+    box-shadow: 0 60px 120px rgba(0,0,0,0.45);
+    will-change: transform, opacity;
+  }
+  #prodShot img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+  #prodCopy { display: flex; flex-direction: column; gap: 36px; }
+  .prodHuge {
+    font-size: 88px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; color: #fff;
+    will-change: transform, opacity;
+  }
+  .prodHuge span { color: #f0c14a; display: inline-block; }
+  .prodSub {
+    font-size: 32px; line-height: 1.45; color: #b7c9da; max-width: 520px;
+    will-change: transform, opacity;
+  }
+  .statRow { display: flex; gap: 20px; }
+  .stat {
+    background: rgba(255,255,255,0.08); border-radius: 22px; padding: 22px 28px;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    will-change: transform, opacity;
+  }
+  .stat b { display: block; font-size: 42px; color: #fff; letter-spacing: -0.02em; }
+  .stat span { font-size: 22px; color: #8fa8bf; }
+
+  /* ===== CTA ===== */
+  #cta {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 36px; text-align: center;
+  }
+  #ctaBadge {
+    padding: 14px 28px; border-radius: 999px;
+    background: rgba(240,193,74,0.18); border: 2px solid rgba(240,193,74,0.55);
+    color: #f0c14a; font-size: 28px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    will-change: transform, opacity;
+  }
+  #ctaTitle {
+    font-size: 96px; font-weight: 800; letter-spacing: -0.035em; color: #fff; line-height: 1.05;
+    will-change: transform, opacity;
+  }
+  #ctaTitle em { font-style: normal; color: #6eb6e8; }
+  #ctaChips { display: flex; gap: 16px; }
+  #ctaUrl {
+    font-size: 44px; font-weight: 800; color: #fff; letter-spacing: -0.01em;
+    background: linear-gradient(135deg, #3978a8, #4a96cc);
+    padding: 28px 56px; border-radius: 999px;
+    box-shadow: 0 20px 60px rgba(57,120,168,0.45);
+    will-change: transform, opacity;
+  }
+  #ctaLogo {
+    width: 120px; height: 120px; border-radius: 28px; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    will-change: transform, opacity;
+  }
+  #ctaLogo img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* ===== FLASH / VIGNETTE ===== */
+  #flash {
+    position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none;
+  }
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 75% 70% at 50% 45%, transparent 40%, rgba(4,10,18,0.55) 100%);
+  }
+  #grain {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+
+  /* scene visibility */
+  .scene { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="fx" width="1920" height="1080"></canvas>
+
+  <!-- SCENE A: HERO -->
+  <div class="layer scene" id="hero">
+    <div id="logoWrap"><img src="assets/logo.png" alt="" /></div>
+    <div id="brand">
+      <span>K</span><span>i</span><span>d</span><span>d</span><span>o</span><span class="gold">T</span><span class="gold">a</span><span class="gold">s</span><span class="gold">k</span><span class="gold">s</span>
+    </div>
+    <div id="tagline">Missions for kids. Support for parents.</div>
+  </div>
+
+  <!-- SCENE B: KINETIC -->
+  <div class="layer scene" id="kinetic">
+    <div class="kline kstrike" id="kChores">Chores</div>
+    <div class="kline blue" id="kMissions">become Missions.</div>
+    <div class="kline gold" id="kEarn">Earn stars. Level up.</div>
+    <div id="chipsRow">
+      <div class="chip" id="chip1">No kid emails</div>
+      <div class="chip" id="chip2">PIN login</div>
+      <div class="chip" id="chip3">Free plan stays free</div>
+    </div>
+  </div>
+
+  <!-- SCENE C: FEATURES -->
+  <div class="layer scene" id="features">
+    <div id="featCopy">
+      <div class="eyebrow" id="featEyebrow">Why families switch</div>
+      <div class="featTitle" id="featTitle">Chores kids<br/><em>want</em> to finish.</div>
+      <div id="featCards">
+        <div class="fcard" id="fc1">
+          <div class="ficon">★</div>
+          <div class="ftext"><h3>Earn stars</h3><p>Every finished mission</p></div>
+        </div>
+        <div class="fcard" id="fc2">
+          <div class="ficon gold">◆</div>
+          <div class="ftext"><h3>Hard-earned rewards</h3><p>Claim only after parent OK</p></div>
+        </div>
+        <div class="fcard" id="fc3">
+          <div class="ficon green">✓</div>
+          <div class="ftext"><h3>Real life lesson</h3><p>Hard work pays off</p></div>
+        </div>
+      </div>
+    </div>
+    <div id="phoneCol">
+      <div class="phone p3" id="ph3"><img src="assets/parent.png" alt="" /></div>
+      <div class="phone p2" id="ph2"><img src="assets/celebrate.png" alt="" /></div>
+      <div class="phone p1" id="ph1"><img src="assets/kids.png" alt="" /></div>
+    </div>
+  </div>
+
+  <!-- SCENE D: PRODUCT -->
+  <div class="layer scene" id="product">
+    <div id="prodShot"><img src="assets/celebrate.png" alt="" /></div>
+    <div id="prodCopy">
+      <div class="eyebrow" id="prodEyebrow">Hard-earned, not free</div>
+      <div class="prodHuge" id="prodHuge">Effort kids<br/>can <span>feel.</span></div>
+      <div class="prodSub" id="prodSub">Finish a mission → earn stars → parent approves → celebrate for real. That's the whole loop.</div>
+      <div class="statRow">
+        <div class="stat" id="st1"><b>★ Stars</b><span>watch them grow</span></div>
+        <div class="stat" id="st2"><b>✓ Approve</b><span>parents stay in control</span></div>
+        <div class="stat" id="st3"><b>🎁 Rewards</b><span>only when it's earned</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE E: CTA -->
+  <div class="layer scene" id="cta">
+    <div id="ctaLogo"><img src="assets/logo.png" alt="" /></div>
+    <div id="ctaBadge">Start free today</div>
+    <div id="ctaTitle">Family chores,<br/><em>made clear.</em></div>
+    <div id="ctaChips">
+      <div class="chip" id="cchip1">No kid emails</div>
+      <div class="chip" id="cchip2">No bank account</div>
+      <div class="chip" id="cchip3">PIN login</div>
+      <div class="chip" id="cchip4">Free plan stays free</div>
+    </div>
+    <div id="ctaUrl">kiddotasks-app.web.app</div>
+  </div>
+
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="flash"></div>
+</div>
+
+<script>
+// ========== EASING ==========
+const E = {
+  outCubic: t => 1 - Math.pow(1 - t, 3),
+  outQuint: t => 1 - Math.pow(1 - t, 5),
+  outExpo: t => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+  inOutCubic: t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  outBack: t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  outElastic: t => {
+    const c4 = (2 * Math.PI) / 3;
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+  },
+};
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const map = (t, t0, t1, v0 = 0, v1 = 1, ease = E.outCubic) => {
+  if (t <= t0) return v0;
+  if (t >= t1) return v1;
+  return v0 + (v1 - v0) * ease((t - t0) / (t1 - t0));
+};
+const $ = id => document.getElementById(id);
+
+// ========== PARTICLES ==========
+const canvas = $('fx');
+const ctx = canvas.getContext('2d');
+const parts = [];
+// seeded random
+let seed = 42;
+function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+for (let i = 0; i < 140; i++) {
+  const a = rnd() * Math.PI * 2;
+  const r = 80 + rnd() * 700;
+  parts.push({
+    x: 960 + Math.cos(a) * r * 0.3,
+    y: 540 + Math.sin(a) * r * 0.25,
+    vx: Math.cos(a) * (2 + rnd() * 8),
+    vy: Math.sin(a) * (2 + rnd() * 8) - 1,
+    size: 2 + rnd() * 6,
+    hue: rnd() > 0.7 ? '#f0c14a' : (rnd() > 0.4 ? '#6eb6e8' : '#ffffff'),
+    phase: rnd() * Math.PI * 2,
+    burst: 2 + rnd() * 6,
+  });
+}
+
+function drawFx(t) {
+  ctx.clearRect(0, 0, 1920, 1080);
+
+  // energy rings at start
+  const ringT = clamp((t - 0.05) / 1.1, 0, 1);
+  if (ringT > 0 && ringT < 1) {
+    for (let i = 0; i < 3; i++) {
+      const rt = clamp((t - 0.08 - i * 0.12) / 0.9, 0, 1);
+      if (rt <= 0 || rt >= 1) continue;
+      const r = 40 + E.outQuint(rt) * (520 + i * 80);
+      ctx.beginPath();
+      ctx.arc(960, 500, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(110,182,232,${(1 - rt) * 0.45})`;
+      ctx.lineWidth = 3 + (1 - rt) * 6;
+      ctx.stroke();
+    }
+  }
+
+  // particles
+  const pAlpha = map(t, 0.0, 0.4, 0, 1) * (1 - map(t, 13.5, 15, 0, 0.5));
+  for (const p of parts) {
+    const drift = Math.sin(t * 1.2 + p.phase) * 12;
+    const x = p.x + p.vx * t * 8 + drift;
+    const y = p.y + p.vy * t * 6 + Math.cos(t * 0.9 + p.phase) * 10;
+    const twinkle = 0.55 + 0.45 * Math.sin(t * 3 + p.phase);
+    ctx.beginPath();
+    ctx.arc(x, y, p.size * (0.7 + twinkle * 0.5), 0, Math.PI * 2);
+    ctx.fillStyle = p.hue;
+    ctx.globalAlpha = pAlpha * twinkle * 0.85;
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // floating star glyphs
+  const stars = [
+    { x: 180, y: 200, s: 28, ph: 0 },
+    { x: 1740, y: 260, s: 22, ph: 1.2 },
+    { x: 320, y: 860, s: 18, ph: 2.1 },
+    { x: 1600, y: 820, s: 26, ph: 0.6 },
+    { x: 960, y: 140, s: 16, ph: 1.8 },
+    { x: 140, y: 540, s: 20, ph: 2.8 },
+    { x: 1800, y: 560, s: 18, ph: 0.3 },
+  ];
+  for (const s of stars) {
+    const bob = Math.sin(t * 1.4 + s.ph) * 14;
+    const rot = t * 0.4 + s.ph;
+    const a = 0.25 + 0.2 * Math.sin(t * 2 + s.ph);
+    ctx.save();
+    ctx.translate(s.x, s.y + bob);
+    ctx.rotate(rot);
+    ctx.globalAlpha = a * map(t, 0.2, 1.0);
+    ctx.fillStyle = '#f0c14a';
+    drawStar(ctx, 0, 0, s.s, s.s * 0.45, 5);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  // light sweep
+  const sweep = map(t, 5.2, 6.2, -0.3, 1.3);
+  if (sweep > -0.2 && sweep < 1.3) {
+    const g = ctx.createLinearGradient(sweep * 1920 - 200, 0, sweep * 1920 + 200, 1080);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 1920, 1080);
+  }
+}
+
+function drawStar(ctx, cx, cy, outer, inner, points) {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (i * Math.PI) / points - Math.PI / 2;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ========== SCENES ==========
+const scenes = {
+  hero: $('hero'), kinetic: $('kinetic'), features: $('features'),
+  product: $('product'), cta: $('cta'),
+};
+
+function setSceneOpacity(name, v) {
+  scenes[name].style.opacity = v;
+}
+
+function seek(t) {
+  // ---------- SCENE A: 0 – 3.1 ----------
+  {
+    const a = map(t, 0.0, 0.15, 0, 1, E.outCubic);
+    const out = 1 - map(t, 2.7, 3.15, 0, 1, E.inOutCubic);
+    setSceneOpacity('hero', a * out);
+
+    const logoS = map(t, 0.05, 0.75, 0.35, 1, E.outBack) * (1 + map(t, 0.75, 1.0, 0.06, 0, E.outCubic));
+    const logoY = map(t, 0.05, 0.7, 80, 0, E.outExpo);
+    $('logoWrap').style.transform = `translateY(${logoY}px) scale(${logoS})`;
+    $('logoWrap').style.opacity = map(t, 0.0, 0.35);
+
+    // letters stagger
+    const letters = $('brand').querySelectorAll('span');
+    letters.forEach((el, i) => {
+      const st = 0.35 + i * 0.05;
+      const p = map(t, st, st + 0.45, 0, 1, E.outBack);
+      el.style.transform = `translateY(${(1 - p) * 60}px)`;
+      el.style.opacity = p;
+    });
+
+    $('tagline').style.opacity = map(t, 1.15, 1.7);
+    $('tagline').style.transform = `translateY(${map(t, 1.15, 1.7, 24, 0, E.outCubic)}px)`;
+  }
+
+  // ---------- SCENE B: 2.8 – 6.0 ----------
+  {
+    const inn = map(t, 2.85, 3.35, 0, 1, E.outCubic);
+    const out = 1 - map(t, 5.55, 6.05, 0, 1, E.inOutCubic);
+    setSceneOpacity('kinetic', inn * out);
+
+    // Chores with strike
+    const cIn = map(t, 2.95, 3.45, 0, 1, E.outExpo);
+    $('kChores').style.opacity = cIn;
+    $('kChores').style.transform = `translateX(${(1 - cIn) * -120}px) scale(${0.85 + cIn * 0.15})`;
+    // strike-through width
+    const strike = map(t, 3.7, 4.15, 0, 108, E.outCubic);
+    $('kChores').style.setProperty('--sw', strike + '%');
+    // use inline style via pseudo - set on element
+    $('kChores').style.setProperty('width', 'auto');
+    // animate strike via CSS variable on ::after - need style tag workaround:
+    $('kChores').dataset.sw = strike;
+
+    const mIn = map(t, 3.85, 4.45, 0, 1, E.outBack);
+    $('kMissions').style.opacity = mIn;
+    $('kMissions').style.transform = `translateY(${(1 - mIn) * 70}px) scale(${0.9 + mIn * 0.1})`;
+    $('kMissions').style.filter = `blur(${(1 - mIn) * 8}px)`;
+
+    const eIn = map(t, 4.35, 4.95, 0, 1, E.outCubic);
+    $('kEarn').style.opacity = eIn;
+    $('kEarn').style.transform = `translateY(${(1 - eIn) * 50}px)`;
+
+    ['chip1', 'chip2', 'chip3'].forEach((id, i) => {
+      const st = 4.7 + i * 0.12;
+      const p = map(t, st, st + 0.4, 0, 1, E.outBack);
+      $(id).style.opacity = p;
+      $(id).style.transform = `translateY(${(1 - p) * 30}px) scale(${0.85 + p * 0.15})`;
+    });
+  }
+
+  // ---------- SCENE C: 5.7 – 9.6 ----------
+  {
+    const inn = map(t, 5.8, 6.3, 0, 1, E.outCubic);
+    const out = 1 - map(t, 9.15, 9.65, 0, 1, E.inOutCubic);
+    setSceneOpacity('features', inn * out);
+
+    const eb = map(t, 5.95, 6.45, 0, 1, E.outCubic);
+    $('featEyebrow').style.opacity = eb;
+    $('featEyebrow').style.transform = `translateX(${(1 - eb) * -40}px)`;
+
+    const ft = map(t, 6.1, 6.75, 0, 1, E.outBack);
+    $('featTitle').style.opacity = ft;
+    $('featTitle').style.transform = `translateY(${(1 - ft) * 50}px)`;
+
+    ['fc1', 'fc2', 'fc3'].forEach((id, i) => {
+      const st = 6.35 + i * 0.14;
+      const p = map(t, st, st + 0.55, 0, 1, E.outBack);
+      $(id).style.opacity = p;
+      $(id).style.transform = `translateX(${(1 - p) * 80}px)`;
+    });
+
+    // phones parallax
+    const p1 = map(t, 5.95, 6.85, 0, 1, E.outExpo);
+    $('ph1').style.opacity = p1;
+    $('ph1').style.transform = `translate(${(1 - p1) * 200}px, ${(1 - p1) * 80}px) rotate(${(1 - p1) * 12}deg) scale(${0.85 + p1 * 0.15})`;
+
+    const p2 = map(t, 6.15, 7.05, 0, 1, E.outExpo);
+    $('ph2').style.opacity = p2 * 0.95;
+    $('ph2').style.transform = `translate(${-80 + (1 - p2) * -160}px, ${40 + (1 - p2) * 60}px) rotate(${-8 + (1 - p2) * -10}deg) scale(${0.85 + p2 * 0.12})`;
+
+    const p3 = map(t, 6.35, 7.25, 0, 1, E.outExpo);
+    $('ph3').style.opacity = p3 * 0.85;
+    $('ph3').style.transform = `translate(${-200 + (1 - p3) * -120}px, ${-20 + (1 - p3) * 40}px) rotate(${-14 + (1 - p3) * -8}deg) scale(${0.85 + p3 * 0.1})`;
+
+    // subtle float
+    const bob = Math.sin(t * 1.6) * 8;
+    $('ph1').style.transform += ` translateY(${bob}px)`;
+  }
+
+  // ---------- SCENE D: 9.3 – 12.6 ----------
+  {
+    const inn = map(t, 9.35, 9.85, 0, 1, E.outCubic);
+    const out = 1 - map(t, 12.15, 12.65, 0, 1, E.inOutCubic);
+    setSceneOpacity('product', inn * out);
+
+    const shot = map(t, 9.4, 10.15, 0, 1, E.outExpo);
+    $('prodShot').style.opacity = shot;
+    $('prodShot').style.transform = `scale(${0.88 + shot * 0.12}) translateY(${(1 - shot) * 40}px)`;
+
+    const eb = map(t, 9.55, 10.05, 0, 1, E.outCubic);
+    $('prodEyebrow').style.opacity = eb;
+    $('prodEyebrow').style.transform = `translateY(${(1 - eb) * 20}px)`;
+
+    const huge = map(t, 9.7, 10.4, 0, 1, E.outBack);
+    $('prodHuge').style.opacity = huge;
+    $('prodHuge').style.transform = `translateX(${(1 - huge) * -60}px)`;
+
+    const sub = map(t, 10.0, 10.55, 0, 1, E.outCubic);
+    $('prodSub').style.opacity = sub;
+    $('prodSub').style.transform = `translateY(${(1 - sub) * 24}px)`;
+
+    ['st1', 'st2', 'st3'].forEach((id, i) => {
+      const st = 10.35 + i * 0.12;
+      const p = map(t, st, st + 0.5, 0, 1, E.outBack);
+      $(id).style.opacity = p;
+      $(id).style.transform = `translateY(${(1 - p) * 36}px) scale(${0.9 + p * 0.1})`;
+    });
+  }
+
+  // ---------- SCENE E: 12.3 – 15 ----------
+  {
+    const inn = map(t, 12.4, 12.9, 0, 1, E.outCubic);
+    setSceneOpacity('cta', inn);
+
+    const logo = map(t, 12.45, 13.05, 0, 1, E.outBack);
+    $('ctaLogo').style.opacity = logo;
+    $('ctaLogo').style.transform = `scale(${0.5 + logo * 0.5})`;
+
+    const badge = map(t, 12.65, 13.15, 0, 1, E.outBack);
+    $('ctaBadge').style.opacity = badge;
+    $('ctaBadge').style.transform = `translateY(${(1 - badge) * 20}px)`;
+
+    const title = map(t, 12.8, 13.5, 0, 1, E.outBack);
+    $('ctaTitle').style.opacity = title;
+    $('ctaTitle').style.transform = `translateY(${(1 - title) * 40}px)`;
+
+    ['cchip1', 'cchip2', 'cchip3', 'cchip4'].forEach((id, i) => {
+      const st = 13.15 + i * 0.08;
+      const p = map(t, st, st + 0.4, 0, 1, E.outBack);
+      $(id).style.opacity = p;
+      $(id).style.transform = `scale(${0.8 + p * 0.2})`;
+    });
+
+    const url = map(t, 13.55, 14.15, 0, 1, E.outBack);
+    $('ctaUrl').style.opacity = url;
+    $('ctaUrl').style.transform = `scale(${0.85 + url * 0.15}) translateY(${(1 - url) * 20}px)`;
+
+    // final pulse
+    const pulse = map(t, 14.2, 14.7, 1, 1.04, E.outCubic);
+    if (t > 14.2) $('ctaUrl').style.transform = `scale(${pulse})`;
+  }
+
+  // ---------- FLASH transitions ----------
+  // flash at scene cuts
+  let flash = 0;
+  const cuts = [2.95, 5.95, 9.45, 12.45];
+  for (const c of cuts) {
+    const ft = Math.abs(t - c);
+    if (ft < 0.18) flash = Math.max(flash, (1 - ft / 0.18) * 0.55);
+  }
+  // intro flash
+  if (t < 0.25) flash = Math.max(flash, 1 - t / 0.25);
+  $('flash').style.opacity = flash;
+
+  drawFx(t);
+}
+
+// CSS strike-through driven by data attr
+const style = document.createElement('style');
+style.textContent = `
+  .kstrike::after { width: calc(var(--sw, 0%) ); }
+`;
+document.head.appendChild(style);
+
+// override: set --sw each frame
+const origSeek = seek;
+// monkeypatch to set CSS var
+window.seek = function (t) {
+  origSeek(t);
+  const strike = map(t, 3.7, 4.15, 0, 100, E.outCubic);
+  $('kChores').style.setProperty('--sw', strike + '%');
+};
+
+window.seek(0);
+window.__ready = true;
+</script>
+</body>
+</html>

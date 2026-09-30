@@ -28,3 +28,8 @@ firestore-debug.log
 ui-debug.log
 *.debug.log
 .firebase/
+
+# Promo video render intermediates
+promo/video/frames/
+promo/video/out/check/
+promo/video/node_modules/

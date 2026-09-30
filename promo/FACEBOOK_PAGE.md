@@ -74,6 +74,16 @@ Refreshed 2026-09-30 from live production + product mockups. All 1080×1080.
 
 Raw recaptures also refreshed under `promo/screenshots/` (`npm run capture` in `promo/`).
 
+### Motion ad (15s)
+
+| File | Format | Use |
+|---|---|---|
+| `promo/video/out/kiddotasks-15s-ad.mp4` | 1920×1080 · 15s · H.264 · faststart | Feed / website / showreel |
+| `promo/video/out/kiddotasks-15s-ad-square.mp4` | 1080×1080 · 15s · H.264 · faststart | Facebook/IG feed ads |
+| `promo/video/out/storyboard.png` | contact sheet | Review / briefing |
+
+Timeline: logo burst → kinetic type (Chores→Missions) → feature cards + phones → hard-earned rewards loop → free CTA. Rebuild: `promo/video/capture-frames.mjs` then ffmpeg.
+
 ---
 
 ## First 3 posts (launch week)
