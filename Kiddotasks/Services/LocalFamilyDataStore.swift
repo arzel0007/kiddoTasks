@@ -636,7 +636,11 @@ final class LocalFamilyDataStore {
     // MARK: - Completions (kids submit, parents approve)
 
     @discardableResult
-    func submitCompletion(taskId: String, childId: String) throws -> TaskCompletion {
+    func submitCompletion(
+        taskId: String,
+        childId: String,
+        completedAt: Date = Date()
+    ) throws -> TaskCompletion {
         guard let family else { throw FirebaseError.invalidFamily }
         guard let task = tasks.first(where: { $0.id == taskId && $0.isActive }) else {
             throw FirebaseError.invalidTask
@@ -660,7 +664,8 @@ final class LocalFamilyDataStore {
             familyId: family.id,
             taskId: taskId,
             childId: childId,
-            status: status
+            status: status,
+            completedAt: completedAt
         )
         if !requiresApproval {
             completion = awardPoints(for: completion, task: task, parentId: "system")

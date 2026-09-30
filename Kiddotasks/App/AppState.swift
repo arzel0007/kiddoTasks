@@ -461,7 +461,7 @@ final class AppState {
     /// Submit a mission. Kids PIN sessions write via cloud callables so the
     /// parent's devices see the completion; parent sessions stay local-first
     /// and sync through `pushFamilySnapshot`.
-    func submitMission(taskId: String, childId: String) async throws {
+    func submitMission(taskId: String, childId: String, completedAt: Date = Date()) async throws {
         guard let familyId = store.family?.id else {
             throw FirebaseError.invalidFamily
         }
@@ -470,13 +470,22 @@ final class AppState {
             _ = try await cloudSync.submitTaskCompletion(
                 familyId: familyId,
                 taskId: taskId,
-                childId: childId
+                childId: childId,
+                completedAt: completedAt
             )
             // Optimistic local row so Kids UI updates immediately.
-            _ = try? store.submitCompletion(taskId: taskId, childId: childId)
+            _ = try? store.submitCompletion(
+                taskId: taskId,
+                childId: childId,
+                completedAt: completedAt
+            )
             return
         }
-        _ = try store.submitCompletion(taskId: taskId, childId: childId)
+        _ = try store.submitCompletion(
+            taskId: taskId,
+            childId: childId,
+            completedAt: completedAt
+        )
     }
 
     /// Request a reward. Same split as `submitMission`.

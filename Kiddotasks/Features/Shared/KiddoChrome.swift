@@ -1,6 +1,42 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Edge swipe back (custom nav bars hide the system gesture)
+
+/// Restores swipe-from-left-to-go-back on screens that hide the system nav bar.
+struct KiddoSwipeBackModifier: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .leading) {
+                Color.clear
+                    .frame(width: 28)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 16, coordinateSpace: .global)
+                            .onEnded { value in
+                                let isFromEdge = value.startLocation.x < 36
+                                let wentRight = value.translation.width > 64
+                                let mostlyHorizontal = abs(value.translation.height) < 80
+                                guard isFromEdge, wentRight, mostlyHorizontal else { return }
+                                Haptic.light()
+                                dismiss()
+                            }
+                    )
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
+extension View {
+    func kiddoSwipeBack() -> some View {
+        modifier(KiddoSwipeBackModifier())
+    }
+}
+
 // MARK: - Floating pill tab bar
 
 /// One item in the floating bottom bar.

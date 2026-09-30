@@ -237,6 +237,8 @@ type FamilyState = {
   submitTaskCompletion: (input: {
     taskId: string;
     childId: string;
+    /** Kid-reported day (ISO). Defaults to now. */
+    completedAt?: string;
   }) => Promise<{ completionId: string; status: string }>;
   /** Kid/parent reward claim (cloud). */
   claimReward: (input: {
@@ -923,6 +925,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       familyId: family.id,
       taskId: input.taskId,
       childId: input.childId,
+      completedAt: input.completedAt || new Date().toISOString(),
     };
     if (!parentUid || get().kidsMode) {
       if (!kidsAccessToken) {
@@ -947,7 +950,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
             taskId: input.taskId,
             childId: input.childId,
             status,
-            completedAt: now,
+            completedAt: input.completedAt || now,
             pointsAwarded: status === "APPROVED" ? task?.pointValue ?? 0 : undefined,
           },
         ],

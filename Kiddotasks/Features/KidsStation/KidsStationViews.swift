@@ -239,8 +239,8 @@ struct KidsStationView: View {
     @State private var tabContentID = 0
 
     init() {
-        // Default to Games when arriving without a child profile.
-        _selectedTab = State(initialValue: 3)
+        // Default to chores/missions — games are optional entertainment.
+        _selectedTab = State(initialValue: 0)
     }
 
     private var child: Child? {
@@ -311,11 +311,13 @@ struct KidsStationView: View {
         .ignoresSafeArea(.container, edges: .bottom)
         .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary)
         .onAppear {
-            // Prefer Games when opened without a child / via "Play games together".
+            // Chores first. Games only when explicitly requested or no child profile.
             if child == nil {
                 selectedTab = gamesTabIndex
             } else if appState.gamesTabRequested {
                 selectedTab = gamesTabIndex
+            } else {
+                selectedTab = 0
             }
             // One-shot only — do NOT clear gamesModeActive here or RootView
             // bounces back to the kid picker on the same frame.
@@ -363,11 +365,12 @@ struct MissionsView: View {
                                     selectedTask = task
                                 } label: {
                                     MissionCard(task: task, completion: completion)
-                                        .padding(.vertical, 4)
+                                        .padding(.vertical, 1)
                                 }
                                 .buttonStyle(CardPressStyle())
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     if completion == nil || completion?.status == .rejected {
                                         Button {
@@ -432,7 +435,12 @@ struct MissionsView: View {
                         selectedTask = nil
                         if completed { celebration = task }
                     }
-                    .kiddoBottomSheetForm()
+                    // Fit the sheet to content — not a full-page takeover.
+                    .presentationDetents([.height(520), .medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground {
+                        KiddoTasksDesignTokens.Colors.surface.ignoresSafeArea()
+                    }
                 }
             }
             .fullScreenCover(item: $celebration) { task in
@@ -486,11 +494,40 @@ struct MissionsView: View {
     }
 }
 
+/// When the child says they finished the chore.
+enum MissionWhen: String, CaseIterable, Identifiable {
+    case today
+    case yesterday
+    case other
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .today: return "Today"
+        case .yesterday: return "Yesterday"
+        case .other: return "Another day"
+        }
+    }
+
+    func date(other: Date) -> Date {
+        let cal = Calendar.current
+        switch self {
+        case .today: return Date()
+        case .yesterday: return cal.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+        case .other: return cal.startOfDay(for: other)
+        }
+    }
+}
+
 struct TaskDetailView: View {
     @Environment(AppState.self) private var appState
     let task: KiddoTask
     let child: Child
     let onFinish: (Bool) -> Void
+
+    @State private var when: MissionWhen = .today
+    @State private var otherDate = Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date()
 
     var existing: TaskCompletion? {
         appState.store.todaysCompletion(taskId: task.id, childId: child.id)
@@ -498,64 +535,97 @@ struct TaskDetailView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Image(systemName: task.icon)
-                    .font(.system(size: 44, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 110, height: 110)
-                    .background {
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .fill(task.category.palette.accent)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 14) {
+                    Image(systemName: task.icon)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 64)
+                        .background {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(task.category.palette.accent)
+                        }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(task.name)
+                            .font(KiddoTasksDesignTokens.Typography.headingSmall)
+                        Text("Earn \(task.pointValue) ⭐")
+                            .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                            .foregroundStyle(Color(hex: "#365F8C"))
                     }
-                Text(task.name)
-                    .font(KiddoTasksDesignTokens.Typography.headingLarge)
-                    .multilineTextAlignment(.center)
-                Text(task.description.isEmpty ? "You've got this!" : task.description)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                Text("Earn \(task.pointValue) ⭐")
-                    .font(KiddoTasksDesignTokens.Typography.titleMedium)
-                    .foregroundStyle(Color(hex: "#365F8C"))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Capsule().fill(Color(hex: "#E8EEF4")))
+                    Spacer(minLength: 0)
+                }
+
+                if !task.description.isEmpty {
+                    Text(task.description)
+                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                }
 
                 if let existing {
-                    Text("Latest submission: \(existing.status.displayName)")
-                        .font(KiddoTasksDesignTokens.Typography.bodyLarge)
-                        .padding(.top, 8)
+                    Text("Latest: \(existing.status.displayName)")
+                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
                     if let message = existing.notes, !message.isEmpty {
                         Text("Parent said: \(message)")
                             .font(KiddoTasksDesignTokens.Typography.bodyMedium)
                             .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                            .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(KiddoTasksDesignTokens.Colors.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                    if existing.status == .rejected {
-                        PrimaryButton(
-                            title: "Try again",
-                            color: KiddoTasksDesignTokens.Colors.primary
-                        ) {
-                            submitCompletion()
+                }
+
+                // When did you do it?
+                if existing == nil || existing?.status == .rejected {
+                    Text("When did you do it?")
+                        .font(KiddoTasksDesignTokens.Typography.titleSmall)
+                    HStack(spacing: 8) {
+                        ForEach(MissionWhen.allCases) { option in
+                            Button {
+                                when = option
+                            } label: {
+                                Text(option.label)
+                                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(
+                                        when == option ? .white : KiddoTasksDesignTokens.Colors.text
+                                    )
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        Capsule().fill(
+                                            when == option
+                                                ? KiddoTasksDesignTokens.Colors.primary
+                                                : KiddoTasksDesignTokens.Colors.surface
+                                        )
+                                    )
+                            }
+                            .buttonStyle(KiddoPressStyle())
                         }
-                        .buttonStyle(ExtraBouncyPressStyle())
                     }
-                } else {
+
+                    if when == .other {
+                        DatePicker(
+                            "Day",
+                            selection: $otherDate,
+                            in: ...Date(),
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    }
+
                     PrimaryButton(
-                        title: "I did it! 🎉",
+                        title: existing?.status == .rejected ? "Try again" : "I did it! 🎉",
                         color: KiddoTasksDesignTokens.Colors.success
                     ) {
                         submitCompletion()
                     }
                     .buttonStyle(ExtraBouncyPressStyle())
                 }
-                Spacer()
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .kiddoChildPageBackground(child, base: KiddoTasksDesignTokens.PageBackgrounds.kidsMissionSky)
             .navigationTitle("Mission")
             .navigationBarTitleDisplayMode(.inline)
@@ -568,9 +638,14 @@ struct TaskDetailView: View {
     }
 
     private func submitCompletion() {
+        let completedAt = when.date(other: otherDate)
         Task { @MainActor in
             do {
-                try await appState.submitMission(taskId: task.id, childId: child.id)
+                try await appState.submitMission(
+                    taskId: task.id,
+                    childId: child.id,
+                    completedAt: completedAt
+                )
                 let startOfDay = Calendar.current.startOfDay(for: Date())
                 let todays = appState.store.completions.filter {
                     $0.childId == child.id && $0.completedAt >= startOfDay

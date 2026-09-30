@@ -86,10 +86,47 @@ export default function KidsPage() {
   const [pendingWishDelete, setPendingWishDelete] = useState<string | null>(null);
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  /** Pending "I did it" — opens a compact when-did-you-do-it sheet. */
+  const [pendingSubmitTaskId, setPendingSubmitTaskId] = useState<string | null>(null);
+  const [missionWhen, setMissionWhen] = useState<"today" | "yesterday" | "other">("today");
+  const [missionOtherDate, setMissionOtherDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 2);
+    return d.toISOString().slice(0, 10);
+  });
 
   const canOpen = Boolean(family) || store.kidsMode;
   const selected = children.find((c) => c.id === selectedChildId) ?? null;
   const wishlistEnabled = store.wishlistEnabled === true;
+
+  function missionCompletedAt(): string {
+    if (missionWhen === "today") return new Date().toISOString();
+    if (missionWhen === "yesterday") {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d.toISOString();
+    }
+    return new Date(`${missionOtherDate}T12:00:00`).toISOString();
+  }
+
+  async function confirmMissionSubmit() {
+    if (!selected || !pendingSubmitTaskId) return;
+    const taskId = pendingSubmitTaskId;
+    setSubmittingTaskId(taskId);
+    setPendingSubmitTaskId(null);
+    try {
+      await store.submitTaskCompletion({
+        taskId,
+        childId: selected.id,
+        completedAt: missionCompletedAt(),
+      });
+      toast.success("Mission sent to a parent!");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn’t submit mission");
+    } finally {
+      setSubmittingTaskId(null);
+    }
+  }
 
   const myWishlist = useMemo(() => {
     if (!selected) return [] as WishlistItem[];
@@ -560,7 +597,7 @@ export default function KidsPage() {
                 <p className="text-sm text-ink-secondary">No missions for today.</p>
               </div>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-2">
                 {missions.map((t) => {
                   const done = completions.find(
                     (c) =>
@@ -571,18 +608,18 @@ export default function KidsPage() {
                   return (
                     <li
                       key={t.id}
-                      className={`card flex items-center gap-3 ${done ? "opacity-60" : ""}`}
+                      className={`card !p-3 flex items-center gap-2.5 ${done ? "opacity-60" : ""}`}
                     >
-                      <IconTile icon={t.icon} category={t.category} size={48} />
-                      <div className="flex-1">
-                        <p className="font-bold">{t.name}</p>
-                        <p className="text-sm text-ink-secondary">
+                      <IconTile icon={t.icon} category={t.category} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold">{t.name}</p>
+                        <p className="text-xs text-ink-secondary">
                           {done
                             ? done.status.replace("_", " ").toLowerCase()
-                            : sfSymbolToGlyph(t.icon) + " Ready"}
+                            : "Ready"}
                         </p>
                       </div>
-                      <span className="rounded-pill bg-surface px-2.5 py-1 text-xs font-bold text-primary">
+                      <span className="shrink-0 rounded-pill bg-surface px-2 py-0.5 text-xs font-bold text-primary">
                         ★ {t.pointValue}
                       </span>
                       {!done ? (
@@ -591,17 +628,8 @@ export default function KidsPage() {
                           className="chip-btn chip-btn--primary shrink-0"
                           disabled={submittingTaskId === t.id}
                           onClick={() => {
-                            if (!selected) return;
-                            setSubmittingTaskId(t.id);
-                            void store
-                              .submitTaskCompletion({ taskId: t.id, childId: selected.id })
-                              .then(() => toast.success("Mission sent to a parent!"))
-                              .catch((e) =>
-                                toast.error(
-                                  e instanceof Error ? e.message : "Couldn’t submit mission"
-                                )
-                              )
-                              .finally(() => setSubmittingTaskId(null));
+                            setMissionWhen("today");
+                            setPendingSubmitTaskId(t.id);
                           }}
                         >
                           {submittingTaskId === t.id ? "Sending…" : "I did it!"}
@@ -852,6 +880,65 @@ export default function KidsPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={pendingSubmitTaskId !== null}
+        title="When did you do it?"
+        description="Tell a parent which day you finished this chore."
+        onClose={() => setPendingSubmitTaskId(null)}
+      >
+        <div className="space-y-3 text-left">
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { id: "today", label: "Today" },
+                { id: "yesterday", label: "Yesterday" },
+                { id: "other", label: "Another day" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                  missionWhen === opt.id
+                    ? "bg-primary text-white"
+                    : "bg-surface text-ink"
+                }`}
+                onClick={() => setMissionWhen(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {missionWhen === "other" ? (
+            <label className="block text-sm">
+              <span className="text-ink-secondary">Day</span>
+              <input
+                type="date"
+                className="field-input mt-1"
+                max={new Date().toISOString().slice(0, 10)}
+                value={missionOtherDate}
+                onChange={(e) => setMissionOtherDate(e.target.value)}
+              />
+            </label>
+          ) : null}
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={submittingTaskId !== null}
+            onClick={() => void confirmMissionSubmit()}
+          >
+            Send to parent
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setPendingSubmitTaskId(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
 
       <Modal
         open={pendingWishDelete !== null}

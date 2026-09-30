@@ -616,12 +616,18 @@ final class CloudSyncEngine {
 
     /// Submit a task completion for the family (parent Auth or kids HMAC token).
     @discardableResult
-    func submitTaskCompletion(familyId: String, taskId: String, childId: String) async throws -> (id: String, status: String) {
+    func submitTaskCompletion(
+        familyId: String,
+        taskId: String,
+        childId: String,
+        completedAt: Date = Date()
+    ) async throws -> (id: String, status: String) {
         #if canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
         let payload = wishlistCallablePayload(familyId: familyId, childId: childId)
         var body = payload
         body["taskId"] = taskId
+        body["completedAt"] = ISO8601DateFormatter().string(from: completedAt)
         let result = try await Functions.functions()
             .httpsCallable("submitTaskCompletion")
             .call(body)

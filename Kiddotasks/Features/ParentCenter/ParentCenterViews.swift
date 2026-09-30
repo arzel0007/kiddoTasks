@@ -387,6 +387,7 @@ struct TaskEditorView: View {
                 .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .kiddoSwipeBack()
             .navigationTitle(task == nil ? "New task" : "Edit task")
             .onAppear(perform: loadTaskIfEditing)
             .onChange(of: name) { _, newValue in
@@ -658,6 +659,7 @@ struct RewardEditorView: View {
                 .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .kiddoSwipeBack()
             .navigationTitle(reward == nil ? "New reward" : "Edit reward")
             .onAppear(perform: loadRewardIfEditing)
             .onChange(of: name) { _, newValue in
@@ -1117,6 +1119,7 @@ struct FamilyNameEditor: View {
                 .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .kiddoSwipeBack()
             .navigationTitle("Family name")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -1269,6 +1272,7 @@ struct ChildEditorView: View {
                 .padding(KiddoTasksDesignTokens.Spacing.medium)
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
+            .kiddoSwipeBack()
             .navigationTitle(child == nil ? "New child" : "Edit child")
             .onAppear(perform: loadChildIfEditing)
             .toolbar {

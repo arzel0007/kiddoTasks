@@ -574,10 +574,11 @@ struct MissionCard: View {
             .padding(.vertical, 6)
             .background(Capsule().fill(Color(hex: "#E8EEF4")))
         }
-        .padding(KiddoTasksDesignTokens.Spacing.medium)
+        .padding(.horizontal, KiddoTasksDesignTokens.Spacing.small)
+        .padding(.vertical, 10)
         .background(KiddoTasksDesignTokens.Colors.surfaceCard)
-        .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.extraLarge, style: .continuous))
-        .kiddotasksShadow(.medium)
+        .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.large, style: .continuous))
+        .kiddotasksShadow(.small)
         .opacity(completion?.status == .approved ? 0.6 : 1)
     }
 }

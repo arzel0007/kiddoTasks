@@ -10,6 +10,22 @@ import { birthdayMessage, upcomingBirthdays } from "@/lib/birthdays";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
 
+/** "Today at 3:20 PM" / "Yesterday at 5:05 PM" / "Sep 12, 2025 at 2:10 PM". */
+function formatFriendlyWhen(value?: string | null): string {
+  if (!value) return "Just now";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "Just now";
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+  const that = new Date(d);
+  that.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((day.getTime() - that.getTime()) / 86400000);
+  if (diffDays === 0) return `Today at ${time}`;
+  if (diffDays === 1) return `Yesterday at ${time}`;
+  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} at ${time}`;
+}
+
 export default function TodayPage() {
   const {
     family,
@@ -262,7 +278,9 @@ export default function TodayPage() {
                       {child?.name ?? "Child"}
                       {task ? ` · ${task.name}` : ""}
                     </p>
-                    <p className="text-xs text-ink-secondary">Needs your approval</p>
+                    <p className="text-xs text-ink-secondary">
+                      {formatFriendlyWhen(c.completedAt)} · Needs your approval
+                    </p>
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     <button

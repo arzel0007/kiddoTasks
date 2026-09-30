@@ -553,6 +553,14 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
   }
   const requiresApproval = taskDoc.data()?.requiresApproval !== false;
 
+  // Kid-reported day (today / yesterday / other). Fall back to server now.
+  const rawCompletedAt = String(data?.completedAt || "").trim();
+  const parsedCompletedAt = rawCompletedAt ? new Date(rawCompletedAt) : null;
+  const completedAtValue =
+    parsedCompletedAt && !Number.isNaN(parsedCompletedAt.getTime())
+      ? admin.firestore.Timestamp.fromDate(parsedCompletedAt)
+      : admin.firestore.FieldValue.serverTimestamp();
+
   // Reject duplicate open completions for the same task/child (point-farm guard).
   const dupSnap = await db
     .collection("taskCompletions")
@@ -584,7 +592,7 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
         taskId: String(taskId),
         childId: String(childId),
         status: "APPROVED",
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: completedAtValue,
         approvedAt: admin.firestore.FieldValue.serverTimestamp(),
         approvedBy: actor.parentUid || "kids-session",
         pointsAwarded: pointValue,
@@ -615,7 +623,7 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
     taskId: String(taskId),
     childId: String(childId),
     status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED",
-    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    completedAt: completedAtValue,
   });
   return { completionId: completionRef.id, status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED" };
 });

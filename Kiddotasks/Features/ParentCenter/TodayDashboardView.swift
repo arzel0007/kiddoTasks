@@ -85,7 +85,10 @@ struct TodayDashboardView: View {
             .sheet(item: $approvingCompletion) { completion in
                 ApprovalSheet(
                     title: "Approve mission",
-                    subtitle: appState.child(id: completion.childId)?.name ?? "Child",
+                    subtitle: [
+                        appState.child(id: completion.childId)?.name ?? "Child",
+                        PendingCompletionRow.friendlyWhen(completion.completedAt),
+                    ].joined(separator: " · "),
                     messageLabel: "Message for child (optional)",
                     message: $approveMessage,
                     confirmTitle: "Approve",
@@ -462,7 +465,7 @@ struct PendingCompletionRow: View {
                 Text("\(childName) · \(task?.name ?? "Mission")")
                     .font(KiddoTasksDesignTokens.Typography.titleSmall)
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                Text(completion.completedAt.formatted(date: .omitted, time: .shortened))
+                Text(Self.friendlyWhen(completion.completedAt))
                     .font(KiddoTasksDesignTokens.Typography.captionSmall)
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
             }
@@ -473,6 +476,15 @@ struct PendingCompletionRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// "Today at 3:20 PM" / "Yesterday at 5:05 PM" / "Sep 12 at 2:10 PM".
+    static func friendlyWhen(_ date: Date) -> String {
+        let cal = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if cal.isDateInToday(date) { return "Today at \(time)" }
+        if cal.isDateInYesterday(date) { return "Yesterday at \(time)" }
+        return date.formatted(date: .abbreviated, time: .omitted) + " at \(time)"
     }
 
     private var approveButton: some View {
