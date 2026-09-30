@@ -536,6 +536,17 @@ async function resolveFamilyActor(
   return { familyId: tokenPayload.familyId, parentUid: null };
 }
 
+/** Bump family timestamps so iOS/other clients refresh immediately. */
+async function touchFamily(familyId: string): Promise<void> {
+  await db.collection("families").doc(familyId).set(
+    {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      serverUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 export const submitTaskCompletion = functions.https.onCall(async (data, context) => {
   const actor = await resolveFamilyActor(data, context);
   const familyId = actor.familyId;
@@ -615,6 +626,7 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     });
+    await touchFamily(familyId);
     return { completionId: completionRef.id, status: "APPROVED", pointsAwarded: pointValue };
   }
 
@@ -625,6 +637,8 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
     status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED",
     completedAt: completedAtValue,
   });
+  // Bump family stamp so other devices (iOS) refresh promptly.
+  await touchFamily(familyId);
   return { completionId: completionRef.id, status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED" };
 });
 
@@ -677,6 +691,7 @@ export const claimReward = functions.https.onCall(async (data, context) => {
     status: "CLAIMED",
     claimedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+  await touchFamily(familyId);
   return { claimId: claimRef.id };
 });
 
@@ -700,6 +715,7 @@ export const rejectRewardClaim = functions.https.onCall(async (data, context) =>
     status: "REJECTED",
     notes: reason || "",
   });
+  await touchFamily(familyId);
   return { success: true };
 });
 
@@ -839,6 +855,7 @@ export const approveTaskCompletion = functions.https.onCall(
         });
       });
 
+      await touchFamily(familyId);
       return {
         success: true,
         transactionId,
@@ -902,6 +919,7 @@ export const rejectTaskCompletion = functions.https.onCall(
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
+      await touchFamily(familyId);
       return {
         success: true,
         message: "Task rejected",
@@ -1040,6 +1058,7 @@ export const approveRewardClaim = functions.https.onCall(
         });
       });
 
+      await touchFamily(familyId);
       return {
         success: true,
         transactionId: deductionTransactionId,

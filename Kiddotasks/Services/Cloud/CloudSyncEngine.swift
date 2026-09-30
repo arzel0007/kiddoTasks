@@ -819,15 +819,15 @@ final class CloudSyncEngine {
             if let last = lastFetchedFingerprint, incomingFingerprint == last {
                 return
             }
-            // Stale-guard: skip if remote stamp is not newer than what we saw.
-            if let remoteStamp = snapshot.family.serverUpdatedAt,
-               let lastStamp = store.lastSeenServerUpdatedAt,
-               remoteStamp <= lastStamp,
-               store.family != nil {
-                lastFetchedFingerprint = incomingFingerprint
+            // Fingerprint differs → something actually changed (e.g. a web
+            // approval/submission). Always apply when local is clean, even if
+            // families.serverUpdatedAt is not newer — callables that only write
+            // taskCompletions/claims used to leave that stamp stale and iOS
+            // never saw web-only items.
+            guard !hasUnsyncedLocalChanges else {
+                scheduleRetryPush()
                 return
             }
-            guard !hasUnsyncedLocalChanges else { return }
             applyFromCloud(snapshot)
             lastFetchedFingerprint = incomingFingerprint
         } catch {
