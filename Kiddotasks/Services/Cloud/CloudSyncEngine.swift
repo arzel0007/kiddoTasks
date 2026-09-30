@@ -1086,7 +1086,12 @@ final class CloudSyncEngine {
         return snapshot.documents.compactMap { doc in
             var data = doc.data()
             data["id"] = doc.documentID
-            return try? decodeJSON(type, from: data)
+            do {
+                return try decodeJSON(type, from: data)
+            } catch {
+                print("[CloudSync] skip undecodable \(collection)/\(doc.documentID): \(error)")
+                return nil
+            }
         }
         #else
         return []
@@ -1163,7 +1168,24 @@ final class CloudSyncEngine {
         let clean = dict.mapValues { value in jsonSafe(value) }
         let data = try JSONSerialization.data(withJSONObject: clean)
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        // Accept ISO-8601 with or without fractional seconds (web `toISOString()`).
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            let withFrac = ISO8601DateFormatter()
+            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFrac.date(from: raw) { return date }
+            let plain = ISO8601DateFormatter()
+            plain.formatOptions = [.withInternetDateTime]
+            if let date = plain.date(from: raw) { return date }
+            if let ms = Double(raw) {
+                return Date(timeIntervalSince1970: ms / 1000)
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unrecognized date: \(raw)"
+            )
+        }
         return try decoder.decode(T.self, from: data)
         #else
         throw FirebaseError.authNotAvailable

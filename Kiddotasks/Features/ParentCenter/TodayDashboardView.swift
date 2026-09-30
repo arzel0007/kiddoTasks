@@ -55,7 +55,11 @@ struct TodayDashboardView: View {
                     .padding()
                 }
             }
-            .onAppear(perform: recomputeAggregates)
+            .onAppear {
+                recomputeAggregates()
+                // Pull cloud state so web-submitted missions appear immediately.
+                Task { await appState.refreshFamilyFromCloud() }
+            }
             .onChange(of: appState.store.dataRevision) { _, _ in
                 recomputeAggregates()
             }

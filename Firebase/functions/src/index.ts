@@ -538,6 +538,7 @@ async function resolveFamilyActor(
 
 /** Bump family timestamps so iOS/other clients refresh immediately. */
 async function touchFamily(familyId: string): Promise<void> {
+  // sync-v2: ensure web-authored completions propagate to iOS
   await db.collection("families").doc(familyId).set(
     {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

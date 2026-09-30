@@ -34,6 +34,12 @@ final class AppState {
     /// True when the Firebase SDK is linked and configured with a plist.
     var isCloudEnabled: Bool { cloudSync.isAvailable }
 
+    /// Pull the latest family snapshot (safe no-op when cloud is off).
+    func refreshFamilyFromCloud() async {
+        guard cloudSync.isAvailable else { return }
+        await cloudSync.refreshFromCloud()
+    }
+
     var cloudSyncStatus: CloudSyncStatus { cloudSync.status }
 
     init() {
