@@ -675,6 +675,47 @@ final class LocalFamilyDataStore {
         return completion
     }
 
+    /// Mirrors a completion that was already accepted by the cloud callable.
+    /// This keeps Kids Station responsive without marking the device dirty and
+    /// pushing a duplicate completion back to Firestore.
+    func recordCloudSubmittedCompletion(
+        id: String,
+        taskId: String,
+        childId: String,
+        status: String,
+        pointsAwarded: Int? = nil,
+        completedAt: Date = Date()
+    ) {
+        guard let family else { return }
+        let completionStatus = CompletionStatus(rawValue: status) ?? .awaitingApproval
+        if let existing = completions.first(where: { $0.id == id }) {
+            existing.status = completionStatus
+            applyCloudAwardIfNeeded(to: existing, childId: childId, pointsAwarded: pointsAwarded)
+            persistCloudAcknowledgement()
+            return
+        }
+        if completions.contains(where: {
+            $0.taskId == taskId
+                && $0.childId == childId
+                && Calendar.current.isDate($0.completedAt, inSameDayAs: completedAt)
+                && $0.status != .rejected
+        }) {
+            persistCloudAcknowledgement()
+            return
+        }
+        let completion = TaskCompletion(
+            id: id,
+            familyId: family.id,
+            taskId: taskId,
+            childId: childId,
+            status: completionStatus,
+            completedAt: completedAt
+        )
+        applyCloudAwardIfNeeded(to: completion, childId: childId, pointsAwarded: pointsAwarded)
+        completions.append(completion)
+        persistCloudAcknowledgement()
+    }
+
     func approveCompletion(_ completionId: String, message: String? = nil) throws {
         try requireRealParent()
         guard let parent else { throw FirebaseError.notAuthenticated }
@@ -774,6 +815,33 @@ final class LocalFamilyDataStore {
         let claim = RewardClaim(familyId: family.id, rewardId: rewardId, childId: childId)
         claims.append(claim)
         persistKeepingPassword()
+        return claim
+    }
+
+    /// Mirrors a reward claim that was already accepted by the cloud callable
+    /// without scheduling an echo push from a signed-in shared iPad.
+    func recordCloudRewardClaim(id: String, rewardId: String, childId: String) -> RewardClaim? {
+        guard let family else { return nil }
+        if let existing = claims.first(where: { $0.id == id }) {
+            persistCloudAcknowledgement()
+            return existing
+        }
+        if let existing = claims.first(where: {
+            $0.rewardId == rewardId
+                && $0.childId == childId
+                && ($0.status == .claimed || $0.status == .approved)
+        }) {
+            persistCloudAcknowledgement()
+            return existing
+        }
+        let claim = RewardClaim(
+            id: id,
+            familyId: family.id,
+            rewardId: rewardId,
+            childId: childId
+        )
+        claims.append(claim)
+        persistCloudAcknowledgement()
         return claim
     }
 
@@ -1307,6 +1375,28 @@ final class LocalFamilyDataStore {
             return
         }
         persist(passwordHash: snapshot.passwordHash, passwordSalt: snapshot.passwordSalt)
+    }
+
+    private func persistCloudAcknowledgement() {
+        callbacksSuspended = true
+        defer { callbacksSuspended = false }
+        persistKeepingPassword()
+    }
+
+    private func applyCloudAwardIfNeeded(
+        to completion: TaskCompletion,
+        childId: String,
+        pointsAwarded: Int?
+    ) {
+        guard completion.status == .approved,
+              completion.pointsAwarded == nil,
+              let pointsAwarded,
+              pointsAwarded > 0,
+              let child = children.first(where: { $0.id == childId }) else { return }
+        completion.pointsAwarded = pointsAwarded
+        child.activePoints += pointsAwarded
+        child.totalPointsEarned += pointsAwarded
+        child.updatedAt = Date()
     }
 
     private func persist(passwordHash: String, passwordSalt: String = "") {

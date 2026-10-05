@@ -172,6 +172,20 @@ export const openKidsSession = functions.https.onCall(async (data, context) => {
   return buildKidsSnapshot(familyId, familyDoc.data() || {});
 });
 
+export const refreshKidsSession = functions.https.onCall(async (data, context) => {
+  const token = String(data?.kidsAccessToken || "").trim();
+  const tokenPayload = verifyKidToken(token);
+  if (!tokenPayload) {
+    throw new functions.https.HttpsError("unauthenticated", "Unlock Kids Station again");
+  }
+  const familyId = tokenPayload.familyId;
+  const familyDoc = await db.collection("families").doc(familyId).get();
+  if (!familyDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "Family not found");
+  }
+  return buildKidsSnapshot(familyId, familyDoc.data() || {});
+});
+
 /** Strip server/parent-only fields before returning data to a kids session. */
 function sanitizeKidsFamily(familyId: string, familyData: any) {
   const iso = (v: any) => {

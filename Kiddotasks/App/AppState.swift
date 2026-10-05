@@ -124,6 +124,21 @@ final class AppState {
         store.parent?.id == "kids-session"
     }
 
+    /// Kid-facing actions should write to the shared backend first whenever
+    /// cloud is available, even if this shared iPad still has a parent session.
+    /// Otherwise the iPad sees local changes before the rest of the family does.
+    var isKidInteractionActive: Bool {
+        isKidsSessionOnly
+            || !isAuthenticated
+            || interfaceOverride == .kids
+            || currentChildProfile != nil
+            || gamesModeActive
+    }
+
+    func shouldUseCloudForKidAction(cloudAvailable: Bool? = nil) -> Bool {
+        (cloudAvailable ?? cloudSync.isAvailable) && isKidInteractionActive
+    }
+
     /// True when opening Parent Center must go through the family Kids PIN.
     private var needsParentGate: Bool {
         isKidsSessionOnly || !isAuthenticated
@@ -464,27 +479,28 @@ final class AppState {
         store.children.first { $0.id == id }
     }
 
-    /// Submit a mission. Kids PIN sessions write via cloud callables so the
-    /// parent's devices see the completion; parent sessions stay local-first
-    /// and sync through `pushFamilySnapshot`.
+    /// Submit a mission. Kid-facing sessions write via cloud callables first so
+    /// every parent device sees the completion from the same source of truth.
     func submitMission(taskId: String, childId: String, completedAt: Date = Date()) async throws {
         guard let familyId = store.family?.id else {
             throw FirebaseError.invalidFamily
         }
-        let kidsOnly = isKidsSessionOnly || (!isAuthenticated && cloudSync.isAvailable)
-        if kidsOnly {
-            _ = try await cloudSync.submitTaskCompletion(
+        if shouldUseCloudForKidAction() {
+            let cloudCompletion = try await cloudSync.submitTaskCompletion(
                 familyId: familyId,
                 taskId: taskId,
                 childId: childId,
                 completedAt: completedAt
             )
-            // Optimistic local row so Kids UI updates immediately.
-            _ = try? store.submitCompletion(
+            store.recordCloudSubmittedCompletion(
+                id: cloudCompletion.id,
                 taskId: taskId,
                 childId: childId,
+                status: cloudCompletion.status,
+                pointsAwarded: cloudCompletion.pointsAwarded,
                 completedAt: completedAt
             )
+            await refreshFamilyFromCloud()
             return
         }
         _ = try store.submitCompletion(
@@ -500,16 +516,17 @@ final class AppState {
         guard let familyId = store.family?.id else {
             throw FirebaseError.invalidFamily
         }
-        let kidsOnly = isKidsSessionOnly || (!isAuthenticated && cloudSync.isAvailable)
-        if kidsOnly {
-            _ = try await cloudSync.claimReward(
+        if shouldUseCloudForKidAction() {
+            let claimId = try await cloudSync.claimReward(
                 familyId: familyId,
                 rewardId: rewardId,
                 childId: childId
             )
-            if let local = try? store.claimReward(rewardId: rewardId, childId: childId) {
+            if let local = store.recordCloudRewardClaim(id: claimId, rewardId: rewardId, childId: childId) {
+                await refreshFamilyFromCloud()
                 return local
             }
+            await refreshFamilyFromCloud()
             return RewardClaim(familyId: familyId, rewardId: rewardId, childId: childId)
         }
         return try store.claimReward(rewardId: rewardId, childId: childId)

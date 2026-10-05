@@ -40,6 +40,7 @@ final class CloudSyncEngine {
 
     private var familyListener: Any?
     private var refreshTask: Task<Void, Never>?
+    private var kidsRefreshTask: Task<Void, Never>?
     private var pendingPush: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var isRefreshing = false
@@ -510,6 +511,8 @@ final class CloudSyncEngine {
         refreshTask?.cancel()
         refreshTask = nil
         clearKidsSessionAuth()
+        kidsRefreshTask?.cancel()
+        kidsRefreshTask = nil
         pendingPush?.cancel()
         pendingPush = nil
         retryTask?.cancel()
@@ -550,6 +553,7 @@ final class CloudSyncEngine {
         }
         // Decode snapshot pieces into the local store so Kids UI can run.
         try applyKidsSessionPayload(data, familyId: familyId)
+        startKidsSessionRefresh()
         return true
         #else
         return false
@@ -612,6 +616,26 @@ final class CloudSyncEngine {
         #endif
     }
 
+    func refreshKidsSessionFromCloud() async {
+        #if canImport(FirebaseFunctions) && canImport(FirebaseFirestore)
+        guard isAvailable,
+              let token = kidsAccessToken,
+              !token.isEmpty else { return }
+        do {
+            let result = try await Functions.functions()
+                .httpsCallable("refreshKidsSession")
+                .call(["kidsAccessToken": token])
+            guard let data = result.data as? [String: Any],
+                  let familyId = data["familyId"] as? String else { return }
+            try applyKidsSessionPayload(data, familyId: familyId)
+        } catch {
+            #if DEBUG
+            print("[KidsPIN] refresh failed: \(error.localizedDescription)")
+            #endif
+        }
+        #endif
+    }
+
     // MARK: - Kid/parent mission + reward callables (cloud source of truth)
 
     /// Submit a task completion for the family (parent Auth or kids HMAC token).
@@ -621,7 +645,7 @@ final class CloudSyncEngine {
         taskId: String,
         childId: String,
         completedAt: Date = Date()
-    ) async throws -> (id: String, status: String) {
+    ) async throws -> (id: String, status: String, pointsAwarded: Int?) {
         #if canImport(FirebaseFunctions)
         guard isAvailable else { throw FirebaseError.authNotAvailable }
         let payload = wishlistCallablePayload(familyId: familyId, childId: childId)
@@ -634,7 +658,8 @@ final class CloudSyncEngine {
         let data = result.data as? [String: Any]
         return (
             data?["completionId"] as? String ?? UUID().uuidString,
-            data?["status"] as? String ?? "AWAITING_APPROVAL"
+            data?["status"] as? String ?? "AWAITING_APPROVAL",
+            data?["pointsAwarded"] as? Int
         )
         #else
         throw FirebaseError.authNotAvailable
@@ -658,12 +683,98 @@ final class CloudSyncEngine {
         #endif
     }
 
+    func approveTaskCompletion(
+        familyId: String,
+        completion: TaskCompletion,
+        task: KiddoTask?,
+        message: String?
+    ) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        var payload: [String: Any] = [
+            "familyId": familyId,
+            "completionId": completion.id,
+            "taskId": completion.taskId,
+            "childId": completion.childId,
+            "pointValue": task?.pointValue ?? 0,
+            "taskName": task?.name ?? "",
+        ]
+        if let message, !message.isEmpty {
+            payload["message"] = message
+        }
+        _ = try await Functions.functions()
+            .httpsCallable("approveTaskCompletion")
+            .call(payload)
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    func rejectTaskCompletion(familyId: String, completionId: String, reason: String) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        _ = try await Functions.functions()
+            .httpsCallable("rejectTaskCompletion")
+            .call([
+                "familyId": familyId,
+                "completionId": completionId,
+                "reason": reason,
+            ])
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    func approveRewardClaim(
+        familyId: String,
+        claim: RewardClaim,
+        reward: Reward?,
+        message: String?
+    ) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        var payload: [String: Any] = [
+            "familyId": familyId,
+            "claimId": claim.id,
+            "rewardId": claim.rewardId,
+            "childId": claim.childId,
+            "pointCost": reward?.pointCost ?? 0,
+            "rewardName": reward?.name ?? "",
+        ]
+        if let message, !message.isEmpty {
+            payload["message"] = message
+        }
+        _ = try await Functions.functions()
+            .httpsCallable("approveRewardClaim")
+            .call(payload)
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
+    func rejectRewardClaim(familyId: String, claimId: String, reason: String) async throws {
+        #if canImport(FirebaseFunctions)
+        guard isAvailable else { throw FirebaseError.authNotAvailable }
+        _ = try await Functions.functions()
+            .httpsCallable("rejectRewardClaim")
+            .call([
+                "familyId": familyId,
+                "claimId": claimId,
+                "reason": reason,
+            ])
+        #else
+        throw FirebaseError.authNotAvailable
+        #endif
+    }
+
     // MARK: - Wishlist callables
 
     /// Clears the kids-session token (parent sign-in/out path).
     func clearKidsSessionAuth() {
         kidsAccessToken = nil
         kidsSessionWishlistEnabled = false
+        kidsRefreshTask?.cancel()
+        kidsRefreshTask = nil
     }
 
     private func wishlistCallablePayload(
@@ -1271,6 +1382,17 @@ final class CloudSyncEngine {
                 #else
                 break
                 #endif
+            }
+        }
+    }
+
+    private func startKidsSessionRefresh() {
+        kidsRefreshTask?.cancel()
+        kidsRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                guard !Task.isCancelled, let self else { break }
+                await self.refreshKidsSessionFromCloud()
             }
         }
     }
