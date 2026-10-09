@@ -532,6 +532,68 @@ final class AppState {
         return try store.claimReward(rewardId: rewardId, childId: childId)
     }
 
+    // MARK: - Parent approvals
+
+    /// Commits the decision to the server before reporting success so every
+    /// client receives the same completion state and point balance.
+    func approveMission(_ completion: TaskCompletion, message: String? = nil) async throws {
+        guard let familyId = store.family?.id else { throw FirebaseError.invalidFamily }
+        if cloudSync.isAvailable {
+            try await cloudSync.approveTaskCompletion(
+                familyId: familyId,
+                completion: completion,
+                task: task(id: completion.taskId),
+                message: message
+            )
+            await refreshFamilyFromCloud()
+            return
+        }
+        try store.approveCompletion(completion.id, message: message)
+    }
+
+    func rejectMission(_ completion: TaskCompletion, reason: String) async throws {
+        guard let familyId = store.family?.id else { throw FirebaseError.invalidFamily }
+        if cloudSync.isAvailable {
+            try await cloudSync.rejectTaskCompletion(
+                familyId: familyId,
+                completionId: completion.id,
+                reason: reason
+            )
+            await refreshFamilyFromCloud()
+            return
+        }
+        try store.rejectCompletion(completion.id, reason: reason)
+    }
+
+    func approveRewardRequest(_ claim: RewardClaim, message: String? = nil) async throws {
+        guard let familyId = store.family?.id else { throw FirebaseError.invalidFamily }
+        if cloudSync.isAvailable {
+            try await cloudSync.approveRewardClaim(
+                familyId: familyId,
+                claim: claim,
+                reward: reward(id: claim.rewardId),
+                message: message
+            )
+            await refreshFamilyFromCloud()
+            return
+        }
+        try store.approveClaim(claim.id, message: message)
+    }
+
+    func rejectRewardRequest(_ claim: RewardClaim, reason: String) async throws {
+        guard let familyId = store.family?.id else { throw FirebaseError.invalidFamily }
+        if cloudSync.isAvailable {
+            try await cloudSync.rejectRewardClaim(
+                familyId: familyId,
+                claimId: claim.id,
+                reason: reason
+            )
+            await refreshFamilyFromCloud()
+            return
+        }
+        try store.rejectClaim(claim.id, reason: reason)
+    }
+
     func task(id: String) -> KiddoTask? {
         store.tasks.first { $0.id == id }
     }

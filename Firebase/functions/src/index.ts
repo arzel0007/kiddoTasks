@@ -562,6 +562,29 @@ async function touchFamily(familyId: string): Promise<void> {
   );
 }
 
+// Some parent editing flows write individual Firestore documents directly.
+// Mirror those writes to the family marker so native and web listeners see
+// task, reward, and child changes just as quickly as callable-driven actions.
+export const mirrorFamilyChange = functions.firestore
+  .document("{collectionId}/{documentId}")
+  .onWrite(async (change, context) => {
+    const watchedCollections = new Set([
+      "children",
+      "tasks",
+      "taskCompletions",
+      "rewards",
+      "rewardClaims",
+      "pointTransactions",
+      "achievements",
+      "wishlistItems",
+    ]);
+    if (!watchedCollections.has(context.params.collectionId)) return null;
+    const data = change.after.exists ? change.after.data() : change.before.data();
+    const familyId = typeof data?.familyId === "string" ? data.familyId : "";
+    if (familyId) await touchFamily(familyId);
+    return null;
+  });
+
 export const submitTaskCompletion = functions.https.onCall(async (data, context) => {
   const actor = await resolveFamilyActor(data, context);
   const familyId = actor.familyId;
@@ -750,10 +773,10 @@ export const approveTaskCompletion = functions.https.onCall(
       );
     }
 
-    const { completionId, taskId, childId, familyId, pointValue } = data;
+    const { completionId, taskId, childId, familyId } = data;
 
     // Validate inputs
-    if (!completionId || !taskId || !childId || !familyId || !pointValue) {
+    if (!completionId || !taskId || !childId || !familyId) {
       throw new functions.https.HttpsError(
         "invalid-argument",
         "Missing required fields"
@@ -810,7 +833,7 @@ export const approveTaskCompletion = functions.https.onCall(
 
       // Security: prefer the task's server-stored point value over the
       // client-supplied one so points can't be arbitrarily awarded.
-      let awardedPoints = Number(pointValue) || 0;
+      let awardedPoints = Number(data.pointValue) || 0;
       const taskDoc = await db.collection("tasks").doc(String(taskId)).get();
       if (taskDoc.exists) {
         const task = taskDoc.data();
@@ -824,7 +847,7 @@ export const approveTaskCompletion = functions.https.onCall(
           awardedPoints = task.pointValue;
         }
       }
-      if (!awardedPoints || awardedPoints <= 0) {
+      if (!Number.isFinite(awardedPoints) || awardedPoints < 0) {
         throw new functions.https.HttpsError(
           "invalid-argument",
           "Invalid point value"
@@ -832,7 +855,9 @@ export const approveTaskCompletion = functions.https.onCall(
       }
 
       // Transaction: re-check status so concurrent approvals cannot double-award.
-      const transactionId = db.collection("pointTransactions").doc().id;
+      const transactionId = awardedPoints > 0
+        ? db.collection("pointTransactions").doc().id
+        : null;
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(db.collection("taskCompletions").doc(completionId));
         if (!snap.exists) {
@@ -845,29 +870,34 @@ export const approveTaskCompletion = functions.https.onCall(
         if (typeof current.familyId === "string" && current.familyId !== familyId) {
           throw new functions.https.HttpsError("permission-denied", "Completion not in family");
         }
-        tx.set(db.collection("pointTransactions").doc(transactionId), {
-          familyId,
-          childId,
-          amount: awardedPoints,
-          type: "TASK_COMPLETION",
-          relatedId: completionId,
-          description: `Task completed: ${data.taskName || ""}`,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          createdBy: uid,
-          isReversed: false,
-        });
+        if (transactionId) {
+          tx.set(db.collection("pointTransactions").doc(transactionId), {
+            familyId,
+            childId,
+            amount: awardedPoints,
+            type: "TASK_COMPLETION",
+            relatedId: completionId,
+            description: `Task completed: ${data.taskName || ""}`,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: uid,
+            isReversed: false,
+          });
+        }
         tx.update(db.collection("taskCompletions").doc(completionId), {
           status: "APPROVED",
           approvedAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: uid,
           pointsAwarded: awardedPoints,
           pointTransactionId: transactionId,
+          notes: data.message || "",
         });
-        tx.update(db.collection("children").doc(childId), {
-          activePoints: admin.firestore.FieldValue.increment(awardedPoints),
-          totalPointsEarned: admin.firestore.FieldValue.increment(awardedPoints),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        if (awardedPoints > 0) {
+          tx.update(db.collection("children").doc(childId), {
+            activePoints: admin.firestore.FieldValue.increment(awardedPoints),
+            totalPointsEarned: admin.firestore.FieldValue.increment(awardedPoints),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
       });
 
       await touchFamily(familyId);
@@ -1014,7 +1044,7 @@ export const approveRewardClaim = functions.https.onCall(
           deductionCost = reward.pointCost;
         }
       }
-      if (!deductionCost || deductionCost <= 0) {
+      if (!Number.isFinite(deductionCost) || deductionCost < 0) {
         throw new functions.https.HttpsError(
           "invalid-argument",
           "Invalid point cost"
@@ -1029,7 +1059,9 @@ export const approveRewardClaim = functions.https.onCall(
         );
       }
 
-      const deductionTransactionId = db.collection("pointTransactions").doc().id;
+      const deductionTransactionId = deductionCost > 0
+        ? db.collection("pointTransactions").doc().id
+        : null;
       await db.runTransaction(async (tx) => {
         const claimSnap = await tx.get(db.collection("rewardClaims").doc(String(claimId)));
         if (!claimSnap.exists) {
@@ -1050,27 +1082,32 @@ export const approveRewardClaim = functions.https.onCall(
         if (balance < deductionCost) {
           throw new functions.https.HttpsError("failed-precondition", "Insufficient points");
         }
-        tx.set(db.collection("pointTransactions").doc(deductionTransactionId), {
-          familyId,
-          childId,
-          amount: -deductionCost,
-          type: "REWARD_REDEMPTION",
-          relatedId: claimId,
-          description: `Reward claimed: ${data.rewardName || ""}`,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          createdBy: uid,
-          isReversed: false,
-        });
+        if (deductionTransactionId) {
+          tx.set(db.collection("pointTransactions").doc(deductionTransactionId), {
+            familyId,
+            childId,
+            amount: -deductionCost,
+            type: "REWARD_REDEMPTION",
+            relatedId: claimId,
+            description: `Reward claimed: ${data.rewardName || ""}`,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdBy: uid,
+            isReversed: false,
+          });
+        }
         tx.update(db.collection("rewardClaims").doc(String(claimId)), {
           status: "APPROVED",
           approvedAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: uid,
           pointDeductionTransactionId: deductionTransactionId,
+          notes: data.message || "",
         });
-        tx.update(db.collection("children").doc(String(childId)), {
-          activePoints: admin.firestore.FieldValue.increment(-deductionCost),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        if (deductionCost > 0) {
+          tx.update(db.collection("children").doc(String(childId)), {
+            activePoints: admin.firestore.FieldValue.increment(-deductionCost),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
       });
 
       await touchFamily(familyId);

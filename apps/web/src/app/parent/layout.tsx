@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
-import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { PageSkeleton } from "@/components/skeleton";
 import { toast } from "@/components/toast";
@@ -112,6 +113,15 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [loadFamilyForParent]);
+
+  // All server-authoritative actions bump this document. This keeps every web
+  // page in sync without depending on a focus event or manual reload.
+  useEffect(() => {
+    if (!isFirebaseConfigured || !authUser || !family?.id || kidsMode) return;
+    return onSnapshot(doc(firestore(), "families", family.id), () => {
+      void loadFamilyForParent(authUser.uid);
+    });
+  }, [authUser, family?.id, kidsMode, loadFamilyForParent]);
 
   // Redirect as soon as auth resolves signed-out (not only after the 600ms timer).
   useEffect(() => {

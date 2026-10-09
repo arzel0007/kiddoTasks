@@ -72,14 +72,17 @@ struct TodayDashboardView: View {
                     confirmTitle: "Decline",
                     confirmRole: .destructive
                 ) {
-                    do {
-                        try appState.store.rejectCompletion(completion.id, reason: rejectReason)
-                        appState.toastInfo("Mission declined")
-                    } catch {
-                        appState.toastError(error.localizedDescription)
-                    }
+                    let reason = rejectReason
                     rejectReason = ""
                     rejectingCompletion = nil
+                    Task {
+                        do {
+                            try await appState.rejectMission(completion, reason: reason)
+                            appState.toastInfo("Mission declined")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
+                    }
                 } onCancel: {
                     rejectReason = ""
                     rejectingCompletion = nil
@@ -98,14 +101,17 @@ struct TodayDashboardView: View {
                     confirmTitle: "Approve",
                     confirmRole: .default
                 ) {
-                    do {
-                        try appState.store.approveCompletion(completion.id, message: approveMessage.isEmpty ? nil : approveMessage)
-                        appState.toastSuccess("Mission approved")
-                    } catch {
-                        appState.toastError(error.localizedDescription)
-                    }
+                    let message = approveMessage.isEmpty ? nil : approveMessage
                     approveMessage = ""
                     approvingCompletion = nil
+                    Task {
+                        do {
+                            try await appState.approveMission(completion, message: message)
+                            appState.toastSuccess("Mission approved")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
+                    }
                 } onCancel: {
                     approveMessage = ""
                     approvingCompletion = nil
@@ -121,14 +127,17 @@ struct TodayDashboardView: View {
                     confirmTitle: "Approve",
                     confirmRole: .default
                 ) {
-                    do {
-                        try appState.store.approveClaim(claim.id, message: approveClaimMessage.isEmpty ? nil : approveClaimMessage)
-                        appState.toastSuccess("Reward approved")
-                    } catch {
-                        appState.toastError(error.localizedDescription)
-                    }
+                    let message = approveClaimMessage.isEmpty ? nil : approveClaimMessage
                     approveClaimMessage = ""
                     approvingClaim = nil
+                    Task {
+                        do {
+                            try await appState.approveRewardRequest(claim, message: message)
+                            appState.toastSuccess("Reward approved")
+                        } catch {
+                            appState.toastError(error.localizedDescription)
+                        }
+                    }
                 } onCancel: {
                     approveClaimMessage = ""
                     approvingClaim = nil
@@ -339,7 +348,16 @@ struct TodayDashboardView: View {
                             childName: appState.child(id: claim.childId)?.name ?? "Child",
                             rewardName: appState.reward(id: claim.rewardId)?.name ?? "Reward",
                             onApprove: { approvingClaim = claim },
-                            onDecline: { try? appState.store.rejectClaim(claim.id, reason: "Not now") }
+                            onDecline: {
+                                Task {
+                                    do {
+                                        try await appState.rejectRewardRequest(claim, reason: "Not now")
+                                        appState.toastInfo("Reward declined")
+                                    } catch {
+                                        appState.toastError(error.localizedDescription)
+                                    }
+                                }
+                            }
                         )
                     }
                 }
