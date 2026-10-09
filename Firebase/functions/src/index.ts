@@ -14,6 +14,12 @@ import {
   registerWebPushSubscription,
   unregisterWebPushSubscription,
 } from "./webpush";
+import {
+  computeOccurrenceKey,
+  findBlockingCompletion,
+  normalizeTimeZone,
+  resolveRequiresApproval,
+} from "./occurrence";
 
 export { addWishlistItem, updateWishlistItem, deleteWishlistItem, reviewWishlistItem };
 export {
@@ -600,48 +606,78 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
   if (!childCheck.exists || childCheck.data()?.familyId !== familyId) {
     throw new functions.https.HttpsError("permission-denied", "Child not in family");
   }
-  const requiresApproval = taskDoc.data()?.requiresApproval !== false;
+  const taskData = taskDoc.data() ?? {};
+  const recurrenceType = String(taskData?.recurrence?.type || "oneTime");
 
-  // Kid-reported day (today / yesterday / other). Fall back to server now.
+  // Resolve the approval gate the same way clients do: explicit behaviour
+  // first, then the legacy flag, then the family default (one extra read,
+  // only reached when nothing else answers the question).
+  const behavior = String(taskData?.approvalBehavior || "");
+  const hasExplicitAnswer =
+    behavior === "alwaysRequireApproval" ||
+    behavior === "autoApprove" ||
+    typeof taskData?.requiresApproval === "boolean";
+  const familyDefault = hasExplicitAnswer
+    ? true
+    : (await db.collection("families").doc(familyId).get()).data()?.settings
+        ?.requireApprovalByDefault !== false;
+  const requiresApproval = resolveRequiresApproval(taskData, familyDefault);
+
+  // Kid-reported day (today / yesterday / other). Fall back to server now,
+  // and never accept a future instant — that would skip past the duplicate
+  // guard by claiming tomorrow's occurrence.
   const rawCompletedAt = String(data?.completedAt || "").trim();
   const parsedCompletedAt = rawCompletedAt ? new Date(rawCompletedAt) : null;
-  const completedAtValue =
-    parsedCompletedAt && !Number.isNaN(parsedCompletedAt.getTime())
-      ? admin.firestore.Timestamp.fromDate(parsedCompletedAt)
-      : admin.firestore.FieldValue.serverTimestamp();
+  const submittedAt =
+    parsedCompletedAt && !Number.isNaN(parsedCompletedAt.getTime()) ? parsedCompletedAt : new Date();
+  const keyDate = submittedAt.getTime() > Date.now() ? new Date() : submittedAt;
 
-  // Reject duplicate open completions for the same task/child (point-farm guard).
-  const dupSnap = await db
-    .collection("taskCompletions")
-    .where("familyId", "==", familyId)
-    .where("taskId", "==", String(taskId))
-    .where("childId", "==", String(childId))
-    .limit(20)
-    .get();
-  const openDup = dupSnap.docs.find((d) => {
-    const s = String(d.data()?.status || "");
-    return s === "AWAITING_APPROVAL" || s === "COMPLETED" || s === "APPROVED";
-  });
-  if (openDup) {
-    throw new functions.https.HttpsError(
-      "already-exists",
-      "Already submitted for this mission"
-    );
-  }
+  // Server-authoritative occurrence key — this is what makes phone, iPad and
+  // web agree on whether "today's" submission already exists. `null` for
+  // one-time missions, which are never occurrence-scoped.
+  const timeZone = normalizeTimeZone(data?.timezone);
+  const occurrenceKey = computeOccurrenceKey(recurrenceType, keyDate, timeZone);
 
   const completionRef = db.collection("taskCompletions").doc();
   const autoApprove = !requiresApproval;
-  const pointValue = Number(taskDoc.data()?.pointValue ?? 0);
+  const pointValue = Number(taskData?.pointValue ?? 0);
 
-  if (autoApprove && pointValue > 0) {
-    const txId = db.collection("pointTransactions").doc().id;
-    await db.runTransaction(async (tx) => {
+  // The duplicate check and the write share ONE transaction: two devices
+  // submitting the same instant are serialised, so the loser re-reads after
+  // the winner's write and sees the blocking completion. `null` == blocked.
+  const result = await db.runTransaction(async (tx) => {
+    const dupSnap = await tx.get(
+      db
+        .collection("taskCompletions")
+        .where("familyId", "==", familyId)
+        .where("taskId", "==", String(taskId))
+        .where("childId", "==", String(childId))
+        .limit(50)
+    );
+
+    const blocking = findBlockingCompletion({
+      recurrenceType,
+      requiresApproval,
+      completions: dupSnap.docs.map((doc) => doc.data()),
+      now: keyDate,
+      timeZone,
+    });
+    if (blocking) return null;
+
+    const base = {
+      familyId,
+      taskId: String(taskId),
+      childId: String(childId),
+      completedAt: admin.firestore.Timestamp.fromDate(keyDate),
+      recurrenceType,
+      occurrenceKey,
+    };
+
+    if (autoApprove && pointValue > 0) {
+      const txId = db.collection("pointTransactions").doc().id;
       tx.set(completionRef, {
-        familyId,
-        taskId: String(taskId),
-        childId: String(childId),
+        ...base,
         status: "APPROVED",
-        completedAt: completedAtValue,
         approvedAt: admin.firestore.FieldValue.serverTimestamp(),
         approvedBy: actor.parentUid || "kids-session",
         pointsAwarded: pointValue,
@@ -653,7 +689,7 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
         amount: pointValue,
         type: "TASK_COMPLETION",
         relatedId: completionRef.id,
-        description: `Task completed: ${taskDoc.data()?.name || ""}`,
+        description: `Task completed: ${taskData?.name || ""}`,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         createdBy: actor.parentUid || "kids-session",
         isReversed: false,
@@ -663,21 +699,24 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
         totalPointsEarned: admin.firestore.FieldValue.increment(pointValue),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-    });
-    await touchFamily(familyId);
-    return { completionId: completionRef.id, status: "APPROVED", pointsAwarded: pointValue };
+      return { completionId: completionRef.id, status: "APPROVED", pointsAwarded: pointValue };
+    }
+
+    const status = requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED";
+    tx.set(completionRef, { ...base, status });
+    return { completionId: completionRef.id, status, pointsAwarded: null };
+  });
+
+  if (result === null) {
+    throw new functions.https.HttpsError(
+      "already-exists",
+      "Already submitted for this mission"
+    );
   }
 
-  await completionRef.set({
-    familyId,
-    taskId: String(taskId),
-    childId: String(childId),
-    status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED",
-    completedAt: completedAtValue,
-  });
   // Bump family stamp so other devices (iOS) refresh promptly.
   await touchFamily(familyId);
-  return { completionId: completionRef.id, status: requiresApproval ? "AWAITING_APPROVAL" : "COMPLETED" };
+  return result;
 });
 
 export const claimReward = functions.https.onCall(async (data, context) => {

@@ -35,6 +35,7 @@ import type {
 } from "./types";
 import { canAddTask, isOwnerEmail } from "./entitlements";
 import { requiresApprovalFromBehavior } from "./catalog";
+import { computeOccurrenceKey, deviceTimeZone, taskRecurrenceType } from "./occurrence";
 import { errorMessage } from "./errors";
 import { isWishlistEnabled } from "./wishlist";
 
@@ -926,6 +927,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       taskId: input.taskId,
       childId: input.childId,
       completedAt: input.completedAt || new Date().toISOString(),
+      // The server derives the family-local occurrence key from this, so it
+      // reaches the same verdict as this browser's card.
+      timezone: deviceTimeZone(),
     };
     if (!parentUid || get().kidsMode) {
       if (!kidsAccessToken) {
@@ -941,6 +945,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       const status = (data.status ?? "AWAITING_APPROVAL") as TaskCompletion["status"];
       const now = new Date().toISOString();
       const task = tasks.find((t) => t.id === input.taskId);
+      const submittedAt = new Date(input.completedAt || now);
       set({
         completions: [
           ...completions,
@@ -951,6 +956,10 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
             childId: input.childId,
             status,
             completedAt: input.completedAt || now,
+            // Mirrors the server-computed key so the card flips immediately.
+            occurrenceKey: task
+              ? computeOccurrenceKey(taskRecurrenceType(task), submittedAt, deviceTimeZone())
+              : null,
             pointsAwarded: status === "APPROVED" ? task?.pointValue ?? 0 : undefined,
           },
         ],

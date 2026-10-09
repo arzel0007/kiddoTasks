@@ -360,7 +360,10 @@ struct MissionsView: View {
                     } else {
                         List {
                             ForEach(Array(missions.enumerated()), id: \.element.id) { index, task in
-                                let completion = appState.store.todaysCompletion(taskId: task.id, childId: child.id)
+                                // Status for THIS occurrence only — never history — plus
+                                // the server's verdict on whether a new submit is allowed.
+                                let completion = appState.store.latestOccurrenceCompletion(taskId: task.id, childId: child.id)
+                                let blocked = appState.store.blockingCompletion(taskId: task.id, childId: child.id)
                                 Button {
                                     selectedTask = task
                                 } label: {
@@ -372,7 +375,7 @@ struct MissionsView: View {
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    if completion == nil || completion?.status == .rejected {
+                                    if blocked == nil {
                                         Button {
                                             quickSubmit(task: task, child: child)
                                         } label: {
@@ -529,8 +532,15 @@ struct TaskDetailView: View {
     @State private var when: MissionWhen = .today
     @State private var otherDate = Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date()
 
+    /// Status for the current occurrence (a rejection is included so the kid
+    /// still sees why the mission is open again).
     var existing: TaskCompletion? {
-        appState.store.todaysCompletion(taskId: task.id, childId: child.id)
+        appState.store.latestOccurrenceCompletion(taskId: task.id, childId: child.id)
+    }
+
+    /// The server's verdict — `nil` means a new submission is allowed.
+    var blocker: TaskCompletion? {
+        appState.store.blockingCompletion(taskId: task.id, childId: child.id)
     }
 
     var body: some View {
@@ -575,8 +585,8 @@ struct TaskDetailView: View {
                     }
                 }
 
-                // When did you do it?
-                if existing == nil || existing?.status == .rejected {
+                // When did you do it? — only when the server would accept it.
+                if blocker == nil {
                     Text("When did you do it?")
                         .font(KiddoTasksDesignTokens.Typography.titleSmall)
                     HStack(spacing: 8) {

@@ -85,6 +85,8 @@ export type TaskCompletion = {
   childId: string;
   status: "AWAITING_APPROVAL" | "APPROVED" | "REJECTED" | "COMPLETED";
   completedAt?: string;
+  /** Server-authoritative occurrence (e.g. `D:2026-10-09` / `W:2026-W41`). */
+  occurrenceKey?: string | null;
   approvedAt?: string | null;
   notes?: string | null;
   pointsAwarded?: number | null;

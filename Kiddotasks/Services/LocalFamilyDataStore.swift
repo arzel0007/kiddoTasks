@@ -648,24 +648,44 @@ final class LocalFamilyDataStore {
         guard children.contains(where: { $0.id == childId }) else {
             throw FirebaseError.invalidChild
         }
-        let isOneTime = task.recurrence.type == .oneTime
-        let hasOpenCompletion = completions.contains { existing in
-            existing.taskId == taskId
-                && existing.childId == childId
-                && existing.status != .rejected
-                && (isOneTime || Calendar.current.isDateInToday(existing.completedAt))
-        }
-        guard !hasOpenCompletion else {
-            throw FirebaseError.operationFailed("Already submitted — wait for a parent or try again tomorrow.")
-        }
         let requiresApproval = task.requiresParentApproval(using: family.settings)
+        // Exactly the rule the server duplicate guard applies: occurrence-aware
+        // for recurring missions, permanent for one-time missions, and reopened
+        // as soon as a parent has approved an approval-gated mission.
+        if let blocking = CompletionEligibility.blockingCompletion(
+            of: task,
+            childId: childId,
+            in: completions,
+            at: completedAt,
+            requiresApproval: requiresApproval
+        ) {
+            let waitingOnParent =
+                blocking.status == .awaitingApproval || blocking.status == .completed
+            let reason: String
+            if waitingOnParent {
+                reason = "Already sent — waiting for a parent to check it."
+            } else {
+                switch task.recurrence.type {
+                case .oneTime:
+                    reason = "This mission only counts once — it is already done."
+                case .weekly:
+                    reason = "Already done this week — try again next week."
+                default:
+                    reason = "Already done for today — try again tomorrow."
+                }
+            }
+            throw FirebaseError.operationFailed(reason)
+        }
         let status: CompletionStatus = requiresApproval ? .awaitingApproval : .approved
         var completion = TaskCompletion(
             familyId: family.id,
             taskId: taskId,
             childId: childId,
             status: status,
-            completedAt: completedAt
+            completedAt: completedAt,
+            occurrenceKey: CompletionEligibility.occurrenceKey(
+                for: task.recurrence, at: completedAt
+            )
         )
         if !requiresApproval {
             completion = awardPoints(for: completion, task: task, parentId: "system")
@@ -694,22 +714,19 @@ final class LocalFamilyDataStore {
             persistCloudAcknowledgement()
             return
         }
-        if completions.contains(where: {
-            $0.taskId == taskId
-                && $0.childId == childId
-                && Calendar.current.isDate($0.completedAt, inSameDayAs: completedAt)
-                && $0.status != .rejected
-        }) {
-            persistCloudAcknowledgement()
-            return
-        }
+        // The server already ran the duplicate guard, so anything it accepted
+        // gets recorded as-is. The old "skip when something already exists
+        // today" rule would now discard legitimate follow-up submissions from
+        // the same day, since recurring missions reopen once a parent decides.
+        let recurrence = tasks.first(where: { $0.id == taskId })?.recurrence ?? .oneTime
         let completion = TaskCompletion(
             id: id,
             familyId: family.id,
             taskId: taskId,
             childId: childId,
             status: completionStatus,
-            completedAt: completedAt
+            completedAt: completedAt,
+            occurrenceKey: CompletionEligibility.occurrenceKey(for: recurrence, at: completedAt)
         )
         applyCloudAwardIfNeeded(to: completion, childId: childId, pointsAwarded: pointsAwarded)
         completions.append(completion)
@@ -1188,12 +1205,31 @@ final class LocalFamilyDataStore {
         }
     }
 
-    func todaysCompletion(taskId: String, childId: String) -> TaskCompletion? {
-        completions.last {
-            $0.taskId == taskId
-            && $0.childId == childId
-            && Calendar.current.isDateInToday($0.completedAt)
-        }
+    /// Status to show on the Kids Station card for the mission's CURRENT
+    /// occurrence. Historical completions are deliberately invisible so a
+    /// daily or weekly chore never stays greyed out forever.
+    ///
+    /// Deliberately NOT `todaysCompletion(...)`: an "is it done today" check is
+    /// what made recurring missions stay blocked forever after one run. Use
+    /// `latestOccurrenceCompletion` (display) and `blockingCompletion` (gating).
+    func latestOccurrenceCompletion(taskId: String, childId: String) -> TaskCompletion? {
+        guard let task = tasks.first(where: { $0.id == taskId }) else { return nil }
+        return CompletionEligibility.latestOccurrence(
+            of: task, childId: childId, in: completions
+        )
+    }
+
+    /// The completion that blocks a new submission right now, or `nil` when the
+    /// child may submit. Mirrors the server duplicate guard exactly.
+    func blockingCompletion(taskId: String, childId: String) -> TaskCompletion? {
+        guard let task = tasks.first(where: { $0.id == taskId }) else { return nil }
+        guard let family else { return nil }
+        return CompletionEligibility.blockingCompletion(
+            of: task,
+            childId: childId,
+            in: completions,
+            requiresApproval: task.requiresParentApproval(using: family.settings)
+        )
     }
 
     func pendingCompletions() -> [TaskCompletion] {

@@ -15,6 +15,11 @@ final class TaskCompletion: Identifiable, Codable {
     var pointsAwarded: Int?
     var pointTransactionId: String?
     var notes: String?
+    /// Server-authoritative occurrence this completion belongs to —
+    /// `D:2026-10-09` for daily-style recurrence, `W:2026-W41` for weekly.
+    /// `nil` for one-time missions and for rows written before it existed
+    /// (those derive the key from `completedAt`).
+    var occurrenceKey: String?
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -28,6 +33,7 @@ final class TaskCompletion: Identifiable, Codable {
         case pointsAwarded
         case pointTransactionId
         case notes
+        case occurrenceKey
     }
     
     init(
@@ -41,7 +47,8 @@ final class TaskCompletion: Identifiable, Codable {
         approvedBy: String? = nil,
         pointsAwarded: Int? = nil,
         pointTransactionId: String? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        occurrenceKey: String? = nil
     ) {
         self.id = id
         self.familyId = familyId
@@ -54,6 +61,7 @@ final class TaskCompletion: Identifiable, Codable {
         self.pointsAwarded = pointsAwarded
         self.pointTransactionId = pointTransactionId
         self.notes = notes
+        self.occurrenceKey = occurrenceKey
     }
     
     /// Check if completion is finalized (points awarded)

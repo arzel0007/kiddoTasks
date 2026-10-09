@@ -652,6 +652,9 @@ final class CloudSyncEngine {
         var body = payload
         body["taskId"] = taskId
         body["completedAt"] = ISO8601DateFormatter().string(from: completedAt)
+        // The server derives the family-local occurrence key from this, so it
+        // reaches the same verdict as this device's Kids Station.
+        body["timezone"] = TimeZone.current.identifier
         let result = try await Functions.functions()
             .httpsCallable("submitTaskCompletion")
             .call(body)

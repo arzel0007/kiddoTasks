@@ -22,6 +22,11 @@ import type {
   WishlistItem,
 } from "@/lib/types";
 import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
+import {
+  deviceTimeZone,
+  findBlockingCompletion,
+  latestOccurrenceCompletion,
+} from "@/lib/occurrence";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
 import { ArzAvatar, arzHandle } from "@/components/arz-companion";
 import { toast } from "@/components/toast";
@@ -599,30 +604,38 @@ export default function KidsPage() {
             ) : (
               <ul className="space-y-2">
                 {missions.map((t) => {
-                  const done = completions.find(
-                    (c) =>
-                      c.taskId === t.id &&
-                      c.childId === selected.id &&
-                      c.status !== "REJECTED"
-                  );
+                  // One shared verdict for display and for the action gate —
+                  // both must match what the server's duplicate guard allows.
+                  const query = {
+                    task: t,
+                    completions,
+                    childId: selected.id,
+                    now: new Date(),
+                    timeZone: deviceTimeZone(),
+                    familyDefault: family?.settings?.requireApprovalByDefault !== false,
+                  };
+                  // Status to show for THIS occurrence (never history).
+                  const shown = latestOccurrenceCompletion(query);
+                  // Whether the server would refuse a new submission right now.
+                  const blocked = findBlockingCompletion(query);
                   return (
                     <li
                       key={t.id}
-                      className={`card !p-3 flex items-center gap-2.5 ${done ? "opacity-60" : ""}`}
+                      className={`card !p-3 flex items-center gap-2.5 ${
+                        shown && blocked ? "opacity-60" : ""
+                      }`}
                     >
                       <IconTile icon={t.icon} category={t.category} size={40} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold">{t.name}</p>
                         <p className="text-xs text-ink-secondary">
-                          {done
-                            ? done.status.replace("_", " ").toLowerCase()
-                            : "Ready"}
+                          {shown ? shown.status.replace("_", " ").toLowerCase() : "Ready"}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-pill bg-surface px-2 py-0.5 text-xs font-bold text-primary">
                         ★ {t.pointValue}
                       </span>
-                      {!done ? (
+                      {!blocked ? (
                         <button
                           type="button"
                           className="chip-btn chip-btn--primary shrink-0"
