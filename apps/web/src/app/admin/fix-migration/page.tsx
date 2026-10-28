@@ -3,12 +3,8 @@
 import { useState } from "react";
 import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { firebaseFunctions } from "@/lib/firebase";
-import { useRouter } from "next/navigation";
 
 export default function FixMigrationPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +37,24 @@ export default function FixMigrationPage() {
 
       const familyId = parentDocSnap.data().familyId;
 
-      // Call the fix migration cloud function
-      const functions = firebaseFunctions();
-      const fixMigrationDateFormats = httpsCallable(functions, "fixMigrationDateFormats");
+      // Call the API route with auth token (backend calls cloud function)
+      const token = await user.getIdToken();
+      const response = await fetch("/api/fix-migration", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ familyId }),
+      });
 
-      const result = await fixMigrationDateFormats({ familyId });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Fix migration failed");
+      }
 
-      setStatus(`✅ ${(result.data as any).message}`);
+      const result = await response.json();
+      setStatus(`✅ ${result.message}`);
     } catch (err: any) {
       console.error("Fix migration error:", err);
       setError(`❌ ${err.message}`);
