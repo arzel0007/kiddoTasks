@@ -10,7 +10,8 @@ struct DataExportView: View {
     @State private var isExporting = false
     
     // Access the app state to get the store
-    @EnvironmentObject private var appState: AppState
+    // Using @StateObject with lazy initialization since AppState is @Observable not @ObservableObject
+    @State private var appState = AppState()
     
     var body: some View {
         List {
@@ -35,7 +36,7 @@ struct DataExportView: View {
             if !exportText.isEmpty {
                 Section("Exported JSON") {
                     Text(exportText)
-                        .font(.system(.body, design: .monospace))
+                        .font(.system(.body, design: .monospaced))
                         .lineLimit(10)
                     
                     Button("Copy to Clipboard") {
@@ -87,6 +88,6 @@ struct DataExportView: View {
 
 #Preview {
     NavigationView {
-        Text("Open on device to export family data")
+        DataExportView()
     }
 }
