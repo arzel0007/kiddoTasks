@@ -679,7 +679,6 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     try {
       if (!isFirebaseConfigured) throw new Error("Firebase is not configured.");
       const db = firestore();
-if (next.recurrence.weekdays === undefined) { delete next.recurrence.weekdays; }
       await updateDoc(doc(db, "tasks", id), {
         name: next.name,
         description: next.description,
