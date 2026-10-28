@@ -1,5 +1,11 @@
 import Foundation
 import UIKit
+import Observation
+
+// Import the main module to access Kiddotasks types
+#if canImport(Kiddotasks)
+import Kiddotasks
+#endif
 
 /// Helper for exporting family data - call from anywhere in the app
 /// Usage: Add a debug button to any SwiftUI view and call ExportHelper.copyToClipboard()
