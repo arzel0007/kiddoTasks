@@ -40,6 +40,16 @@ final class AppState {
         await cloudSync.refreshFromCloud()
     }
 
+    /// Force a hard sync: clears local cache and re-fetches all data from cloud.
+    /// Use after migrations or when local data is stale.
+    func forceSyncFromCloud() async {
+        guard cloudSync.isAvailable else { return }
+        // Clear the local cache entirely so next fetch pulls everything fresh
+        store.clearLocalCache()
+        // Now refetch from cloud
+        await cloudSync.autoRestoreIfPossible()
+    }
+
     var cloudSyncStatus: CloudSyncStatus { cloudSync.status }
 
     init() {

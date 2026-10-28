@@ -239,6 +239,18 @@ struct TodayDashboardView: View {
             .accessibilityLabel("Open Kids Station")
             
             #if DEBUG
+            Button {
+                Task {
+                    await appState.forceSyncFromCloud()
+                    appState.toastSuccess("Synced from cloud")
+                }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.trailing, 8)
+            
             Button("Export") {
                 ExportHelper().copyToClipboard(store: appState.store)
             }

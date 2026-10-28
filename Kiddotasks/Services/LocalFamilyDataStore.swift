@@ -321,6 +321,24 @@ final class LocalFamilyDataStore {
         persistSyncMeta()
     }
 
+    /// Clears ONLY the local data cache (no tombstones).
+    /// Use after migrations to force a fresh fetch from Firestore.
+    func clearLocalCache() {
+        if isKidsSessionOnly { return }
+        UserDefaults.standard.removeObject(forKey: Self.storageKey)
+        family = nil
+        parent = nil
+        children = []
+        tasks = []
+        completions = []
+        rewards = []
+        claims = []
+        transactions = []
+        achievements = []
+        wishlistItems = []
+        dataRevision = 0
+    }
+
     /// Clears tombstones + pending-push + session (full account reset).
     func clearSyncMeta() {
         removedChildren = []
