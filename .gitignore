@@ -33,3 +33,4 @@ ui-debug.log
 promo/video/frames/
 promo/video/out/check/
 promo/video/node_modules/
+*.tsbuildinfo

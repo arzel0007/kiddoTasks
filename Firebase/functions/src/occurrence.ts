@@ -188,9 +188,12 @@ export function findBlockingCompletion(options: BlockingOptions): CompletionLike
   if (!currentKey) return null;
 
   // Rule 2 — only completions belonging to this occurrence count.
+  // NOTE: No `key === null` fallback. Legacy rows with missing `occurrenceKey`
+  // MUST NOT block a fresh submission — otherwise any historical row (even for
+  // a different day) would permanently lock the task.
   const sameOccurrence = notRejected.filter((completion) => {
     const key = completionOccurrenceKey(completion, recurrenceType, timeZone);
-    return key === null || key === currentKey;
+    return key === currentKey;
   });
   if (sameOccurrence.length === 0) return null;
 

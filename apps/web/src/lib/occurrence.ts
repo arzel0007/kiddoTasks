@@ -141,10 +141,13 @@ function occurrenceCandidates(query: OccurrenceQuery): TaskCompletion[] {
 
   const currentKey = computeOccurrenceKey(recurrenceType, now, timeZone);
   if (!currentKey) return [];
+
+  // NOTE: No `key === null` fallback. Legacy rows with missing `occurrenceKey`
+  // MUST NOT block a fresh submission — otherwise any historical row (even for
+  // a different day) would permanently lock the task.
   return notRejected.filter((completion) => {
     const key = completionOccurrenceKey(completion, recurrenceType, timeZone);
-    // An unresolvable legacy row is treated as matching (fail closed).
-    return key === null || key === currentKey;
+    return key === currentKey;
   });
 }
 
@@ -185,10 +188,20 @@ export function findBlockingCompletion(query: OccurrenceQuery): TaskCompletion |
   );
   if (pending.length > 0) return pending[0];
 
-  // Rule 5 — auto-approved missions are once per occurrence.
-  if (!taskRequiresApproval(task, familyDefault)) return sameOccurrence[0];
+  // Rule 4/5 — Server-authoritative verdict for the current occurrence:
+  //   - If the task requires approval, the occurrence reopens once the parent
+  //     decided (this is handled by the server, where the parent's decision is
+  //     stored as a completion with status APPROVED).
+  //   - Auto-approved missions are locked per occurrence.
+  if (!requiresApprovalFromBehavior(
+    (task.approvalBehavior ?? "useFamilyDefault") as Parameters<
+      typeof requiresApprovalFromBehavior
+    >[0],
+    familyDefault
+  )) {
+    return sameOccurrence[0]; // auto-approved → once per occurrence
+  }
 
-  // Rule 4 — the parent already approved → reopen.
-  return null;
+  return null; // approval-gated → reopened once parent decided
 }
 

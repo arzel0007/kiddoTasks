@@ -193,6 +193,7 @@ type FamilyState = {
     approvalBehavior: TaskApprovalBehavior;
     assignedChildIds: string[];
     recurrence: TaskRecurrenceType;
+    weekdays?: number[];
   }) => Promise<KiddoTask>;
   updateTask: (
     id: string,
@@ -205,6 +206,7 @@ type FamilyState = {
       approvalBehavior: TaskApprovalBehavior;
       assignedChildIds: string[];
       recurrence: TaskRecurrenceType;
+      weekdays?: number[];
     }
   ) => Promise<void>;
   setTaskActive: (id: string, isActive: boolean) => Promise<void>;
@@ -670,7 +672,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       assignedChildIds: input.assignedChildIds,
       recurrence: {
         type: input.recurrence,
-        weekdays: existing.recurrence?.weekdays,
+        // Only include `weekdays` when the task is actually a weekdays task,
+        // otherwise Firestore rejects the write with "Unsupported field value: undefined".
+        ...(input.recurrence === "weekdays" && { weekdays: input.weekdays ?? existing.recurrence?.weekdays ?? [] }),
       },
       updatedAt: new Date().toISOString(),
       version: (existing.version ?? 1) + 1,

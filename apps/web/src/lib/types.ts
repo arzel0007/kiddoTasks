@@ -42,6 +42,7 @@ export type Child = {
   totalPointsEarned: number;
   createdAt?: string;
   updatedAt?: string;
+  version?: number;
 };
 
 export type TaskCategory =
@@ -70,7 +71,7 @@ export type KiddoTask = {
   requiresApproval?: boolean;
   approvalBehavior: string;
   assignedChildIds: string[];
-  recurrence?: { type: TaskRecurrenceType; weekdays?: number[] };
+  recurrence: { type: TaskRecurrenceType; weekdays?: number[] };
   isActive: boolean;
   createdBy: string;
   createdAt?: string;
@@ -88,8 +89,11 @@ export type TaskCompletion = {
   /** Server-authoritative occurrence (e.g. `D:2026-10-09` / `W:2026-W41`). */
   occurrenceKey?: string | null;
   approvedAt?: string | null;
-  notes?: string | null;
+  approvedBy?: string | null;
   pointsAwarded?: number | null;
+  pointTransactionId?: string | null;
+  notes?: string | null;
+  occurrence?: string | null;
 };
 
 export type Reward = {
@@ -113,9 +117,12 @@ export type RewardClaim = {
   familyId: string;
   rewardId: string;
   childId: string;
-  status: "CLAIMED" | "APPROVED" | "REJECTED";
+  status: "CLAIMED" | "APPROVED" | "REJECTED" | "REDEEMED";
   claimedAt?: string;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
   notes?: string | null;
+  pointDeductionTransactionId?: string | null;
 };
 
 export type PointTransaction = {
@@ -126,6 +133,10 @@ export type PointTransaction = {
   type: string;
   description: string;
   createdAt?: string;
+  relatedId?: string;
+  createdBy?: string;
+  isReversed?: boolean;
+  reversalTransactionId?: string;
 };
 
 export type Entitlements = {

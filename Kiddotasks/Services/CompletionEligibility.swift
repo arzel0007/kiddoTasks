@@ -95,7 +95,11 @@ enum CompletionEligibility {
         }
         return notRejected.filter { completion in
             let key = occurrenceKey(of: completion, for: task.recurrence, calendar: calendar)
-            return key == nil || key == currentKey
+            // NOTE: No `key == nil` fallback. Legacy rows with missing
+            // `occurrenceKey` MUST NOT block a fresh submission — otherwise any
+            // historical row (even for a different day) would permanently lock
+            // the task for the family.
+            return key == currentKey
         }
     }
 
@@ -117,7 +121,10 @@ enum CompletionEligibility {
         }
         return mine.last { completion in
             let key = occurrenceKey(of: completion, for: task.recurrence, calendar: calendar)
-            return key == nil || key == currentKey
+            // NOTE: Only current-occurrence completions are shown — a historical
+            // completion from a different day must not be displayed as the
+            // current status.
+            return key == currentKey
         }
     }
 
