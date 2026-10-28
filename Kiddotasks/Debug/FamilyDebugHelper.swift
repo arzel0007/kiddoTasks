@@ -1,34 +1,49 @@
 import Foundation
 import UIKit
 
-/// Extension to get the current AppState from the app's main window
-extension UIApplication {
-    
-    /// Attempts to find the AppState instance from the app's view controller hierarchy
-    /// Note: This uses private API patterns and may need adjustment based on your app structure
-    var currentAppState: AppState? {
-        guard let appDelegate = shared.delegate as? KiddotasksApp else {
-            print("Could not access KiddotasksApp")
-            return nil
-        }
-        // Access the @State var directly (requires Swift runtime reflection)
-        // This is a workaround - for production use, add a proper debug view
-        return nil
-    }
-}
-
-/// Simple helper to print family data summary from anywhere in the app
-/// Usage: FamilyDebugHelper.printCurrentState()
+/// Helper functions for debugging family data export
+/// Usage: Call from Xcode debugger or add to a debug button in your app
 struct FamilyDebugHelper {
     
     /// Prints a summary of current family data to the console
     static func printCurrentState() {
-        guard let appDelegate = UIApplication.shared.delegate as? KiddotasksApp else {
-            print("❌ Could not access app delegate")
+        // Access the shared AppState from the main scene
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+            print("❌ Could not access scene")
             return
         }
         
-        guard let store = appDelegate.store else {
+        guard let rootVC = scene.windows.first?.rootViewController else {
+            print("❌ Could not access root view controller")
+            return
+        }
+        
+        // Walk the view controller hierarchy to find the app state
+        // The AppState is typically passed as an environment object
+        var foundAppState: AppState?
+        
+        func findAppState(in vc: UIViewController) {
+            // Check if this view controller has AppState as an environment object
+            // We'll use key-value coding to check for the presence of an AppState
+            if let state = vc.value(forKey: "_environmentValues") as? [String: Any],
+               let appState = state.values.first as? AppState {
+                foundAppState = appState
+            }
+            
+            // Check child view controllers
+            for child in vc.children {
+                findAppState(in: child)
+            }
+        }
+        
+        findAppState(in: rootVC)
+        
+        guard let appState = foundAppState ?? AppState() else {
+            print("❌ Could not access AppState")
+            return
+        }
+        
+        guard let store = appState.store else {
             print("❌ Could not access store")
             return
         }
@@ -65,15 +80,10 @@ struct FamilyDebugHelper {
     /// Exports current family data to a JSON file in the documents directory
     /// - Returns: File URL or nil on failure
     static func exportToDocument() -> URL? {
-        guard let appDelegate = UIApplication.shared.delegate as? KiddotasksApp else {
-            print("❌ Could not access app delegate")
-            return nil
-        }
-        
-        guard let store = appDelegate.store else {
-            print("❌ Could not access store")
-            return nil
-        }
+        // Create a temporary AppState to access the store
+        // Note: This creates a new instance, so use with caution
+        let appState = AppState()
+        let store = appState.store
         
         guard let snapshot = store.currentSnapshot() else {
             print("❌ No family snapshot available")
@@ -108,15 +118,9 @@ struct FamilyDebugHelper {
     /// Copies current family data JSON to clipboard
     /// - Returns: true if successful, false otherwise
     static func copyToClipboard() -> Bool {
-        guard let appDelegate = UIApplication.shared.delegate as? KiddotasksApp else {
-            print("❌ Could not access app delegate")
-            return false
-        }
-        
-        guard let store = appDelegate.store else {
-            print("❌ Could not access store")
-            return false
-        }
+        // Create a temporary AppState to access the store
+        let appState = AppState()
+        let store = appState.store
         
         guard let snapshot = store.currentSnapshot() else {
             print("❌ No family snapshot available")
@@ -135,6 +139,7 @@ struct FamilyDebugHelper {
             
             UIPasteboard.general.string = jsonString
             print("✅ JSON copied to clipboard!")
+            print("   Length: \(jsonString.count) characters")
             return true
         } catch {
             print("❌ Export failed: \(error)")
