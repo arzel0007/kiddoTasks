@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { firebaseFunctions } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -30,17 +30,16 @@ export default function FixMigrationPage() {
     setError(null);
 
     try {
-      // Get familyId from parent document
+      // Get familyId from parent document using direct read (by UID)
       const db = firestore();
-      const parentRef = collection(db, "parents");
-      const q = query(parentRef, where("email", "==", user.email));
-      const querySnapshot = await getDocs(q);
+      const parentDocRef = doc(db, "parents", user.uid);
+      const parentDocSnap = await getDoc(parentDocRef);
 
-      if (querySnapshot.empty) {
+      if (!parentDocSnap.exists()) {
         throw new Error("Parent record not found");
       }
 
-      const familyId = querySnapshot.docs[0].data().familyId;
+      const familyId = parentDocSnap.data().familyId;
 
       // Call the fix migration cloud function
       const functions = firebaseFunctions();
@@ -50,6 +49,7 @@ export default function FixMigrationPage() {
 
       setStatus(`✅ ${(result.data as any).message}`);
     } catch (err: any) {
+      console.error("Fix migration error:", err);
       setError(`❌ ${err.message}`);
     } finally {
       setLoading(false);
