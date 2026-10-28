@@ -1821,10 +1821,10 @@ export const fixMigrationDateFormats = functions.https.onCall(
     try {
       const uid = context.auth.uid;
 
-      // Verify parent owns this family
-      const parentDoc = await db.collection("parents").doc(uid).get();
+      // Verify parent owns this family using Admin SDK (has permissions)
+      const parentDoc = await admin.firestore().collection("parents").doc(uid).get();
       if (!parentDoc.exists) {
-        throw new functions.https.HttpsError("permission-denied", "Not authorized");
+        throw new functions.https.HttpsError("permission-denied", "Parent not found");
       }
 
       const userFamilyId = parentDoc.data()?.familyId;
@@ -1839,14 +1839,14 @@ export const fixMigrationDateFormats = functions.https.onCall(
       const now = admin.firestore.FieldValue.serverTimestamp();
 
       // Fix tasks
-      const tasksSnapshot = await db
+      const tasksSnapshot = await admin.firestore()
         .collection("tasks")
         .where("familyId", "==", familyId)
         .get();
 
       for (const taskDoc of tasksSnapshot.docs) {
         const task = taskDoc.data();
-        const updates: Record<string, any> = { updatedAt: now };
+        const updates: Record<string, any> = {};
         let needsUpdate = false;
 
         if (typeof task.createdAt === "number") {
@@ -1859,20 +1859,21 @@ export const fixMigrationDateFormats = functions.https.onCall(
         }
 
         if (needsUpdate) {
+          updates.updatedAt = now;
           await taskDoc.ref.update(updates);
           fixedCount++;
         }
       }
 
       // Fix rewards
-      const rewardsSnapshot = await db
+      const rewardsSnapshot = await admin.firestore()
         .collection("rewards")
         .where("familyId", "==", familyId)
         .get();
 
       for (const rewardDoc of rewardsSnapshot.docs) {
         const reward = rewardDoc.data();
-        const updates: Record<string, any> = { updatedAt: now };
+        const updates: Record<string, any> = {};
         let needsUpdate = false;
 
         if (typeof reward.createdAt === "number") {
@@ -1885,20 +1886,21 @@ export const fixMigrationDateFormats = functions.https.onCall(
         }
 
         if (needsUpdate) {
+          updates.updatedAt = now;
           await rewardDoc.ref.update(updates);
           fixedCount++;
         }
       }
 
       // Fix children
-      const childrenSnapshot = await db
+      const childrenSnapshot = await admin.firestore()
         .collection("children")
         .where("familyId", "==", familyId)
         .get();
 
       for (const childDoc of childrenSnapshot.docs) {
         const child = childDoc.data();
-        const updates: Record<string, any> = { updatedAt: now };
+        const updates: Record<string, any> = {};
         let needsUpdate = false;
 
         if (typeof child.dateOfBirth === "number") {
@@ -1915,6 +1917,7 @@ export const fixMigrationDateFormats = functions.https.onCall(
         }
 
         if (needsUpdate) {
+          updates.updatedAt = now;
           await childDoc.ref.update(updates);
           fixedCount++;
         }
@@ -1929,6 +1932,7 @@ export const fixMigrationDateFormats = functions.https.onCall(
       return {
         success: true,
         message: `Fixed date formats in ${fixedCount} documents`,
+        fixedCount,
       };
     } catch (error: any) {
       console.error("[FixMigration] Error:", error);
