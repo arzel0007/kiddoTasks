@@ -46,8 +46,8 @@ final class AppState {
         guard cloudSync.isAvailable else { return }
         // Clear the local cache entirely so next fetch pulls everything fresh
         store.clearLocalCache()
-        // Now refetch from cloud
-        await cloudSync.autoRestoreIfPossible()
+        // Force refresh from cloud, bypassing fingerprint check
+        await cloudSync.forceRefreshFromCloud()
     }
 
     var cloudSyncStatus: CloudSyncStatus { cloudSync.status }

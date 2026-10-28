@@ -950,6 +950,35 @@ final class CloudSyncEngine {
         #endif
     }
 
+    /// Force a hard refresh from cloud, bypassing fingerprint check.
+    /// Used after clearing local cache to ensure fresh data is pulled.
+    func forceRefreshFromCloud() async {
+        #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
+        guard isAvailable,
+              let user = Auth.auth().currentUser,
+              !isRefreshing else { return }
+        // Never pull over unpushed local work.
+        guard !hasUnsyncedLocalChanges else {
+            scheduleRetryPush()
+            return
+        }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            status = .syncing
+            let email = user.email ?? store.parent?.email ?? ""
+            let snapshot = try await fetchSnapshot(uid: user.uid, email: email)
+            // Apply without fingerprint check so we get fresh data even if it "hasn't changed"
+            applyFromCloud(snapshot)
+            lastFetchedFingerprint = fingerprint(of: snapshot)
+            status = .signedIn
+        } catch {
+            // Fetch failed
+            status = .error(error.localizedDescription)
+        }
+        #endif
+    }
+
     private func schedulePush() {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable, Auth.auth().currentUser != nil, store.family != nil else { return }
