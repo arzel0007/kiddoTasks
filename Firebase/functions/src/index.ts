@@ -1674,10 +1674,45 @@ export const migrateDataFromIOS = functions.https.onCall(
       const now = admin.firestore.FieldValue.serverTimestamp();
       let updatedCount = 0;
 
+      // Helper: normalize date fields to ISO8601 strings
+      const normalizeTask = (task: Task) => ({
+        ...task,
+        createdAt: typeof task.createdAt === "number" 
+          ? new Date(task.createdAt).toISOString() 
+          : task.createdAt,
+        updatedAt: typeof task.updatedAt === "number"
+          ? new Date(task.updatedAt).toISOString()
+          : task.updatedAt,
+      });
+
+      const normalizeReward = (reward: Reward) => ({
+        ...reward,
+        createdAt: typeof reward.createdAt === "number"
+          ? new Date(reward.createdAt).toISOString()
+          : reward.createdAt,
+        updatedAt: typeof reward.updatedAt === "number"
+          ? new Date(reward.updatedAt).toISOString()
+          : reward.updatedAt,
+      });
+
+      const normalizeChild = (child: Child) => ({
+        ...child,
+        dateOfBirth: typeof child.dateOfBirth === "number"
+          ? new Date(child.dateOfBirth).toISOString()
+          : child.dateOfBirth,
+        createdAt: typeof child.createdAt === "number"
+          ? new Date(child.createdAt).toISOString()
+          : child.createdAt,
+        updatedAt: typeof child.updatedAt === "number"
+          ? new Date(child.updatedAt).toISOString()
+          : child.updatedAt,
+      });
+
       // 1. Update tasks from iOS (overwrites webapp tasks)
       for (const task of snapshot.tasks) {
+        const normalized = normalizeTask(task);
         await db.collection("tasks").doc(task.id).set({
-          ...task,
+          ...normalized,
           familyId,
           updatedAt: now,
           // Ensure createdBy is set to current parent for new tasks
@@ -1688,8 +1723,9 @@ export const migrateDataFromIOS = functions.https.onCall(
 
       // 2. Update rewards from iOS (overwrites webapp rewards)
       for (const reward of snapshot.rewards) {
+        const normalized = normalizeReward(reward);
         await db.collection("rewards").doc(reward.id).set({
-          ...reward,
+          ...normalized,
           familyId,
           updatedAt: now,
           createdBy: reward.createdBy || uid,
@@ -1707,11 +1743,12 @@ export const migrateDataFromIOS = functions.https.onCall(
         const iosChild = snapshot.children.find((c) => c.id === childDoc.id);
         if (iosChild) {
           const existingData = childDoc.data();
+          const normalized = normalizeChild(iosChild);
           await db.collection("children").doc(childDoc.id).update({
-            avatar: iosChild.avatar,
-            photoData: iosChild.photoData || null,
-            photoURL: iosChild.photoURL || null,
-            dateOfBirth: iosChild.dateOfBirth || null,
+            avatar: normalized.avatar,
+            photoData: normalized.photoData || null,
+            photoURL: normalized.photoURL || null,
+            dateOfBirth: normalized.dateOfBirth || null,
             // PRESERVE existing points from web app
             activePoints: existingData?.activePoints ?? 0,
             totalPointsEarned: existingData?.totalPointsEarned ?? 0,
