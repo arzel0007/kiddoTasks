@@ -1,34 +1,38 @@
 import Foundation
 
-/// Helper for exporting family data - call from Xcode debugger or add to debug UI
+/// Helper for exporting family data - call from anywhere in the app
+/// Usage: Add a debug button to any SwiftUI view and call ExportHelper.copyToClipboard()
 struct ExportHelper {
     
-    /// Call this from Xcode debugger to print current state:
-    /// (lldb) po ExportHelper.printState()
-    static func printState() {
-        guard let appDelegate = UIApplication.shared.delegate as? KiddotasksApp else {
-            print("❌ Could not access app delegate")
+    /// Copy current family data JSON to clipboard
+    /// - Parameter store: The LocalFamilyDataStore instance from your app
+    func copyToClipboard(store: LocalFamilyDataStore) {
+        guard let snapshot = store.currentSnapshot() else {
+            print("❌ No family snapshot available")
             return
         }
         
-        // Access the AppState through the @State property
-        print("📱 KiddoTasks Debug")
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        
-        // Note: Direct @State access from debugger requires Swift runtime
-        // The recommended approach is to add a debug button in the UI
-        print("💡 Add to RootView or ParentCenter for debug button:")
-        print("   Button(\"Export Data\") {")
-        print("       let helper = ExportHelper()")
-        print("       helper.exportCurrentData()")
-        print("   }")
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(snapshot)
+            
+            guard let jsonString = String(data: data, encoding: .utf8) else {
+                print("❌ Could not convert to string")
+                return
+            }
+            
+            UIPasteboard.general.string = jsonString
+            print("✅ JSON copied to clipboard! (\(jsonString.count) chars)")
+            print("📋 Paste into web migration tool at /admin/migrate-data")
+        } catch {
+            print("❌ Export failed: \(error)")
+        }
     }
     
     /// Export current family data to JSON string
-    /// Note: This requires access to the actual AppState instance
-    /// Usage: Add this to a button action in your SwiftUI view
-    func exportCurrentData(store: LocalFamilyDataStore) -> String? {
+    /// - Parameter store: The LocalFamilyDataStore instance from your app
+    func exportToString(store: LocalFamilyDataStore) -> String? {
         guard let snapshot = store.currentSnapshot() else {
             print("❌ No family snapshot available")
             return nil
@@ -53,8 +57,10 @@ struct ExportHelper {
     }
     
     /// Export to documents directory
-    func exportToFile(store: LocalFamilyDataStore, filename: String = "family-data.json") {
-        guard let jsonString = exportCurrentData(store: store) else {
+    /// - Parameter store: The LocalFamilyDataStore instance from your app
+    /// - Parameter filename: Optional filename (defaults to family-data-{date}.json)
+    func exportToFile(store: LocalFamilyDataStore, filename: String = "family-data-\(Date().formatted(date: .omitted, time: .shortened)).json") {
+        guard let jsonString = exportToString(store: store) else {
             return
         }
         
@@ -71,15 +77,5 @@ struct ExportHelper {
         } catch {
             print("❌ Failed to write file: \(error)")
         }
-    }
-    
-    /// Copy to clipboard
-    func copyToClipboard(store: LocalFamilyDataStore) {
-        guard let jsonString = exportCurrentData(store: store) else {
-            return
-        }
-        
-        UIPasteboard.general.string = jsonString
-        print("✅ JSON copied to clipboard! (\(jsonString.count) chars)")
     }
 }

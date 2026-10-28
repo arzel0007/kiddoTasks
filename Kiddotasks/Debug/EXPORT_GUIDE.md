@@ -1,81 +1,140 @@
 # iOS Data Export Guide
 
-## Quick Start (3 Steps)
+## Quick Start (2 Steps)
 
-### Step 1: Add Export Button to Your App
+### Step 1: Add Export Button to a View
 
-Open `RootView.swift` or any view where you want the export functionality:
+Open any SwiftUI view file (e.g., `RootView.swift`, `TodayDashboardView.swift`, or any parent view):
 
 ```swift
-import Kiddotasks.Debug  // Add at the top
+// Add to the top of the file
+import Kiddotasks.Debug  // Or just import the module
 
-// Add this anywhere in your view body:
-#if DEBUG
+// Add this button somewhere in your view body (I recommend near a settings button):
+Button("Export Data") {
+    let helper = ExportHelper()
+    // Access appState.store - depends on how your view is structured
+    // For views with @Environment(AppState.self):
+    helper.copyToClipboard(store: appState.store)
+}
+.font(.caption)
+.foregroundStyle(.secondary)
+```
+
+**If your view doesn't have access to `appState`**, add this at the top:
+```swift
+@Environment(AppState.self) private var appState
+```
+
+### Step 2: Run, Tap, and Use
+
+1. **Build and run** the app in Xcode (Cmd+R)
+2. **Sign in** to your family account
+3. **Tap the "Export Data" button** you just added
+4. Check Xcode console for confirmation:
+   ```
+   ✅ JSON copied to clipboard! (XXXXX chars)
+   ```
+5. **Go to web migration tool**: `/admin/migrate-data`
+6. **Paste the JSON** and click "Migrate Data"
+
+---
+
+## Where to Add the Button
+
+### Option A: RootView (Easiest)
+
+In `RootView.swift`, add to the navigation title:
+
+```swift
+.navigationTitle("Parent Center")
+.navigationBarItems(trailing: 
+    #if DEBUG
+    Button("Export") {
+        let helper = ExportHelper()
+        helper.copyToClipboard(store: appState.store)
+    }
+    .opacity(0.3)
+    #endif
+)
+```
+
+### Option B: TodayDashboardView
+
+In `TodayDashboardView.swift`, add to the parent menu:
+
+```swift
+Section("Debug") {
+    Button("Export Data") {
+        let helper = ExportHelper()
+        helper.copyToClipboard(store: appState.store)
+    }
+}
+.opacity(0.2)
+```
+
+### Option C: Family Settings View
+
+In the family settings view, add at the bottom:
+
+```swift
 Button("Export Family Data") {
     let helper = ExportHelper()
     helper.copyToClipboard(store: appState.store)
 }
 .font(.caption)
-.opacity(0.5)
-#endif
+.opacity(0.3)
 ```
-
-### Step 2: Run the App
-
-1. Build and run the app in Xcode
-2. Sign in to your family
-3. Tap the "Export Family Data" button
-4. The JSON will be copied to your clipboard
-
-### Step 3: Use the Data
-
-1. Paste the JSON from clipboard to a file or the web migration tool
-2. Go to `/admin/migrate-data` in the web app
-3. Paste the JSON and click "Migrate Data"
 
 ---
 
-## Alternative: Using Xcode Debugger
+## What Gets Exported
 
-If you can't modify the code:
-
-1. **Build and run** the app in Xcode
-2. **Click the Pause button** in Xcode to break execution
-3. **Open the debugger console** (View > Debug Area > Activate Console)
-4. **Type this command**:
-```
-po let helper = ExportHelper(); helper.copyToClipboard(store: AppState().store)
-```
-
-Wait, this won't work either because we need the actual app state. Let me provide a better approach:
+The export includes:
+- **Family** info (name, ID, settings)
+- **Children** list (names, avatars, points)
+- **Tasks** list (names, icons, descriptions, recurrence)
+- **Rewards** list (names, icons, point costs)
+- **Completions** (all task completions)
+- **Claims** (reward claims)
+- **Transactions** (point history)
+- **Achievements** (unlock history)
+- **WishlistItems** (gift wishes)
 
 ---
 
-## Recommended Approach: Add Debug Button
+## Troubleshooting
 
-1. Open any parent view (e.g., `ParentCenterViews.swift`)
-2. Add a hidden debug button:
+### "No family snapshot available"
+- You need to sign in first
+- Make sure the family data is loaded
+- Wait 2-3 seconds after signing in
+
+### "Could not convert to string"
+- This is a rare encoding error
+- Try exporting to file instead: `helper.exportToFile(store: appState.store)`
+
+### Button doesn't work
+- Make sure you're importing the debug module correctly
+- Check that `appState` is available in your view
+- Verify you're signed in with a valid family
+
+---
+
+## Alternative: Export to File
+
+If clipboard doesn't work, export to file instead:
+
 ```swift
-#if DEBUG
-Button("Export") {
+Button("Export to File") {
     let helper = ExportHelper()
-    helper.copyToClipboard(store: appState.store)
+    helper.exportToFile(store: appState.store)
 }
-.opacity(0.1)  // Very faint, but tappable
-#endif
 ```
 
-3. Build and run
-4. Tap the faint button to export
-5. Check the Xcode console for confirmation
-
----
-
-## Verifying the Export
-
-After exporting, check the Xcode console for:
+Then retrieve the file from:
 ```
-✅ JSON copied to clipboard! (XXXXX chars)
+Settings → Your App → File Sharing
 ```
 
-Then paste the JSON from clipboard into the web migration tool.
+Or use Xcode's Device Manager to download the app's container.
