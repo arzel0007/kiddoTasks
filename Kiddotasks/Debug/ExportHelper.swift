@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Helper for exporting family data - call from anywhere in the app
 /// Usage: Add a debug button to any SwiftUI view and call ExportHelper.copyToClipboard()
