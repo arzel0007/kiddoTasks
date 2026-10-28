@@ -40,14 +40,13 @@ final class AppState {
         await cloudSync.refreshFromCloud()
     }
 
-    /// Force a hard sync: clears local cache and re-fetches all data from cloud.
+    /// Force a hard sync: invalidate fingerprint and re-fetch fresh data from cloud.
     /// Use after migrations or when local data is stale.
+    /// Does NOT clear local data, so UI stays stable.
     func forceSyncFromCloud() async {
         guard cloudSync.isAvailable else { return }
-        // Clear the local cache entirely so next fetch pulls everything fresh
-        store.clearLocalCache()
-        // Force refresh from cloud, bypassing fingerprint check
-        await cloudSync.forceRefreshFromCloud()
+        // Invalidate the fingerprint so forceRefreshFromCloud bypasses the cache check
+        await cloudSync.invalidateFingerprintAndRefresh()
     }
 
     var cloudSyncStatus: CloudSyncStatus { cloudSync.status }

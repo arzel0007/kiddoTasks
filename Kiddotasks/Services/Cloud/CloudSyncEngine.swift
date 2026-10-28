@@ -979,6 +979,13 @@ final class CloudSyncEngine {
         #endif
     }
 
+    /// Invalidate the cached fingerprint and force a refresh.
+    /// Does not clear local data, so UI remains stable.
+    func invalidateFingerprintAndRefresh() async {
+        lastFetchedFingerprint = nil
+        await forceRefreshFromCloud()
+    }
+
     private func schedulePush() {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable, Auth.auth().currentUser != nil, store.family != nil else { return }
