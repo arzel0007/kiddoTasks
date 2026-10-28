@@ -968,13 +968,38 @@ final class CloudSyncEngine {
             status = .syncing
             let email = user.email ?? store.parent?.email ?? ""
             let snapshot = try await fetchSnapshot(uid: user.uid, email: email)
+            
+            #if DEBUG
+            print("[ForceSync] Fetched snapshot:")
+            print("  - Family: \(snapshot.family.name)")
+            print("  - Children: \(snapshot.children.count)")
+            print("  - Tasks: \(snapshot.tasks.count)")
+            print("  - Rewards: \(snapshot.rewards.count)")
+            let oldSnapshot = store.currentSnapshot()
+            print("[ForceSync] Previous local snapshot:")
+            print("  - Children: \(oldSnapshot?.children.count ?? 0)")
+            print("  - Tasks: \(oldSnapshot?.tasks.count ?? 0)")
+            print("  - Rewards: \(oldSnapshot?.rewards.count ?? 0)")
+            #endif
+            
             // Apply without fingerprint check so we get fresh data even if it "hasn't changed"
             applyFromCloud(snapshot)
             lastFetchedFingerprint = fingerprint(of: snapshot)
             status = .signedIn
+            
+            #if DEBUG
+            print("[ForceSync] Applied snapshot, new local state:")
+            let newSnapshot = store.currentSnapshot()
+            print("  - Children: \(newSnapshot?.children.count ?? 0)")
+            print("  - Tasks: \(newSnapshot?.tasks.count ?? 0)")
+            print("  - Rewards: \(newSnapshot?.rewards.count ?? 0)")
+            #endif
         } catch {
             // Fetch failed
             status = .error(error.localizedDescription)
+            #if DEBUG
+            print("[ForceSync] Error: \(error.localizedDescription)")
+            #endif
         }
         #endif
     }
