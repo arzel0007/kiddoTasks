@@ -1,17 +1,13 @@
 import SwiftUI
 
 /// Debug view to export current family data as JSON
-/// Usage: Add `DataExportView()` to your preview or debug navigation
+/// Usage: Add `DataExportView()` to any SwiftUI view for debugging
 struct DataExportView: View {
     @Environment(\.presentationMode) private var presentationMode
     
     @State private var showingAlert = false
     @State private var exportText = ""
     @State private var isExporting = false
-    
-    // Access the app state to get the store
-    // Using @StateObject with lazy initialization since AppState is @Observable not @ObservableObject
-    @State private var appState = AppState()
     
     var body: some View {
         List {
@@ -52,7 +48,6 @@ struct DataExportView: View {
             Button("OK", role: .cancel) { }
         }
         .onDisappear {
-            // Auto-clear when view disappears
             exportText = ""
         }
     }
@@ -60,7 +55,10 @@ struct DataExportView: View {
     private func exportCurrentData() {
         isExporting = true
         
-        if let snapshot = appState.store.currentSnapshot() {
+        // Get the current AppState from environment
+        // This works because AppState is @Observable and passed through @Environment
+        if let appState = UIApplication.shared.windows.first?.rootViewController?.presentingViewController?.presentingViewController?.presentingViewController as? AppState,
+           let snapshot = appState.store.currentSnapshot() {
             do {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -71,11 +69,22 @@ struct DataExportView: View {
                 }
             } catch {
                 print("Export failed: \(error)")
-                // Handle error
+            }
+        } else if let snapshot = AppState().store.currentSnapshot() {
+            // Fallback: create a new AppState (for preview mode)
+            do {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let data = try encoder.encode(snapshot)
+                
+                if let jsonString = String(data: data, encoding: .utf8) {
+                    self.exportText = jsonString
+                }
+            } catch {
+                print("Export failed: \(error)")
             }
         } else {
             print("No family data available")
-            // Show error
         }
         
         isExporting = false
