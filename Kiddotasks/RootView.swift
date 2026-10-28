@@ -1,9 +1,14 @@
+import Kiddotasks.Debug
 import SwiftUI
 
 struct RootView: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeStore.self) private var theme
     @State private var toastCenter = ToastCenter.shared
+    
+    #if DEBUG
+    @State private var showExportButton = false
+    #endif
 
     var body: some View {
         // Re-eval when navigation-relevant state changes (Observation + computed mode).
@@ -81,6 +86,14 @@ struct RootView: View {
                 Arz.handle(.achievementUnlocked)
             }
         }
+        #if DEBUG
+        .onChange(of: showExportButton) { _, newValue in
+            if newValue {
+                ExportHelper().copyToClipboard(store: appState.store)
+                showExportButton = false
+            }
+        }
+        #endif
     }
 }
 

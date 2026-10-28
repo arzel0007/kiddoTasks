@@ -1,3 +1,4 @@
+import Kiddotasks.Debug
 import SwiftUI
 import Charts
 
@@ -11,6 +12,11 @@ struct TodayDashboardView: View {
     @State private var approvingCompletion: TaskCompletion?
     @State private var approveClaimMessage = ""
     @State private var approvingClaim: RewardClaim?
+    @State private var showExportButton = false
+    
+    #if DEBUG
+    @State private var debugShowExport = false
+    #endif
 
     /// Aggregates recomputed only when the store revision changes — avoids
     /// scanning transactions twice on every unrelated body pass.
@@ -232,6 +238,15 @@ struct TodayDashboardView: View {
             }
             .buttonStyle(KiddoPressStyle())
             .accessibilityLabel("Open Kids Station")
+            
+            #if DEBUG
+            Button("Export") {
+                ExportHelper().copyToClipboard(store: appState.store)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.trailing, 8)
+            #endif
         }
     }
 
@@ -649,3 +664,12 @@ struct ApprovalSheet: View {
         .background(KiddoTasksDesignTokens.Colors.surface)
     }
 }
+
+#if DEBUG
+extension TodayDashboardView {
+    private func debugExport() {
+        ExportHelper().copyToClipboard(store: appState.store)
+    }
+}
+#endif
+
