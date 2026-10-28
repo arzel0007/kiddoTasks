@@ -1,0 +1,68 @@
+<resources>
+    <string name="app_name">KiddoTasks</string>
+
+    <!-- Welcome -->
+    <string name="welcome_title">Welcome to KiddoTasks</string>
+    <string name="welcome_subtitle">Chores, rewards, and family teamwork</string>
+    <string name="btn_sign_in">Sign in</string>
+    <string name="btn_create_family">Create family</string>
+    <string name="btn_continue_as_guest">Continue as guest</string>
+
+    <!-- Auth -->
+    <string name="hint_email">Email</string>
+    <string name="hint_password">Password</string>
+    <string name="hint_confirm_password">Confirm password</string>
+    <string name="btn_sign_in_action">Sign in</string>
+    <string name="btn_create_family_action">Create family</string>
+    <string name="error_invalid_email">Please enter a valid email</string>
+    <string name="error_weak_password">Password must be at least 6 characters</string>
+    <string name="error_passwords_do_not_match">Passwords do not match</string>
+
+    <!-- Kids Station -->
+    <string name="kids_station_title">Kids Station</string>
+    <string name="hint_pin">Enter your 6-digit PIN</string>
+    <string name="btn_unlock">Unlock</string>
+    <string name="error_invalid_pin">Invalid PIN. Try again.</string>
+    <string name="missions_title">Today\'s Missions</string>
+    <string name="btn_complete">Complete</string>
+    <string name="task_submitted">Task submitted for approval</string>
+    <string name="points_earned">Points earned</string>
+
+    <!-- Parent Center -->
+    <string name="parent_center_title">Parent Center</string>
+    <string name="dashboard_title">Family Dashboard</string>
+    <string name="tab_tasks">Tasks</string>
+    <string name="tab_approvals">Approvals</string>
+    <string name="tab_rewards">Rewards</string>
+    <string name="tab_children">Children</string>
+    <string name="tab_settings">Settings</string>
+    <string name="btn_add_task">Add Task</string>
+    <string name="btn_add_child">Add Child</string>
+    <string name="btn_add_reward">Add Reward</string>
+
+    <!-- Approval -->
+    <string name="approve">Approve</string>
+    <string name="decline">Decline</string>
+    <string name="task_approved">Task approved — points awarded</string>
+    <string name="task_declined">Task declined</string>
+    <string name="reward_approved">Reward approved</string>
+    <string name="reward_declined">Reward declined</string>
+
+    <!-- Purchase -->
+    <string name="purchase_title">Get KiddoTasks</string>
+    <string name="purchase_subtitle">One-time payment to unlock the full app</string>
+    <string name="purchase_price">₱200</string>
+    <string name="btn_purchase">Buy now — ₱200</string>
+    <string name="purchase_success">Thank you! KiddoTasks is unlocked.</string>
+    <string name="purchase_cancelled">Purchase cancelled.</string>
+    <string name="purchase_failed">Purchase failed. Please try again.</string>
+    <string name="already_purchased">You already own KiddoTasks.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="pref_kids_pin">Kids Station PIN</string>
+    <string name="pref_require_approval">Require approval by default</string>
+    <string name="pref_enable_notifications">Enable notifications</string>
+    <string name="pref_enable_mini_games">Enable mini games</string>
+    <string name="btn_sign_out">Sign out</string>
+</resources>

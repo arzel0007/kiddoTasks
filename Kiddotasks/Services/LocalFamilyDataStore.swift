@@ -35,7 +35,6 @@ extension FamilySnapshot {
         case wishlistItems
     }
 
-    /// Tolerates older local snapshots that predate wishlist support.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         family = try c.decode(Family.self, forKey: .family)

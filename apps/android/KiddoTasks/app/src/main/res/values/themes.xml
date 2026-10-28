@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/parent_primary</item>
+        <item name="colorPrimaryContainer">@color/parent_secondary</item>
+        <item name="colorSurface">@color/parent_surface</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+
+    <style name="KidsTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/kids_primary</item>
+        <item name="colorPrimaryContainer">@color/kids_secondary</item>
+        <item name="colorSurface">@color/kids_surface</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="android:windowBackground">@color/kids_surface</item>
+    </style>
+</resources>

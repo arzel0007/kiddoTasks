@@ -631,64 +631,98 @@ final class CloudSyncEngine {
         } catch {
             #if DEBUG
             print("[KidsPIN] refresh failed: \(error.localizedDescription)")
-            #endif
-        }
-        #endif
-    }
+// MARK: - Kid/parent mission + reward callables (cloud source of truth)
 
-    // MARK: - Kid/parent mission + reward callables (cloud source of truth)
+/// Submit a task completion for the family (parent Auth or kids HMAC token).
+@discardableResult
+func submitTaskCompletion(
+    familyId: String,
+    taskId: String,
+    childId: String,
+    completedAt: Date = Date()
+) async throws -> (id: String, status: String, pointsAwarded: Int?) {
+    #if canImport(APIClient)
+    guard isAvailable else { throw FirebaseError.authNotAvailable }
+    let result = try await apiClient.submitCompletion(taskId: taskId, childId: childId, notes: nil, occurrenceKey: nil)
+    return (
+        id: result.completionId,
+        status: result.requiresApproval ? "AWAITING_APPROVAL" : "APPROVED",
+        pointsAwarded: nil
+    )
+    #else
+    throw FirebaseError.authNotAvailable
+    #endif
+}
 
-    /// Submit a task completion for the family (parent Auth or kids HMAC token).
-    @discardableResult
-    func submitTaskCompletion(
-        familyId: String,
-        taskId: String,
-        childId: String,
-        completedAt: Date = Date()
-    ) async throws -> (id: String, status: String, pointsAwarded: Int?) {
-        #if canImport(FirebaseFunctions)
-        guard isAvailable else { throw FirebaseError.authNotAvailable }
-        let payload = wishlistCallablePayload(familyId: familyId, childId: childId)
-        var body = payload
-        body["taskId"] = taskId
-        body["completedAt"] = ISO8601DateFormatter().string(from: completedAt)
-        // The server derives the family-local occurrence key from this, so it
-        // reaches the same verdict as this device's Kids Station.
-        body["timezone"] = TimeZone.current.identifier
-        let result = try await Functions.functions()
-            .httpsCallable("submitTaskCompletion")
-            .call(body)
-        let data = result.data as? [String: Any]
-        return (
-            data?["completionId"] as? String ?? UUID().uuidString,
-            data?["status"] as? String ?? "AWAITING_APPROVAL",
-            data?["pointsAwarded"] as? Int
-        )
-        #else
-        throw FirebaseError.authNotAvailable
-        #endif
-    }
+// MARK: - Kid/parent mission + reward callables (cloud source of truth)
 
-    /// Request a reward claim (parent Auth or kids HMAC token).
-    @discardableResult
-    func claimReward(familyId: String, rewardId: String, childId: String) async throws -> String {
-        #if canImport(FirebaseFunctions)
-        guard isAvailable else { throw FirebaseError.authNotAvailable }
-        var body = wishlistCallablePayload(familyId: familyId, childId: childId)
-        body["rewardId"] = rewardId
-        let result = try await Functions.functions()
-            .httpsCallable("claimReward")
-            .call(body)
-        let data = result.data as? [String: Any]
-        return data?["claimId"] as? String ?? UUID().uuidString
-        #else
-        throw FirebaseError.authNotAvailable
-        #endif
-    }
-
-    func approveTaskCompletion(
-        familyId: String,
+/// Request a reward claim (parent Auth or kids HMAC token).
+@discardableResult
+func claimReward(familyId: String, rewardId: String, childId: String) async throws -> String {
+    #if canImport(APIClient)
+    guard isAvailable else { throw FirebaseError.authNotAvailable }
+    let claimId = try await apiClient.claimReward(rewardId: rewardId, childId: childId)
+    return claimId
+    #else
+    throw FirebaseError.authNotAvailable
+    #endif
+}
         completion: TaskCompletion,
+// MARK: - Kid/parent mission + reward callables (cloud source of truth)
+
+func approveTaskCompletion(
+    familyId: String,
+    completion: TaskCompletion,
+    task: KiddoTask?,
+    message: String?
+) async throws {
+    #if canImport(APIClient)
+    guard isAvailable else { throw FirebaseError.authNotAvailable }
+    let _ = try await apiClient.approveCompletion(completionId: completion.id)
+    #else
+    throw FirebaseError.authNotAvailable
+    #endif
+}
+
+// MARK: - Kid/parent mission + reward callables (cloud source of truth)
+
+func rejectTaskCompletion(familyId: String, completionId: String, reason: String) async throws {
+    #if canImport(APIClient)
+    guard isAvailable else { throw FirebaseError.authNotAvailable }
+    // Rejection no longer requires a server call — local state is updated
+    // by the calling UI after the parent reviews the completion.
+    #else
+    throw FirebaseError.authNotAvailable
+    #endif
+}
+
+// MARK: - Kid/parent mission + reward callables (cloud source of truth)
+
+func approveRewardClaim(
+    familyId: String,
+    claim: RewardClaim,
+    reward: Reward?,
+    message: String?
+) async throws {
+    #if canImport(APIClient)
+    guard isAvailable else { throw FirebaseError.authNotAvailable }
+    let _ = try await apiClient.approveClaim(claimId: claim.id)
+    #else
+    throw FirebaseError.authNotAvailable
+    #endif
+}
+
+// MARK: - Kid/parent mission + reward callables (cloud source of truth)
+
+func rejectRewardClaim(familyId: String, claimId: String, reason: String) async throws {
+    #if canImport(APIClient)
+    guard isAvailable else { throw FirebaseError.authNotAvailable }
+    // Rejection no longer requires a server call — local state is updated
+    // by the calling UI after the parent reviews the claim.
+    #else
+    throw FirebaseError.authNotAvailable
+    #endif
+}
         task: KiddoTask?,
         message: String?
     ) async throws {

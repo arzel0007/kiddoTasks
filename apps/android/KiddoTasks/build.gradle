@@ -1,0 +1,32 @@
+buildscript {
+    ext {
+        composeBom = "2024.06.00"
+        kotlinVersion = "1.9.23"
+        navVersion = "2.7.7"
+        lifecycleVersion = "2.7.0"
+        firebaseBom = "33.2.0"
+        playBillingVersion = "6.2.1"
+    }
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.3.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("com.google.gms:google-services:4.4.2")
+        classpath("com.google.firebase:firebase-crashlytics-gradle:2.9.9")
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

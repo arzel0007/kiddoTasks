@@ -670,7 +670,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       assignedChildIds: input.assignedChildIds,
       recurrence: {
         type: input.recurrence,
-        weekdays: existing.recurrence?.weekdays,
+        weekdays: (existing.recurrence as { weekdays?: number[] } | undefined)?.weekdays,
       },
       updatedAt: new Date().toISOString(),
       version: (existing.version ?? 1) + 1,

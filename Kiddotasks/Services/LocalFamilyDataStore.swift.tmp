@@ -1,0 +1,10 @@
+
+extension FamilySnapshot {
+    /// Returns a dictionary representation suitable for API sync payloads.
+    func toDict() -> [String: Any] {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(self) else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+    }
+}
