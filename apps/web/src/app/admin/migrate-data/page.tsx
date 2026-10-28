@@ -85,17 +85,22 @@ export default function MigrateDataPage() {
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
+      console.log("Firebase not configured");
       setAuthReady(true);
       return;
     }
 
     const auth = firebaseAuth();
+    console.log("Auth initialized, current user:", auth.currentUser?.email || "none");
+    
     if (auth.currentUser) {
+      console.log("User already authenticated:", auth.currentUser.email);
       setAuthUser(auth.currentUser);
       setAuthReady(true);
     }
 
     const unsub = onAuthStateChanged(auth, (user) => {
+      console.log("Auth state changed:", user?.email || "none");
       setAuthUser(user);
       setAuthReady(true);
     });
@@ -121,6 +126,8 @@ export default function MigrateDataPage() {
   };
 
   const handleMigrate = async () => {
+    console.log("Migrate clicked - authUser:", authUser?.email || "none", "authReady:", authReady);
+    
     if (!isFirebaseConfigured) {
       setError("Firebase is not configured");
       return;
@@ -132,6 +139,7 @@ export default function MigrateDataPage() {
     }
 
     if (!authUser) {
+      console.error("No auth user found");
       setError("Please sign in first");
       return;
     }
