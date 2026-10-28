@@ -2,11 +2,6 @@ import Foundation
 import UIKit
 import Observation
 
-// Import the main module to access Kiddotasks types
-#if canImport(Kiddotasks)
-import Kiddotasks
-#endif
-
 /// Helper functions for debugging family data export
 /// Usage: Call from Xcode debugger or add to a debug button in your app
 struct FamilyDebugHelper {

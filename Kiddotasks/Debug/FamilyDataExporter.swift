@@ -1,10 +1,4 @@
 import Foundation
-import Observation
-
-// Import the main module to access Kiddotasks types
-#if canImport(Kiddotasks)
-import Kiddotasks
-#endif
 
 /// Export current family data as JSON string
 /// Use: let json = FamilyDataExporter.exportCurrentFamily(store: appState.store)

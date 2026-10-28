@@ -3,7 +3,7 @@ import SwiftUI
 /// Debug view to export current family data as JSON
 /// Usage: Add `DataExportView()` to any SwiftUI view for debugging
 struct DataExportView: View {
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(AppState.self) private var appState
     
     @State private var showingAlert = false
     @State private var exportText = ""
@@ -55,23 +55,7 @@ struct DataExportView: View {
     private func exportCurrentData() {
         isExporting = true
         
-        // Get the current AppState from environment
-        // This works because AppState is @Observable and passed through @Environment
-        if let appState = UIApplication.shared.windows.first?.rootViewController?.presentingViewController?.presentingViewController?.presentingViewController as? AppState,
-           let snapshot = appState.store.currentSnapshot() {
-            do {
-                let encoder = JSONEncoder()
-                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                let data = try encoder.encode(snapshot)
-                
-                if let jsonString = String(data: data, encoding: .utf8) {
-                    self.exportText = jsonString
-                }
-            } catch {
-                print("Export failed: \(error)")
-            }
-        } else if let snapshot = AppState().store.currentSnapshot() {
-            // Fallback: create a new AppState (for preview mode)
+        if let snapshot = appState.store.currentSnapshot() {
             do {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -99,4 +83,5 @@ struct DataExportView: View {
     NavigationView {
         DataExportView()
     }
+    .environment(AppState())
 }
