@@ -1,18 +1,14 @@
 import Foundation
 
 /// Export current family data as JSON string
-/// Use: let json = FamilyDataExporter.exportCurrentFamily()
+/// Use: let json = FamilyDataExporter.exportCurrentFamily(store: AppState().store)
 /// Then share this JSON with the webapp migration tool
 struct FamilyDataExporter {
     
     /// Exports the current family data as a JSON string
+    /// - Parameter store: The LocalFamilyDataStore instance to export from
     /// Returns nil if no family data is available
-    static func exportCurrentFamily() -> String? {
-        guard let store = LocalFamilyDataStore.shared else {
-            print("LocalFamilyDataStore not available")
-            return nil
-        }
-        
+    static func exportCurrentFamily(store: LocalFamilyDataStore) -> String? {
         guard let snapshot = store.currentSnapshot() else {
             print("No family snapshot available")
             return nil
@@ -30,9 +26,11 @@ struct FamilyDataExporter {
     }
     
     /// Exports to a file in the documents directory
+    /// - Parameter store: The LocalFamilyDataStore instance to export from
+    /// - Parameter filename: Optional filename (defaults to family-data-{date}.json)
     /// Returns the file URL or nil on failure
-    static func exportToFile(filename: String = "family-data-\(Date()).json") -> URL? {
-        guard let jsonString = exportCurrentFamily() else {
+    static func exportToFile(store: LocalFamilyDataStore, filename: String = "family-data-\(Date()).json") -> URL? {
+        guard let jsonString = exportCurrentFamily(store: store) else {
             return nil
         }
         
@@ -52,12 +50,8 @@ struct FamilyDataExporter {
     }
     
     /// Prints the current family data summary to console
-    static func printSummary() {
-        guard let store = LocalFamilyDataStore.shared else {
-            print("LocalFamilyDataStore not available")
-            return
-        }
-        
+    /// - Parameter store: The LocalFamilyDataStore instance to export from
+    static func printSummary(store: LocalFamilyDataStore) {
         guard let snapshot = store.currentSnapshot() else {
             print("No family snapshot available")
             return

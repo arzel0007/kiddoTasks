@@ -9,6 +9,9 @@ struct DataExportView: View {
     @State private var exportText = ""
     @State private var isExporting = false
     
+    // Access the app state to get the store
+    @EnvironmentObject private var appState: AppState
+    
     var body: some View {
         List {
             Section {
@@ -32,14 +35,14 @@ struct DataExportView: View {
             if !exportText.isEmpty {
                 Section("Exported JSON") {
                     Text(exportText)
-                        .font(.monospace)
+                        .font(.system(.body, design: .monospace))
                         .lineLimit(10)
                     
                     Button("Copy to Clipboard") {
                         UIPasteboard.general.string = exportText
                         showingAlert = true
                     }
-                    .buttonStyle(BorderlessButtonStyle()
+                    .buttonStyle(BorderlessButtonStyle())
                 }
             }
         }
@@ -47,7 +50,7 @@ struct DataExportView: View {
         .alert("Copied!", isPresented: $showingAlert) {
             Button("OK", role: .cancel) { }
         }
-        .onChange(of: presentationMode.wrappedValue) { _, _ in
+        .onDisappear {
             // Auto-clear when view disappears
             exportText = ""
         }
@@ -56,10 +59,7 @@ struct DataExportView: View {
     private func exportCurrentData() {
         isExporting = true
         
-        // Access the shared store
-        let store = LocalFamilyDataStore.shared
-        
-        if let snapshot = store.currentSnapshot() {
+        if let snapshot = appState.store.currentSnapshot() {
             do {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -87,6 +87,6 @@ struct DataExportView: View {
 
 #Preview {
     NavigationView {
-        DataExportView()
+        Text("Open on device to export family data")
     }
 }
