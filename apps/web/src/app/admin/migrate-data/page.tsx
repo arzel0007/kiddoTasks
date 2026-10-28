@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useFamilyStore } from "@/lib/family-store";
-import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
+import { firebaseAuth, firestore, firebaseFunctions, isFirebaseConfigured } from "@/lib/firebase";
 import { doc, setDoc, updateDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import { useRouter } from "next/navigation";
 
 interface Child {
@@ -151,69 +152,13 @@ export default function MigrateDataPage() {
     try {
       const data: FamilySnapshot = JSON.parse(jsonData);
 
-      const db = firestore();
-      const auth = getAuth();
+      // Call the cloud function instead of direct Firestore writes
+      const functions = firebaseFunctions();
+      const migrateDataFromIOS = httpsCallable(functions, "migrateDataFromIOS");
 
-      // Get current familyId from user
-      const usersRef = collection(db, "parents");
-      const q = query(usersRef, where("email", "==", authUser.email));
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        throw new Error("Parent record not found");
-      }
+      const result = await migrateDataFromIOS({ snapshot: data });
 
-      const parentDoc = querySnapshot.docs[0];
-      const familyId = parentDoc.data().familyId;
-
-      // Update tasks from iOS (overwrite webapp tasks)
-      for (const task of data.tasks) {
-        await setDoc(doc(db, "tasks", task.id), {
-          ...task,
-          familyId,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      // Update rewards from iOS (overwrite webapp rewards)
-      for (const reward of data.rewards) {
-        await setDoc(doc(db, "rewards", reward.id), {
-          ...reward,
-          familyId,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      // Update children icons/avatars but KEEP webapp points
-      const childrenSnapshot = await getDocs(
-        query(collection(db, "children"), where("familyId", "==", familyId))
-      );
-
-      for (const childDoc of childrenSnapshot.docs) {
-        const iosChild = data.children.find((c) => c.id === childDoc.id);
-        if (iosChild) {
-          await updateDoc(childDoc.ref, {
-            avatar: iosChild.avatar,
-            photoData: iosChild.photoData,
-            photoURL: iosChild.photoURL,
-            dateOfBirth: iosChild.dateOfBirth,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      }
-
-      // Update task recurrence with weekdays field for recurring tasks
-      for (const task of data.tasks) {
-        if (
-          task.recurrence.type === "weekdays" &&
-          Array.isArray(task.recurrence.weekdays)
-        ) {
-          await updateDoc(doc(db, "tasks", task.id), {
-            "recurrence.weekdays": task.recurrence.weekdays,
-          });
-        }
-      }
-
+      console.log("Migration result:", result.data);
       setStatus("Migration completed successfully! Refresh both apps.");
       setError(null);
 

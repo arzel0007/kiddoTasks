@@ -1561,3 +1561,198 @@ async function validateChildInFamily(
 // KiddoTasks push notifications: Firestore triggers (taskCompletions /
 // rewardClaims / pointTransactions( + the server-managed device-token registry.
 export * from "./notifications";
+
+
+// MARK: - Data Migration (iOS → Web)
+
+interface Child {
+  id: string;
+  name: string;
+  familyId: string;
+  avatar: { emoji: string; colorHex: string };
+  photoData?: string | null;
+  photoURL?: string | null;
+  dateOfBirth?: string | null;
+  activePoints: number;
+  totalPointsEarned: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface Task {
+  id: string;
+  familyId: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  pointValue: number;
+  requiresApproval?: boolean;
+  approvalBehavior: string;
+  assignedChildIds: string[];
+  recurrence: { type: string; weekdays?: number[] };
+  isActive: boolean;
+  createdBy: string;
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
+}
+
+interface Reward {
+  id: string;
+  familyId: string;
+  name: string;
+  description: string;
+  icon: string;
+  pointCost: number;
+  eligibleChildIds: string[];
+  requiresApproval?: boolean;
+  isActive: boolean;
+  createdBy: string;
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
+}
+
+interface FamilySnapshot {
+  family: {
+    id: string;
+    name: string;
+    members: string[];
+    familyCode: string;
+    settings: Record<string, unknown>;
+  };
+  children: Child[];
+  tasks: Task[];
+  rewards: Reward[];
+}
+
+/**
+ * Migrate data from iOS app into web app.
+ * Parent can only migrate into their own family.
+ * Web app points are PRESERVED; iOS tasks/rewards/icons are MERGED.
+ */
+export const migrateDataFromIOS = functions.https.onCall(
+  async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Must be logged in"
+      );
+    }
+
+    const { snapshot } = data as { snapshot: FamilySnapshot };
+    if (!snapshot) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Missing snapshot data"
+      );
+    }
+
+    try {
+      const uid = context.auth.uid;
+
+      // Verify parent owns this family
+      const parentDoc = await db.collection("parents").doc(uid).get();
+      if (!parentDoc.exists) {
+        throw new functions.https.HttpsError("permission-denied", "Not authorized");
+      }
+
+      const familyId = parentDoc.data()?.familyId;
+      if (!familyId) {
+        throw new functions.https.HttpsError("permission-denied", "No family found");
+      }
+
+      // Only allow migration into the parent's own family
+      if (snapshot.family.id !== familyId) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Cannot migrate into another family"
+        );
+      }
+
+      const now = admin.firestore.FieldValue.serverTimestamp();
+      let updatedCount = 0;
+
+      // 1. Update tasks from iOS (overwrites webapp tasks)
+      for (const task of snapshot.tasks) {
+        await db.collection("tasks").doc(task.id).set({
+          ...task,
+          familyId,
+          updatedAt: now,
+          // Ensure createdBy is set to current parent for new tasks
+          createdBy: task.createdBy || uid,
+        });
+        updatedCount++;
+      }
+
+      // 2. Update rewards from iOS (overwrites webapp rewards)
+      for (const reward of snapshot.rewards) {
+        await db.collection("rewards").doc(reward.id).set({
+          ...reward,
+          familyId,
+          updatedAt: now,
+          createdBy: reward.createdBy || uid,
+        });
+        updatedCount++;
+      }
+
+      // 3. Update child icons/avatars (PRESERVE webapp points)
+      const childrenSnapshot = await db
+        .collection("children")
+        .where("familyId", "==", familyId)
+        .get();
+
+      for (const childDoc of childrenSnapshot.docs) {
+        const iosChild = snapshot.children.find((c) => c.id === childDoc.id);
+        if (iosChild) {
+          const existingData = childDoc.data();
+          await db.collection("children").doc(childDoc.id).update({
+            avatar: iosChild.avatar,
+            photoData: iosChild.photoData || null,
+            photoURL: iosChild.photoURL || null,
+            dateOfBirth: iosChild.dateOfBirth || null,
+            // PRESERVE existing points from web app
+            activePoints: existingData?.activePoints ?? 0,
+            totalPointsEarned: existingData?.totalPointsEarned ?? 0,
+            updatedAt: now,
+          });
+          updatedCount++;
+        }
+      }
+
+      // 4. Update recurring task weekdays
+      for (const task of snapshot.tasks) {
+        if (
+          task.recurrence.type === "weekdays" &&
+          Array.isArray(task.recurrence.weekdays)
+        ) {
+          await db
+            .collection("tasks")
+            .doc(task.id)
+            .update({
+              "recurrence.weekdays": task.recurrence.weekdays,
+              updatedAt: now,
+            });
+        }
+      }
+
+      await touchFamily(familyId);
+
+      console.log(
+        `[Migration] Success: updated ${updatedCount} docs for family ${familyId}`
+      );
+
+      return {
+        success: true,
+        message: `Migration completed: ${updatedCount} items updated`,
+      };
+    } catch (error: any) {
+      console.error("[Migration] Error:", error);
+      throw new functions.https.HttpsError(
+        "internal",
+        error.message || "Migration failed"
+      );
+    }
+  }
+);
