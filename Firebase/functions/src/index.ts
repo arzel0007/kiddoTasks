@@ -1793,3 +1793,149 @@ export const migrateDataFromIOS = functions.https.onCall(
     }
   }
 );
+
+
+/**
+ * Admin function to fix date format issues in already-migrated data.
+ * Converts numeric timestamps to ISO8601 strings in tasks, rewards, and children.
+ * Call this ONCE after a problematic migration to repair the data.
+ */
+export const fixMigrationDateFormats = functions.https.onCall(
+  async (data, context) => {
+    // Only allow authenticated users to call this
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Must be logged in"
+      );
+    }
+
+    const { familyId } = data as { familyId: string };
+    if (!familyId) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Missing familyId"
+      );
+    }
+
+    try {
+      const uid = context.auth.uid;
+
+      // Verify parent owns this family
+      const parentDoc = await db.collection("parents").doc(uid).get();
+      if (!parentDoc.exists) {
+        throw new functions.https.HttpsError("permission-denied", "Not authorized");
+      }
+
+      const userFamilyId = parentDoc.data()?.familyId;
+      if (userFamilyId !== familyId) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Can only fix own family data"
+        );
+      }
+
+      let fixedCount = 0;
+      const now = admin.firestore.FieldValue.serverTimestamp();
+
+      // Fix tasks
+      const tasksSnapshot = await db
+        .collection("tasks")
+        .where("familyId", "==", familyId)
+        .get();
+
+      for (const taskDoc of tasksSnapshot.docs) {
+        const task = taskDoc.data();
+        const updates: Record<string, any> = { updatedAt: now };
+        let needsUpdate = false;
+
+        if (typeof task.createdAt === "number") {
+          updates.createdAt = new Date(task.createdAt).toISOString();
+          needsUpdate = true;
+        }
+        if (typeof task.updatedAt === "number") {
+          updates.updatedAt = new Date(task.updatedAt).toISOString();
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await taskDoc.ref.update(updates);
+          fixedCount++;
+        }
+      }
+
+      // Fix rewards
+      const rewardsSnapshot = await db
+        .collection("rewards")
+        .where("familyId", "==", familyId)
+        .get();
+
+      for (const rewardDoc of rewardsSnapshot.docs) {
+        const reward = rewardDoc.data();
+        const updates: Record<string, any> = { updatedAt: now };
+        let needsUpdate = false;
+
+        if (typeof reward.createdAt === "number") {
+          updates.createdAt = new Date(reward.createdAt).toISOString();
+          needsUpdate = true;
+        }
+        if (typeof reward.updatedAt === "number") {
+          updates.updatedAt = new Date(reward.updatedAt).toISOString();
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await rewardDoc.ref.update(updates);
+          fixedCount++;
+        }
+      }
+
+      // Fix children
+      const childrenSnapshot = await db
+        .collection("children")
+        .where("familyId", "==", familyId)
+        .get();
+
+      for (const childDoc of childrenSnapshot.docs) {
+        const child = childDoc.data();
+        const updates: Record<string, any> = { updatedAt: now };
+        let needsUpdate = false;
+
+        if (typeof child.dateOfBirth === "number") {
+          updates.dateOfBirth = new Date(child.dateOfBirth).toISOString();
+          needsUpdate = true;
+        }
+        if (typeof child.createdAt === "number") {
+          updates.createdAt = new Date(child.createdAt).toISOString();
+          needsUpdate = true;
+        }
+        if (typeof child.updatedAt === "number") {
+          updates.updatedAt = new Date(child.updatedAt).toISOString();
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          await childDoc.ref.update(updates);
+          fixedCount++;
+        }
+      }
+
+      await touchFamily(familyId);
+
+      console.log(
+        `[FixMigration] Fixed ${fixedCount} docs with date format issues in family ${familyId}`
+      );
+
+      return {
+        success: true,
+        message: `Fixed date formats in ${fixedCount} documents`,
+      };
+    } catch (error: any) {
+      console.error("[FixMigration] Error:", error);
+      throw new functions.https.HttpsError(
+        "internal",
+        error.message || "Cleanup failed"
+      );
+    }
+  }
+);
