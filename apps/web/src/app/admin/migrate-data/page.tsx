@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFamilyStore } from "@/lib/family-store";
 import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
 import { doc, setDoc, updateDoc, collection, getDocs, query, where } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
 interface Child {
@@ -80,6 +80,28 @@ export default function MigrateDataPage() {
   } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) {
+      setAuthReady(true);
+      return;
+    }
+
+    const auth = firebaseAuth();
+    if (auth.currentUser) {
+      setAuthUser(auth.currentUser);
+      setAuthReady(true);
+    }
+
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthReady(true);
+    });
+
+    return () => unsub();
+  }, []);
 
   const handleParseJSON = () => {
     try {
@@ -109,8 +131,7 @@ export default function MigrateDataPage() {
       return;
     }
 
-    const user = firebaseAuth().currentUser;
-    if (!user) {
+    if (!authUser) {
       setError("Please sign in first");
       return;
     }
@@ -127,7 +148,7 @@ export default function MigrateDataPage() {
 
       // Get current familyId from user
       const usersRef = collection(db, "parents");
-      const q = query(usersRef, where("email", "==", user.email));
+      const q = query(usersRef, where("email", "==", authUser.email));
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
@@ -207,6 +228,27 @@ export default function MigrateDataPage() {
           </p>
         </header>
 
+        {!authReady && (
+          <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-6">
+            <div className="text-lg font-semibold text-blue-900">
+              🔄 Checking authentication...
+            </div>
+          </div>
+        )}
+
+        {authReady && !authUser && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-6">
+            <div className="text-lg font-semibold text-red-900">❌ Not Signed In</div>
+            <p className="mt-2 text-red-900">
+              Please sign in first by going to the{" "}
+              <a href="/parent/today" className="underline font-semibold">
+                Parent Dashboard
+              </a>
+              .
+            </p>
+          </div>
+        )}
+
         <div className="mb-6 rounded-xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold text-ink">Instructions</h2>
           <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-ink-secondary">
@@ -277,7 +319,7 @@ export default function MigrateDataPage() {
 
         <button
           onClick={handleMigrate}
-          disabled={loading || !jsonData}
+          disabled={loading || !jsonData || !authUser}
           className="w-full rounded-xl bg-primary px-6 py-4 font-semibold text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Migrating Data..." : "Migrate Data"}
