@@ -6,7 +6,6 @@ import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
 import { doc, setDoc, updateDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 
 interface Child {
   id: string;
@@ -79,6 +78,8 @@ export default function MigrateDataPage() {
     tasks: number;
     rewards: number;
   } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleParseJSON = () => {
     try {
@@ -88,42 +89,41 @@ export default function MigrateDataPage() {
         tasks: data.tasks.length,
         rewards: data.rewards.length,
       });
-      toast.success("JSON parsed successfully!");
+      setStatus("JSON parsed successfully!");
+      setError(null);
     } catch (error) {
-      toast.error("Invalid JSON format");
+      setError("Invalid JSON format");
+      setStatus(null);
       setPreview(null);
     }
   };
 
   const handleMigrate = async () => {
     if (!isFirebaseConfigured) {
-      toast.error("Firebase is not configured");
+      setError("Firebase is not configured");
       return;
     }
 
     if (!jsonData) {
-      toast.error("Please paste the iOS JSON data first");
+      setError("Please paste the iOS JSON data first");
       return;
     }
 
     const user = firebaseAuth().currentUser;
     if (!user) {
-      toast.error("Please sign in first");
+      setError("Please sign in first");
       return;
     }
 
     setLoading(true);
+    setStatus(null);
+    setError(null);
 
     try {
       const data: FamilySnapshot = JSON.parse(jsonData);
 
       const db = firestore();
       const auth = getAuth();
-
-      // Start transaction
-      const tasksRef = collection(db, "tasks");
-      const rewardsRef = collection(db, "rewards");
-      const childrenRef = collection(db, "children");
 
       // Get current familyId from user
       const usersRef = collection(db, "parents");
@@ -137,8 +137,7 @@ export default function MigrateDataPage() {
       const parentDoc = querySnapshot.docs[0];
       const familyId = parentDoc.data().familyId;
 
-      // 1. Copy tasks from iOS (overwrite webapp tasks)
-      // This preserves iOS task icons, descriptions, recurrence settings
+      // Update tasks from iOS (overwrite webapp tasks)
       for (const task of data.tasks) {
         await setDoc(doc(db, "tasks", task.id), {
           ...task,
@@ -147,8 +146,7 @@ export default function MigrateDataPage() {
         });
       }
 
-      // 2. Copy rewards from iOS (overwrite webapp rewards)
-      // This preserves iOS reward icons, configurations
+      // Update rewards from iOS (overwrite webapp rewards)
       for (const reward of data.rewards) {
         await setDoc(doc(db, "rewards", reward.id), {
           ...reward,
@@ -157,16 +155,14 @@ export default function MigrateDataPage() {
         });
       }
 
-      // 3. Update children icons/avatars but KEEP webapp points
-      // Get current webapp children points first
+      // Update children icons/avatars but KEEP webapp points
       const childrenSnapshot = await getDocs(
-        query(childrenRef, where("familyId", "==", familyId))
+        query(collection(db, "children"), where("familyId", "==", familyId))
       );
 
       for (const childDoc of childrenSnapshot.docs) {
         const iosChild = data.children.find((c) => c.id === childDoc.id);
         if (iosChild) {
-          // Update only avatar/photo fields, keep points from webapp
           await updateDoc(childDoc.ref, {
             avatar: iosChild.avatar,
             photoData: iosChild.photoData,
@@ -177,8 +173,7 @@ export default function MigrateDataPage() {
         }
       }
 
-      // 4. Update task recurrence with weekdays field for recurring tasks
-      // This ensures iOS tasks with weekdays recurrence work correctly
+      // Update task recurrence with weekdays field for recurring tasks
       for (const task of data.tasks) {
         if (
           task.recurrence.type === "weekdays" &&
@@ -190,14 +185,13 @@ export default function MigrateDataPage() {
         }
       }
 
-      toast.success("Migration completed! Please refresh both apps.");
-      router.push("/parent/family");
+      setStatus("Migration completed successfully! Refresh both apps.");
+      setError(null);
 
     } catch (error: any) {
       console.error("Migration error:", error);
-      toast.error(
-        `Migration failed: ${error.message || "Unknown error"}`
-      );
+      setError(`Migration failed: ${error.message || "Unknown error"}`);
+      setStatus(null);
     } finally {
       setLoading(false);
     }
@@ -216,7 +210,7 @@ export default function MigrateDataPage() {
         <div className="mb-6 rounded-xl border border-border bg-card p-6">
           <h2 className="text-lg font-semibold text-ink">Instructions</h2>
           <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-ink-secondary">
-            <li>Export family data from iOS app</li>
+            <li>Export family data from iOS app (see MIGRATION_PLAN.md)</li>
             <li>Paste the JSON data below</li>
             <li>Click "Parse JSON" to preview</li>
             <li>Click "Migrate Data" to merge</li>
@@ -267,6 +261,20 @@ export default function MigrateDataPage() {
           </div>
         )}
 
+        {status && (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-6">
+            <div className="text-lg font-semibold text-emerald-900">✅ Success</div>
+            <p className="mt-2 text-emerald-900">{status}</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-6">
+            <div className="text-lg font-semibold text-red-900">❌ Error</div>
+            <p className="mt-2 text-red-900">{error}</p>
+          </div>
+        )}
+
         <button
           onClick={handleMigrate}
           disabled={loading || !jsonData}
@@ -297,6 +305,39 @@ export default function MigrateDataPage() {
               <strong>Refresh both apps</strong> after migration to see updates
             </li>
           </ul>
+        </div>
+
+        <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-6">
+          <h3 className="text-lg font-semibold text-blue-900">
+            📋 How to Export from iOS
+          </h3>
+          <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-blue-900">
+            <li>
+              Open the iOS app on your device
+            </li>
+            <li>
+              Add this code to a debug view or use a debugger:
+              <pre className="mt-2 rounded bg-blue-100 p-3 font-mono text-xs">
+                {`// In a Swift debugger or debug view
+import FamilyDataExporter
+
+// Print summary to console
+FamilyDataExporter.printSummary()
+
+// Get JSON string
+if let json = FamilyDataExporter.exportCurrentFamily() {
+    print(json)
+}
+`}
+              </pre>
+            </li>
+            <li>
+              Copy the full JSON output
+            </li>
+            <li>
+              Paste it into the field above
+            </li>
+          </ol>
         </div>
       </div>
     </div>
