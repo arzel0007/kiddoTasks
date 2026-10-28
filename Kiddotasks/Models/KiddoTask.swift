@@ -179,3 +179,29 @@ struct TaskRecurrence: Codable, Equatable {
     static let weekly = TaskRecurrence(type: .weekly)
     static let custom = TaskRecurrence(type: .custom)
 }
+
+// MARK: - Firestore Codable Fix
+// Prevent Firestore from encoding `undefined` for nil weekdays
+extension TaskRecurrence {
+    // Custom encoding to skip weekdays when nil/empty (Firestore rejects `undefined`)
+    internal func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, for: .type)
+        // Only encode weekdays if non-nil AND non-empty
+        if let weekdays = weekdays, !weekdays.isEmpty {
+            try container.encode(weekdays, for: .weekdays)
+        }
+        // If weekdays is nil or empty, the key is omitted entirely
+    }
+    
+    internal init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decode(RecurrenceType, for: .type)
+        weekdays = try? container.decode([Int].self, for: .weekdays)
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case weekdays
+    }
+}

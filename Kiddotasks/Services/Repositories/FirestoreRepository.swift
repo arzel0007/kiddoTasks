@@ -164,3 +164,48 @@ extension FirestoreRepository {
     }
 }
 #endif
+
+// MARK: - Firestore Field Cleaning
+extension FirestoreRepository {
+    
+    /// Recursively removes nil/unwanted values from dictionary that Firestore rejects
+    private func cleanFirestoreFields(_ fields: [String: Any]) -> [String: Any] {
+        var cleaned = [String: Any]()
+        
+        for (key, value) in fields {
+            switch value {
+            case let v as [String: Any]:
+                // Recursively clean nested dictionaries
+                let cleanedNested = cleanFirestoreFields(v)
+                if !cleanedNested.isEmpty {
+                    cleaned[key] = cleanedNested
+                }
+            case let v as [Any]:
+                // Clean arrays - remove nil elements
+                let cleanedArray = v.compactMap { item in
+                    if let item = item as? [String: Any] {
+                        return cleanFirestoreFields(item)
+                    }
+                    return item
+                }
+                if !cleanedArray.isEmpty {
+                    cleaned[key] = cleanedArray
+                }
+            case is NSNull:
+                // Skip nil values
+                break
+            default:
+                // Keep non-nil values
+                cleaned[key] = value
+            }
+        }
+        return cleaned
+    }
+    
+    /// Update document with cleaned fields
+    override func update(id: String, fields: [String: Any]) async throws {
+        let cleanedFields = cleanFirestoreFields(fields)
+        try await db.collection(collectionName).document(id).updateData(cleanedFields)
+    }
+}
+#endif
