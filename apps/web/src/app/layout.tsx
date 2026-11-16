@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   description:
     "Make family chores easier. Parents assign missions and rewards; kids earn stars with a simple PIN on a shared device.",
   applicationName: "KiddoTasks",
+  verification: { google: "7w7cHQVrCOIQl5IKkiOivW2AnC9ov8fL_ONHNvBX06Q" },
   openGraph: {
     type: "website",
     locale: "en_PH",
