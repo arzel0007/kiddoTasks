@@ -10,9 +10,10 @@ import {
 import { BrandLogo } from "@/components/brand-logo";
 
 export const metadata: Metadata = {
-  title: "About KiddoTasks — Growing capable kids",
+  title: "Our Story",
   description:
     "Why KiddoTasks exists: helping children build skills, habits, and confidence through everyday chores—not just points.",
+  alternates: { canonical: "/about" },
 };
 
 export default function AboutPage() {

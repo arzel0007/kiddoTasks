@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "How Kiddotasks works — 3 steps to calmer chore time",
+  title: "How KiddoTasks Works",
   description:
-    "Add your family, assign missions, celebrate progress. A short guide for parents using Kiddotasks.",
+    "Learn how to set up your family, assign recurring chores, and celebrate progress with KiddoTasks missions, stars, and rewards.",
+  alternates: { canonical: "/how-to" },
 };
 
 export default function HowToPage() {

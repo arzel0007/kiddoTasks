@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Summer missions for kids — Kiddotasks guide",
+  title: "Summer Chore Ideas for Kids",
   description:
-    "Outdoor jobs, screen-time swaps, and a simple summer rhythm that still gets chores done.",
+    "Use these simple summer chore ideas to build a light daily rhythm for kids, from watering plants to tidying up and earning chosen rewards.",
+  alternates: { canonical: "/blog/summer-missions" },
 };
 
 export default function BlogSummerChores() {

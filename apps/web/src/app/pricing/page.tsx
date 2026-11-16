@@ -1,4 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Family Chore App Pricing",
+  description:
+    "Compare KiddoTasks Free and Premium. Start with chores, Kids PIN, stars, and rewards at no cost; upgrade when your family needs more.",
+  alternates: { canonical: "/pricing" },
+};
 
 const tiers = [
   {

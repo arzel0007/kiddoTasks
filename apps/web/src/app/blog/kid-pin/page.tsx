@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Why no kid email — Kiddotasks guide",
+  title: "Kids Chore App Login Without Email",
   description:
-    "Kids use a family PIN on a shared device. No email, no bank account, no ads.",
+    "KiddoTasks lets children open their chore list with a family PIN on a shared device. Parents manage the account; kids do not need email.",
+  alternates: { canonical: "/blog/kid-pin" },
 };
 
 export default function BlogKidPin() {
