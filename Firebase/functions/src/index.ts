@@ -1059,7 +1059,7 @@ export const approveRewardClaim = functions.https.onCall(
  * with admin privileges, which is how the app can reconcile the point ledger
  * even though Firestore rules keep raw client ledger writes blocked.
  */
-export const pushFamilySnapshot = functions.https.onCall(async (data, context) => {
+const pushFamilySnapshotHandler = async (data: any, context: functions.https.CallableContext) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
   }
@@ -1266,6 +1266,20 @@ export const pushFamilySnapshot = functions.https.onCall(async (data, context) =
 
   await flushBatch();
   return { ok: true, familyId, deleted };
+};
+
+export const pushFamilySnapshot = functions.https.onCall(async (data, context) => {
+  try {
+    return await pushFamilySnapshotHandler(data, context);
+  } catch (error) {
+    console.error("pushFamilySnapshot failed", {
+      uid: context.auth?.uid ?? "unauthenticated",
+      familyId: String(data?.familyId || ""),
+      code: error instanceof functions.https.HttpsError ? error.code : "internal",
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 });
 
 /**

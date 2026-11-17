@@ -67,6 +67,7 @@ struct ArzLoopVideoView: UIViewRepresentable {
             let item = AVPlayerItem(url: url)
             let queue = AVQueuePlayer(playerItem: item)
             queue.isMuted = true
+            queue.preventsDisplaySleepDuringVideoPlayback = false
             queue.actionAtItemEnd = .advance
             // AVPlayerLooper restarts the template item seamlessly.
             looper = AVPlayerLooper(player: queue, templateItem: item)

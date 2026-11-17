@@ -5,7 +5,6 @@ import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { FREE_LIMITS } from "@/lib/entitlements";
 import { ChildAvatar } from "@/lib/ui";
 import { PageSkeleton } from "@/components/skeleton";
-import { ALLOWANCE_MODES, type AllowanceMode } from "@/lib/entitlements";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
 import { isWishlistEnabled } from "@/lib/wishlist";
@@ -31,15 +30,6 @@ export default function FamilyPage() {
   const { family, children, loading, error, setEnableWishlist, parentEmail } = useFamilyStore();
   const ent = useEntitlements();
   const planDisplay = computePlanDisplay(ent, parentEmail);
-  const [mode, setMode] = useState<AllowanceMode>(
-    (family?.settings?.allowanceMode as AllowanceMode) || "STARS_ONLY"
-  );
-  const [flatAmount, setFlatAmount] = useState(
-    String(family?.settings?.flatDailyAmount ?? 1)
-  );
-  const [weekBonus, setWeekBonus] = useState(
-    family?.settings?.weekBonusTitle || "Full week!"
-  );
   const [wishlistBusy, setWishlistBusy] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [pushStatus, setPushStatus] = useState<string>("…");
@@ -213,65 +203,6 @@ export default function FamilyPage() {
         <a href="/parent/wishlist" className="btn-secondary mt-3 inline-flex w-auto px-4">
           Open wishlist
         </a>
-      </div>
-
-      <div className="card">
-        <h3 className="mb-2 font-bold">Allowance</h3>
-        <p className="mb-2 text-xs text-ink-secondary">
-          Stars stay in the app. These modes help you know what to pay out.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {ALLOWANCE_MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              className={`rounded-full px-3 py-2 text-sm font-semibold ${
-                mode === m.id
-                  ? "bg-primary text-white"
-                  : "bg-surface text-ink-secondary"
-              }`}
-              onClick={() => {
-                setMode(m.id);
-                toast.success(`Allowance mode set to ${m.label}.`);
-              }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        {mode === "FLAT_DAILY" && (
-          <label className="mt-3 block text-sm">
-            <span className="text-ink-secondary">Daily amount when something is done</span>
-            <input
-              type="number"
-              min={0}
-              className="field-input mt-1"
-              value={flatAmount}
-              onChange={(e) => setFlatAmount(e.target.value)}
-              onBlur={() => toast.success("Daily amount saved.")}
-            />
-          </label>
-        )}
-        <p className="mt-2 text-xs text-ink-tertiary">
-          Settings save locally in this web build; full cloud write can be wired to the iOS store API next.
-        </p>
-      </div>
-
-      <div className="card">
-        <h3 className="mb-2 font-bold">Week bonus</h3>
-        <p className="text-xs text-ink-secondary">
-          Celebrate when a child has progress every day of the week.
-        </p>
-        <input
-          className="field-input mt-2"
-          placeholder="Full week!"
-          defaultValue={weekBonus}
-          onBlur={(e) => {
-            const next = e.target.value || "Full week!";
-            setWeekBonus(next);
-            toast.success("Week bonus saved.");
-          }}
-        />
       </div>
 
       <PlanStatusSummary plan={planDisplay} compact />

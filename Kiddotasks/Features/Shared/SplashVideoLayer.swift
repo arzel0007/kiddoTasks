@@ -50,6 +50,7 @@ struct SplashVideoLayer: UIViewRepresentable {
             let item = AVPlayerItem(url: url)
             let player = AVPlayer(playerItem: item)
             player.isMuted = muted
+            player.preventsDisplaySleepDuringVideoPlayback = false
             player.actionAtItemEnd = .pause
             view.playerLayer.player = player
             self.player = player

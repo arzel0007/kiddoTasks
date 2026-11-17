@@ -11,8 +11,8 @@ struct CloudSyncStatusBanner: View {
             label("Syncing family data…", action: nil)
         case .pending:
             label("Changes waiting to sync", action: onRetry)
-        case .error:
-            label("Couldn’t sync. Saved on this device.", action: onRetry)
+        case let .error(message):
+            label("Couldn’t sync. Saved on this device.\n\(message)", action: onRetry)
         case .unavailable:
             label("Saved on this device only", action: nil)
         case .signedIn, .signedOut:
@@ -22,7 +22,10 @@ struct CloudSyncStatusBanner: View {
 
     private func label(_ text: String, action: (() -> Void)?) -> some View {
         HStack(spacing: 10) {
-            Text(text).font(KiddoTasksDesignTokens.Typography.captionLarge)
+            Text(text)
+                .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
             if let action { Button("Retry", action: action).fontWeight(.semibold).accessibilityHint("Try syncing family data again") }
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
