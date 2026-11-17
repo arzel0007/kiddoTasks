@@ -1114,16 +1114,20 @@ const pushFamilySnapshotHandler = async (data: any, context: functions.https.Cal
       ?? (key === "children" ? data?.removedChildren : undefined)
       ?? [];
     const idList: string[] = Array.isArray(ids) ? ids.map(String) : [];
-    for (const id of idList) {
-      if (!id) continue;
-      const ref = db.collection(collection).doc(id);
-      const existing = await ref.get();
-      if (existing.exists && existing.data()?.familyId === familyId) {
-        batch.delete(ref);
-        batchCount += 1;
-        deleted[key].push(id);
-        if (batchCount >= 400) {
-          await flushBatch();
+    for (let offset = 0; offset < idList.length; offset += 100) {
+      const idsChunk = idList.slice(offset, offset + 100).filter(Boolean);
+      if (idsChunk.length === 0) continue;
+      const refs = idsChunk.map((id) => db.collection(collection).doc(id));
+      const snapshots = await db.getAll(...refs);
+      for (let index = 0; index < snapshots.length; index += 1) {
+        const existing = snapshots[index];
+        if (existing.exists && existing.data()?.familyId === familyId) {
+          batch.delete(refs[index]);
+          batchCount += 1;
+          deleted[key].push(idsChunk[index]);
+          if (batchCount >= 400) {
+            await flushBatch();
+          }
         }
       }
     }
@@ -1136,32 +1140,38 @@ const pushFamilySnapshotHandler = async (data: any, context: functions.https.Cal
   const PENDING_STATUSES = new Set(["AWAITING_APPROVAL", "CLAIMED", "PENDING"]);
 
   const upsert = async (collection: string, items: any[], collectionKey: string) => {
-    for (const item of items || []) {
-      if (!item || typeof item.id !== "string") continue;
-      if (typeof item.familyId === "string" && item.familyId !== familyId) continue;
-      // Skip docs deleted from another client (e.g. web) — do not resurrect.
-      const tomb = await db
-        .collection("familyTombstones")
-        .doc(tombstoneId(collectionKey, item.id))
-        .get();
-      if (tomb.exists) continue;
+    const validItems = (items || []).filter((item) =>
+      item && typeof item.id === "string" &&
+      (typeof item.familyId !== "string" || item.familyId === familyId)
+    );
 
-      // Never overwrite another family's document by ID (cross-tenant write).
-      const existingOwned = await db.collection(collection).doc(item.id).get();
-      if (existingOwned.exists) {
-        const existingFamily = existingOwned.data()?.familyId;
-        if (typeof existingFamily === "string" && existingFamily !== familyId) {
-          continue;
-        }
-      }
+    // Read existing docs and tombstones in parallel batches instead of doing
+    // two or three serial Firestore round trips for every snapshot item.
+    for (let offset = 0; offset < validItems.length; offset += 100) {
+      const itemsChunk = validItems.slice(offset, offset + 100);
+      const refs = itemsChunk.map((item) => db.collection(collection).doc(item.id));
+      const tombstoneRefs = itemsChunk.map((item) =>
+        db.collection("familyTombstones").doc(tombstoneId(collectionKey, item.id))
+      );
+      const [existingSnapshots, tombstoneSnapshots] = await Promise.all([
+        db.getAll(...refs),
+        db.getAll(...tombstoneRefs),
+      ]);
 
-      let payload = { ...item, familyId };
+      for (let index = 0; index < itemsChunk.length; index += 1) {
+        const item = itemsChunk[index];
+        const existing = existingSnapshots[index];
+        if (tombstoneSnapshots[index].exists) continue;
 
-      // Approval statuses are terminal: a stale full-snapshot push must never
-      // flip APPROVED/REJECTED back to AWAITING_APPROVAL / CLAIMED.
-      if (collectionKey === "completions" || collectionKey === "claims") {
-        const existing = await db.collection(collection).doc(item.id).get();
-        if (existing.exists) {
+        // Never overwrite another family's document by ID (cross-tenant write).
+        const existingFamily = existing.exists ? existing.data()?.familyId : undefined;
+        if (typeof existingFamily === "string" && existingFamily !== familyId) continue;
+
+        let payload = { ...item, familyId };
+
+        // Approval statuses are terminal: a stale full-snapshot push must never
+        // flip APPROVED/REJECTED back to AWAITING_APPROVAL / CLAIMED.
+        if (collectionKey === "completions" || collectionKey === "claims") {
           const prev = String(existing.data()?.status || "");
           const next = String(item.status || "");
           if (TERMINAL_STATUSES.has(prev) && PENDING_STATUSES.has(next)) {
@@ -1169,16 +1179,12 @@ const pushFamilySnapshotHandler = async (data: any, context: functions.https.Cal
             payload = { ...rest, familyId, status: prev };
           }
         }
-      }
 
-      batch.set(
-        db.collection(collection).doc(item.id),
-        toFirestoreValue(payload),
-        { merge: true }
-      );
-      batchCount += 1;
-      if (batchCount >= 400) {
-        await flushBatch();
+        batch.set(refs[index], toFirestoreValue(payload), { merge: true });
+        batchCount += 1;
+        if (batchCount >= 400) {
+          await flushBatch();
+        }
       }
     }
   };
