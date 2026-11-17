@@ -14,6 +14,7 @@ import { firebaseAuth, firebaseFunctions, isFirebaseConfigured } from "@/lib/fir
 import { useFamilyStore } from "@/lib/family-store";
 import { BrandLogo } from "@/components/brand-logo";
 import { Modal } from "@/components/ui/modal";
+import { FormField } from "@/components/ui/form-field";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
 import { canJoinWithCode, PREMIUM_PRICE } from "@/lib/entitlements";
@@ -103,28 +104,6 @@ const INFO_COPY: Record<InfoKey, { title: string; description?: string }> = {
     description: "A light rhythm that still gets chores done.",
   },
 };
-
-function Field({
-  label,
-  children,
-  error,
-}: {
-  label: string;
-  children: React.ReactNode;
-  error?: string | null;
-}) {
-  return (
-    <div>
-      <label className="field-label">{label}</label>
-      {children}
-      {error ? (
-        <p className="field-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
 
 function WelcomePageInner() {
   const router = useRouter();
@@ -354,7 +333,7 @@ function WelcomePageInner() {
 
   if (pendingVerifyEmail) {
     return (
-      <main className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-5 py-12 sm:px-6">
+      <main id="main-content" tabIndex={-1} className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center px-5 py-12 sm:px-6">
         <div className="card animate-rise text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-light text-3xl">
             ✉️
@@ -456,7 +435,7 @@ function WelcomePageInner() {
 
   if (checkingSession) {
     return (
-      <main className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6">
+      <main id="main-content" tabIndex={-1} className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6">
         <BrandLogo size={72} />
         <p className="mt-4 text-sm text-ink-secondary">Signing you in…</p>
       </main>
@@ -473,9 +452,6 @@ function WelcomePageInner() {
       {/* Header */}
       <header className="landing-header animate-rise">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-3 sm:px-8">
-          <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:rounded-md focus:bg-surface-card focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary">
-            Skip to content
-          </a>
           <div className="flex min-w-0 items-center gap-2.5">
             <BrandLogo size={40} />
             <div className="min-w-0">
@@ -526,7 +502,7 @@ function WelcomePageInner() {
         </div>
       </header>
 
-      <main id="main" className="relative mx-auto w-full max-w-4xl px-5 pb-16 pt-8 sm:px-8 sm:pt-12">
+        <main id="main-content" tabIndex={-1} className="relative mx-auto w-full max-w-4xl px-5 pb-16 pt-8 sm:px-8 sm:pt-12">
         {/* Hero */}
         <section className="animate-rise delay-1 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center sm:hidden">
@@ -713,7 +689,7 @@ function WelcomePageInner() {
           <form key={mode} onSubmit={handleAuth} className="form-swap space-y-3">
             {mode === "signup" && (
               <>
-                <Field label="Family name">
+                <FormField label="Family name">
                   <input
                     className="field-input"
                     value={familyName}
@@ -721,8 +697,8 @@ function WelcomePageInner() {
                     autoComplete="organization"
                     onChange={(e) => setFamilyName(e.target.value)}
                   />
-                </Field>
-                <Field label="Your name">
+                </FormField>
+                <FormField label="Your name">
                   <input
                     className="field-input"
                     value={parentName}
@@ -730,12 +706,12 @@ function WelcomePageInner() {
                     autoComplete="name"
                     onChange={(e) => setParentName(e.target.value)}
                   />
-                </Field>
+                </FormField>
               </>
             )}
 
             {mode === "join" && (
-              <Field label="Family code">
+              <FormField label="Family code">
                 <input
                   className="field-input uppercase"
                   placeholder="KDO-XXXX"
@@ -744,11 +720,11 @@ function WelcomePageInner() {
                   autoComplete="off"
                   onChange={(e) => setFamilyCode(e.target.value)}
                 />
-              </Field>
+              </FormField>
             )}
 
             {mode === "kids" ? (
-              <Field label="Family PIN" error={error}>
+              <FormField label="Family PIN" error={error}>
                 <input
                   className="field-input"
                   inputMode="numeric"
@@ -758,10 +734,10 @@ function WelcomePageInner() {
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 />
-              </Field>
+              </FormField>
             ) : (
               <>
-                <Field label="Email">
+                <FormField label="Email">
                   <input
                     className="field-input"
                     type="email"
@@ -769,8 +745,8 @@ function WelcomePageInner() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
-                </Field>
-                <Field label="Password" error={mode === "signin" || mode === "signup" ? error : null}>
+                </FormField>
+                <FormField label="Password" error={mode === "signin" || mode === "signup" ? error : null}>
                   <input
                     className="field-input"
                     type="password"
@@ -779,7 +755,7 @@ function WelcomePageInner() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                </Field>
+                </FormField>
               </>
             )}
 
@@ -898,7 +874,7 @@ export default function WelcomePage() {
   return (
     <Suspense
       fallback={
-        <main className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6">
+        <main id="main-content" tabIndex={-1} className="page-wash mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6">
           <BrandLogo size={72} />
           <p className="mt-4 text-sm text-ink-secondary">Loading…</p>
         </main>

@@ -156,8 +156,22 @@ function occurrenceCandidates(query: OccurrenceQuery): TaskCompletion[] {
  * `null` means "show no status / show Ready".
  */
 export function latestOccurrenceCompletion(query: OccurrenceQuery): TaskCompletion | null {
-  const candidates = occurrenceCandidates(query);
-  return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+  const history = occurrenceHistory(query);
+  return history.length > 0 ? history[history.length - 1] : null;
+}
+
+/** Every submission for this task/child in the current occurrence, including rejections. */
+export function occurrenceHistory(query: OccurrenceQuery): TaskCompletion[] {
+  const { task, completions, childId, now, timeZone } = query;
+  const mine = completions.filter((completion) =>
+    completion.taskId === task.id && completion.childId === childId
+  ).sort((a, b) => Date.parse(a.completedAt ?? "") - Date.parse(b.completedAt ?? ""));
+  if (taskRecurrenceType(task) === "oneTime") return mine;
+  const currentKey = computeOccurrenceKey(taskRecurrenceType(task), now, timeZone);
+  if (!currentKey) return [];
+  return mine.filter((completion) =>
+    completionOccurrenceKey(completion, taskRecurrenceType(task), timeZone) === currentKey
+  );
 }
 
 /**

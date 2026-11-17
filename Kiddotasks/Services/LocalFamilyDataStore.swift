@@ -1219,6 +1219,11 @@ final class LocalFamilyDataStore {
         )
     }
 
+    func occurrenceCompletionHistory(taskId: String, childId: String) -> [TaskCompletion] {
+        guard let task = tasks.first(where: { $0.id == taskId }) else { return [] }
+        return CompletionEligibility.occurrenceHistory(of: task, childId: childId, in: completions)
+    }
+
     /// The completion that blocks a new submission right now, or `nil` when the
     /// child may submit. Mirrors the server duplicate guard exactly.
     func blockingCompletion(taskId: String, childId: String) -> TaskCompletion? {
@@ -1234,10 +1239,12 @@ final class LocalFamilyDataStore {
 
     func pendingCompletions() -> [TaskCompletion] {
         completions.filter { $0.status == .awaitingApproval || $0.status == .completed }
+            .sorted { $0.completedAt < $1.completedAt }
     }
 
     func pendingClaims() -> [RewardClaim] {
         claims.filter { $0.status == .claimed }
+            .sorted { $0.claimedAt < $1.claimedAt }
     }
 
     func pendingWishlistCount(forChild childId: String? = nil) -> Int {

@@ -12,6 +12,7 @@ import { isWishlistEnabled } from "@/lib/wishlist";
 import { computePlanDisplay } from "@/lib/billing/plan-status";
 import { PlanStatusSummary } from "@/components/plan-status-summary";
 import { Modal } from "@/components/ui/modal";
+import { FamilyLoadError } from "@/components/family-load-error";
 import {
   isWebPushSupported,
   subscribeWebPush,
@@ -27,7 +28,7 @@ import {
 } from "@/lib/about";
 
 export default function FamilyPage() {
-  const { family, children, loading, setEnableWishlist, parentEmail } = useFamilyStore();
+  const { family, children, loading, error, setEnableWishlist, parentEmail } = useFamilyStore();
   const ent = useEntitlements();
   const planDisplay = computePlanDisplay(ent, parentEmail);
   const [mode, setMode] = useState<AllowanceMode>(
@@ -98,17 +99,7 @@ export default function FamilyPage() {
 
   return (
     <div className="space-y-4">
-      {!family ? (
-        <div className="card border-error/40">
-          <p className="font-semibold text-error">
-            Family data didn’t load. Check your connection or sign out and back in.
-          </p>
-          <p className="mt-1 text-sm text-ink-secondary">
-            The Wishlist toggle needs a loaded family. If Tasks/Rewards are also empty,
-            deploy Firestore rules and hard-refresh.
-          </p>
-        </div>
-      ) : null}
+      {!family ? <FamilyLoadError message={error} /> : null}
       <div className="card text-center">
         <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/10">
           {family?.photoURL || family?.photoData ? (

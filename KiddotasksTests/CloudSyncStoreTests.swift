@@ -6,6 +6,27 @@ import XCTest
 /// and session restore. These run entirely without Firebase.
 final class CloudSyncStoreTests: XCTestCase {
 
+    func testCloudDateDecoderAcceptsNumericEpochMilliseconds() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(CloudDateDecoding.decode)
+        let date = try decoder.decode(Date.self, from: Data("1760000000000".utf8))
+        XCTAssertEqual(date.timeIntervalSince1970, 1_760_000_000, accuracy: 0.001)
+    }
+
+    func testCloudDateDecoderAcceptsNumericEpochSeconds() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(CloudDateDecoding.decode)
+        let date = try decoder.decode(Date.self, from: Data("1760000000".utf8))
+        XCTAssertEqual(date.timeIntervalSince1970, 1_760_000_000, accuracy: 0.001)
+    }
+
+    func testCloudDateDecoderStillAcceptsIso8601Strings() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(CloudDateDecoding.decode)
+        let date = try decoder.decode(Date.self, from: Data("\"2026-10-09T12:30:00.000Z\"".utf8))
+        XCTAssertEqual(date.timeIntervalSince1970, 1_791_549_000, accuracy: 0.001)
+    }
+
     override func setUp() {
         super.setUp()
         let store = LocalFamilyDataStore()

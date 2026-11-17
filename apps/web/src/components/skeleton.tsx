@@ -56,6 +56,7 @@ export function SkeletonPlayerGrid({ count = 6 }: { count?: number }) {
 export function PageSkeleton({ rows = 4 }: { rows?: number }) {
   return (
     <div className="space-y-3" aria-busy="true" aria-label="Loading">
+      <p className="sr-only" role="status">Loading your family data…</p>
       <SkeletonStatGrid />
       {Array.from({ length: rows }).map((_, i) => (
         <SkeletonListRow key={i} />

@@ -6,6 +6,8 @@ import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { IconTile, ChildAvatar } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
+import { FormField } from "@/components/ui/form-field";
+import { FamilyLoadError } from "@/components/family-load-error";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -38,15 +40,6 @@ const emptyForm: TaskForm = {
   assignedChildIds: [],
   recurrence: "daily",
 };
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="field-label">{label}</label>
-      {children}
-    </div>
-  );
-}
 
 export default function TasksPage() {
   const {
@@ -167,9 +160,7 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       {error ? (
-        <div className="card border-error/40">
-          <p className="font-semibold text-error">{error}</p>
-        </div>
+        <FamilyLoadError message={error} />
       ) : null}
       <div className="relative">
         <span
@@ -292,28 +283,29 @@ export default function TasksPage() {
         }}
       >
         <form onSubmit={saveForm} className="space-y-3 text-left">
-          <Field label="Name">
+          <FormField label="Name">
             <input
               className="field-input"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               required
             />
-          </Field>
-          <Field label="Description">
+          </FormField>
+          <FormField label="Description">
             <input
               className="field-input"
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
-          </Field>
-          <Field label="Icon">
+          </FormField>
+          <FormField label="Icon">
             <div className="flex flex-wrap gap-2">
               {TASK_ICONS.map((icon) => (
                 <button
                   key={icon}
                   type="button"
                   aria-label={icon}
+                  aria-pressed={form.icon === icon}
                   className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
                     form.icon === icon ? "border-primary bg-primary-light" : "border-border bg-surface"
                   }`}
@@ -323,13 +315,14 @@ export default function TasksPage() {
                 </button>
               ))}
             </div>
-          </Field>
-          <Field label="Category">
+          </FormField>
+          <FormField label="Category">
             <div className="flex flex-wrap gap-2">
               {TASK_CATEGORIES.map((c) => (
                 <button
                   key={c.id}
                   type="button"
+                  aria-pressed={form.category === c.id}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                     form.category === c.id
                       ? "bg-primary text-white"
@@ -341,8 +334,8 @@ export default function TasksPage() {
                 </button>
               ))}
             </div>
-          </Field>
-          <Field label="Star value">
+          </FormField>
+          <FormField label="Star value">
             <input
               className="field-input"
               type="number"
@@ -352,13 +345,14 @@ export default function TasksPage() {
                 setForm((f) => ({ ...f, pointValue: Number(e.target.value) || 0 }))
               }
             />
-          </Field>
-          <Field label="Recurrence">
+          </FormField>
+          <FormField label="Recurrence">
             <div className="flex flex-wrap gap-2">
               {TASK_RECURRENCE_OPTIONS.map((r) => (
                 <button
                   key={r.id}
                   type="button"
+                  aria-pressed={form.recurrence === r.id}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                     form.recurrence === r.id
                       ? "bg-primary text-white"
@@ -370,8 +364,8 @@ export default function TasksPage() {
                 </button>
               ))}
             </div>
-          </Field>
-          <Field label="Approval">
+          </FormField>
+          <FormField label="Approval">
             <select
               className="field-input"
               value={form.approvalBehavior}
@@ -388,14 +382,15 @@ export default function TasksPage() {
                 </option>
               ))}
             </select>
-          </Field>
-          <Field label="Assign to">
+          </FormField>
+          <FormField label="Assign to">
             {children.length === 0 ? (
               <p className="text-xs text-ink-tertiary">No kids yet — chore stays open to all.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
+                  aria-pressed={form.assignedChildIds.length === 0}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                     form.assignedChildIds.length === 0
                       ? "bg-primary text-white"
@@ -411,6 +406,7 @@ export default function TasksPage() {
                     <button
                       key={c.id}
                       type="button"
+                      aria-pressed={on}
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                         on ? "bg-primary text-white" : "bg-surface text-ink-secondary"
                       }`}
@@ -430,7 +426,7 @@ export default function TasksPage() {
                 })}
               </div>
             )}
-          </Field>
+          </FormField>
           {formError ? (
             <p className="field-error" role="alert">
               {formError}

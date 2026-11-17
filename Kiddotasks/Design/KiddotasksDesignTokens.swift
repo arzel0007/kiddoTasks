@@ -45,33 +45,33 @@ struct KiddoTasksDesignTokens {
     
     struct Typography {
         // Display - Large headings (rounded for a friendly, playful feel)
-        static let displayLarge = Font.system(size: 32, weight: .bold, design: .rounded)
-        static let displayMedium = Font.system(size: 28, weight: .bold, design: .rounded)
-        static let displaySmall = Font.system(size: 24, weight: .bold, design: .rounded)
+        static let displayLarge = Font.system(.largeTitle, design: .rounded).weight(.bold)
+        static let displayMedium = Font.system(.title, design: .rounded).weight(.bold)
+        static let displaySmall = Font.system(.title2, design: .rounded).weight(.bold)
         
         // Heading - Section headers
-        static let headingLarge = Font.system(size: 24, weight: .semibold, design: .rounded)
-        static let headingMedium = Font.system(size: 20, weight: .semibold, design: .rounded)
-        static let headingSmall = Font.system(size: 18, weight: .semibold, design: .rounded)
+        static let headingLarge = Font.system(.title2, design: .rounded).weight(.semibold)
+        static let headingMedium = Font.system(.title3, design: .rounded).weight(.semibold)
+        static let headingSmall = Font.system(.headline, design: .rounded).weight(.semibold)
         
         // Title - Card titles
-        static let titleLarge = Font.system(size: 20, weight: .semibold, design: .rounded)
-        static let titleMedium = Font.system(size: 18, weight: .semibold, design: .rounded)
-        static let titleSmall = Font.system(size: 16, weight: .semibold, design: .rounded)
+        static let titleLarge = Font.system(.title3, design: .rounded).weight(.semibold)
+        static let titleMedium = Font.system(.headline, design: .rounded).weight(.semibold)
+        static let titleSmall = Font.system(.subheadline, design: .rounded).weight(.semibold)
         
         // Body - Main text
-        static let bodyLarge = Font.system(size: 16, weight: .regular, design: .default)
-        static let bodyMedium = Font.system(size: 14, weight: .regular, design: .default)
-        static let bodySmall = Font.system(size: 12, weight: .regular, design: .default)
+        static let bodyLarge = Font.system(.body, design: .default)
+        static let bodyMedium = Font.system(.subheadline, design: .default)
+        static let bodySmall = Font.system(.footnote, design: .default)
         
         // Caption - Small supporting text
-        static let captionLarge = Font.system(size: 13, weight: .regular, design: .default)
-        static let captionSmall = Font.system(size: 11, weight: .regular, design: .default)
+        static let captionLarge = Font.system(.footnote, design: .default)
+        static let captionSmall = Font.system(.caption, design: .default)
         
         // Special - Points and labels
-        static let pointsDisplay = Font.system(size: 28, weight: .bold, design: .rounded)
-        static let taskLabel = Font.system(size: 12, weight: .semibold, design: .rounded)
-        static let buttonLabel = Font.system(size: 16, weight: .semibold, design: .rounded)
+        static let pointsDisplay = Font.system(.title2, design: .rounded).weight(.bold)
+        static let taskLabel = Font.system(.caption, design: .rounded).weight(.semibold)
+        static let buttonLabel = Font.system(.body, design: .rounded).weight(.semibold)
     }
     
     // MARK: - Spacing

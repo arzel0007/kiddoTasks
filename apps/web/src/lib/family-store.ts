@@ -111,6 +111,8 @@ async function callWishlistFn(
 }
 
 type FamilyState = {
+  syncState: "connecting" | "connected" | "updating" | "offline" | "error";
+  setSyncState: (state: FamilyState["syncState"]) => void;
   loading: boolean;
   error: string | null;
   family: Family | null;
@@ -268,6 +270,8 @@ const emptyEntitlements: Entitlements = {
 };
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
+  syncState: "connecting",
+  setSyncState: (syncState) => set({ syncState }),
   loading: false,
   error: null,
   family: null,
@@ -903,6 +907,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
   reset: () =>
     set({
+      syncState: "connecting",
       loading: false,
       error: null,
       family: null,
@@ -1034,6 +1039,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       ...rest
     } = payload;
     set({
+      syncState: "connected",
       loading: false,
       error: null,
       parentUid: null,
@@ -1052,22 +1058,22 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
   loadFamilyForParent: async (uid) => {
     if (!isFirebaseConfigured) {
-      set({ error: "Firebase is not configured (check .env.local)." });
+      set({ error: "Firebase is not configured (check .env.local).", syncState: "error" });
       return;
     }
-    set({ loading: true, error: null, parentUid: uid, kidsMode: false });
+    set({ loading: true, error: null, parentUid: uid, kidsMode: false, syncState: "updating" });
     try {
       const db = firestore();
       const parentSnap = await getDoc(doc(db, "parents", uid));
       if (!parentSnap.exists()) {
-        set({ loading: false, family: null, error: "No family for this account." });
+        set({ loading: false, family: null, error: "No family for this account.", syncState: "error" });
         return;
       }
       const parentEmail = (parentSnap.data()?.email as string) ?? null;
       const familyId = parentSnap.data()?.familyId as string;
       const familySnap = await getDoc(doc(db, "families", familyId));
       if (!familySnap.exists()) {
-        set({ loading: false, family: null, error: "Family not found." });
+        set({ loading: false, family: null, error: "Family not found.", syncState: "error" });
         return;
       }
       const family = { id: familySnap.id, ...(familySnap.data() as Omit<Family, "id">) };
@@ -1136,6 +1142,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         wishlistEnabled: isWishlistEnabled(family),
         entitlements,
         error: null,
+        syncState: "connected",
       });
       // Server-validated premium — settings.plan is client-writable and untrusted.
       void refreshServerPremium();
@@ -1148,6 +1155,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       set({
         loading: false,
         error: errorMessage(e, "Failed to load family"),
+        syncState: typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "error",
       });
     }
   },

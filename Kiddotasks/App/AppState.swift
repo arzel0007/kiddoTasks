@@ -51,6 +51,18 @@ final class AppState {
 
     var cloudSyncStatus: CloudSyncStatus { cloudSync.status }
 
+    func retryCloudSync() async {
+        do {
+            if cloudSync.hasUnsyncedLocalChanges {
+                try await cloudSync.pushSnapshot()
+            } else {
+                await cloudSync.invalidateFingerprintAndRefresh()
+            }
+        } catch {
+            toastError("Couldn’t sync yet. Your changes are saved on this device.")
+        }
+    }
+
     init() {
         let storeInstance = LocalFamilyDataStore()
         store = storeInstance

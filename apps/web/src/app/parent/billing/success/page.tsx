@@ -72,7 +72,7 @@ function SuccessInner() {
   const subId = params.get("sub");
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-12">
+    <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-12">
       <div className="card w-full text-center">
         {state === "checking" && (
           <>
@@ -134,7 +134,7 @@ export default function BillingSuccessPage() {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto flex min-h-screen max-w-lg items-center justify-center">
+        <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-screen max-w-lg items-center justify-center">
           <p className="text-sm text-ink-secondary">Loading…</p>
         </main>
       }

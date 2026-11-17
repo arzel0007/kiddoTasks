@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import Observation
 
 #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
 import FirebaseCore
@@ -35,6 +36,7 @@ enum CloudSyncStatus: Equatable {
 /// 3. Local deletes are tombstoned, pushed to the server, then acknowledged.
 /// 4. A co-parent can join via family code with their own email/password.
 @MainActor
+@Observable
 final class CloudSyncEngine {
     private unowned let store: LocalFamilyDataStore
 
@@ -1345,21 +1347,7 @@ final class CloudSyncEngine {
         let decoder = JSONDecoder()
         // Accept ISO-8601 with or without fractional seconds (web `toISOString()`).
         decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let raw = try container.decode(String.self)
-            let withFrac = ISO8601DateFormatter()
-            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = withFrac.date(from: raw) { return date }
-            let plain = ISO8601DateFormatter()
-            plain.formatOptions = [.withInternetDateTime]
-            if let date = plain.date(from: raw) { return date }
-            if let ms = Double(raw) {
-                return Date(timeIntervalSince1970: ms / 1000)
-            }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unrecognized date: \(raw)"
-            )
+            try CloudDateDecoding.decode(decoder)
         }
         return try decoder.decode(T.self, from: data)
         #else
@@ -1459,5 +1447,42 @@ final class CloudSyncEngine {
                 await self.refreshKidsSessionFromCloud()
             }
         }
+    }
+}
+
+/// Decodes the date shapes present across historical Firestore writes:
+/// ISO-8601 strings, epoch milliseconds, and epoch seconds.
+enum CloudDateDecoding {
+    static func decode(_ decoder: Decoder) throws -> Date {
+        let container = try decoder.singleValueContainer()
+        if let raw = try? container.decode(String.self) {
+            let withFrac = ISO8601DateFormatter()
+            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFrac.date(from: raw) { return date }
+            let plain = ISO8601DateFormatter()
+            plain.formatOptions = [.withInternetDateTime]
+            if let date = plain.date(from: raw) { return date }
+            if let value = Double(raw), value.isFinite {
+                return date(fromEpochValue: value)
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unrecognized date: \(raw)"
+            )
+        }
+        if let value = try? container.decode(Double.self), value.isFinite {
+            return date(fromEpochValue: value)
+        }
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Expected an ISO-8601 string or numeric epoch date"
+        )
+    }
+
+    private static func date(fromEpochValue value: Double) -> Date {
+        // Existing migration functions treat numeric Firestore dates as
+        // JavaScript milliseconds. Also accept seconds from older exports.
+        let seconds = abs(value) >= 100_000_000_000 ? value / 1_000 : value
+        return Date(timeIntervalSince1970: seconds)
     }
 }

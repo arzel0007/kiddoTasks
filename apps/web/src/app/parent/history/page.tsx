@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useFamilyStore, useEntitlements } from "@/lib/family-store";
 import { FREE_LIMITS } from "@/lib/entitlements";
 import { SkeletonListRow } from "@/components/skeleton";
@@ -42,6 +42,7 @@ function formatDate(value: unknown): string {
 export default function HistoryPage() {
   const { transactions, children, loading } = useFamilyStore();
   const ent = useEntitlements();
+  const [page, setPage] = useState(1);
 
   const sorted = useMemo(
     () =>
@@ -53,6 +54,10 @@ export default function HistoryPage() {
 
   // Free tier: only show last 7 days worth (approx by count if no dates)
   const visible = ent.isPlus ? sorted : sorted.slice(0, 20);
+  const pageSize = 15;
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="card">
@@ -76,7 +81,7 @@ export default function HistoryPage() {
         </p>
       ) : (
         <ul className="divide-y divide-border">
-          {visible.map((tx) => (
+          {pageRows.map((tx) => (
             <li key={tx.id} className="flex items-center gap-3 py-3">
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white ${
@@ -108,6 +113,17 @@ export default function HistoryPage() {
             </li>
           ))}
         </ul>
+      )}
+      {!loading && pageCount > 1 && (
+        <nav className="history-pagination" aria-label="History pages">
+          <button type="button" className="page-control" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+            <span aria-hidden="true">←</span> Newer
+          </button>
+          <span aria-live="polite" className="history-pagination__count">{currentPage} / {pageCount}</span>
+          <button type="button" className="page-control" disabled={currentPage === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))}>
+            Older <span aria-hidden="true">→</span>
+          </button>
+        </nav>
       )}
       {!ent.isPlus && (
         <a href="/parent/billing" className="btn-secondary mt-4">

@@ -17,6 +17,7 @@ import {
 import {
   computeOccurrenceKey,
   findBlockingCompletion,
+  occurrenceDateRange,
   normalizeTimeZone,
   resolveRequiresApproval,
 } from "./occurrence";
@@ -646,19 +647,29 @@ export const submitTaskCompletion = functions.https.onCall(async (data, context)
   // submitting the same instant are serialised, so the loser re-reads after
   // the winner's write and sees the blocking completion. `null` == blocked.
   const result = await db.runTransaction(async (tx) => {
-    const dupSnap = await tx.get(
-      db
-        .collection("taskCompletions")
-        .where("familyId", "==", familyId)
-        .where("taskId", "==", String(taskId))
-        .where("childId", "==", String(childId))
-        .limit(50)
-    );
+    const duplicateQuery = db
+      .collection("taskCompletions")
+      .where("familyId", "==", familyId)
+      .where("taskId", "==", String(taskId))
+      .where("childId", "==", String(childId));
+    let duplicateDocs;
+    if (recurrenceType !== "oneTime") {
+      const range = occurrenceDateRange(recurrenceType, keyDate, timeZone);
+      const occurrenceQuery = duplicateQuery
+        .where("completedAt", ">=", admin.firestore.Timestamp.fromDate(range.start))
+        .where("completedAt", "<", admin.firestore.Timestamp.fromDate(range.end));
+      const unresolvedQuery = duplicateQuery.where("completedAt", "==", null);
+      const occurrenceSnap = await tx.get(occurrenceQuery);
+      const unresolvedSnap = await tx.get(unresolvedQuery);
+      duplicateDocs = [...occurrenceSnap.docs, ...unresolvedSnap.docs];
+    } else {
+      duplicateDocs = (await tx.get(duplicateQuery)).docs;
+    }
 
     const blocking = findBlockingCompletion({
       recurrenceType,
       requiresApproval,
-      completions: dupSnap.docs.map((doc) => doc.data()),
+      completions: duplicateDocs.map((doc) => doc.data()),
       now: keyDate,
       timeZone,
     });
@@ -727,46 +738,42 @@ export const claimReward = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
   }
   // Security: child and reward must belong to the caller's family.
-  const childDoc = await db.collection("children").doc(String(childId)).get();
-  if (!childDoc.exists || childDoc.data()?.familyId !== familyId) {
-    throw new functions.https.HttpsError("permission-denied", "Child not in family");
-  }
-  const rewardDoc = await db.collection("rewards").doc(String(rewardId)).get();
-  if (!rewardDoc.exists || rewardDoc.data()?.familyId !== familyId) {
-    throw new functions.https.HttpsError("permission-denied", "Reward not in family");
-  }
-  const activePoints = Number(childDoc.data()?.activePoints ?? 0);
-  const pointCost = Number(rewardDoc.data()?.pointCost ?? 0);
-  if (pointCost > 0 && activePoints < pointCost) {
-    throw new functions.https.HttpsError("failed-precondition", "Insufficient points");
-  }
-
-  // One open claim per reward/child.
-  const openClaims = await db
-    .collection("rewardClaims")
-    .where("familyId", "==", familyId)
-    .where("rewardId", "==", String(rewardId))
-    .where("childId", "==", String(childId))
-    .limit(10)
-    .get();
-  const openClaim = openClaims.docs.find((d) => {
-    const s = String(d.data()?.status || "");
-    return s === "CLAIMED" || s === "APPROVED";
-  });
-  if (openClaim) {
-    throw new functions.https.HttpsError(
-      "already-exists",
-      "Already requested this reward"
-    );
-  }
-
   const claimRef = db.collection("rewardClaims").doc();
-  await claimRef.set({
-    familyId,
-    rewardId,
-    childId,
-    status: "CLAIMED",
-    claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+  await db.runTransaction(async (tx) => {
+    const childRef = db.collection("children").doc(String(childId));
+    const rewardRef = db.collection("rewards").doc(String(rewardId));
+    const openClaimsQuery = db.collection("rewardClaims")
+      .where("familyId", "==", familyId)
+      .where("rewardId", "==", String(rewardId))
+      .where("childId", "==", String(childId));
+    const childDoc = await tx.get(childRef);
+    const rewardDoc = await tx.get(rewardRef);
+    const openClaims = await tx.get(openClaimsQuery);
+    if (!childDoc.exists || childDoc.data()?.familyId !== familyId) {
+      throw new functions.https.HttpsError("permission-denied", "Child not in family");
+    }
+    if (!rewardDoc.exists || rewardDoc.data()?.familyId !== familyId) {
+      throw new functions.https.HttpsError("permission-denied", "Reward not in family");
+    }
+    const pointCost = Number(rewardDoc.data()?.pointCost ?? 0);
+    const activePoints = Number(childDoc.data()?.activePoints ?? 0);
+    if (pointCost > 0 && activePoints < pointCost) {
+      throw new functions.https.HttpsError("failed-precondition", "Insufficient points");
+    }
+    const hasOpenClaim = openClaims.docs.some((doc) => {
+      const status = String(doc.data()?.status || "");
+      return status === "CLAIMED" || status === "APPROVED";
+    });
+    if (hasOpenClaim) {
+      throw new functions.https.HttpsError("already-exists", "Already requested this reward");
+    }
+    tx.create(claimRef, {
+      familyId,
+      rewardId: String(rewardId),
+      childId: String(childId),
+      status: "CLAIMED",
+      claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
   });
   await touchFamily(familyId);
   return { claimId: claimRef.id };
@@ -777,23 +784,37 @@ export const rejectRewardClaim = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
   }
   const { claimId, familyId, reason } = data;
+  if (!claimId || !familyId) {
+    throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
+  }
   const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
   if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
     throw new functions.https.HttpsError("permission-denied", "Not authorized");
   }
-  const claimDoc = await db.collection("rewardClaims").doc(String(claimId || "")).get();
-  if (!claimDoc.exists || claimDoc.data()?.familyId !== familyId) {
-    throw new functions.https.HttpsError("permission-denied", "Claim not in family");
+
+  const claimRef = db.collection("rewardClaims").doc(String(claimId));
+  try {
+    await db.runTransaction(async (tx) => {
+      const claimSnap = await tx.get(claimRef);
+      if (!claimSnap.exists || claimSnap.data()?.familyId !== familyId) {
+        throw new functions.https.HttpsError("permission-denied", "Claim not in family");
+      }
+      if (claimSnap.data()?.status !== "CLAIMED") {
+        throw new functions.https.HttpsError("failed-precondition", "Claim is no longer pending");
+      }
+      tx.update(claimRef, {
+        status: "REJECTED",
+        notes: reason || "",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    await touchFamily(familyId);
+    return { success: true };
+  } catch (error: any) {
+    if (error instanceof functions.https.HttpsError) throw error;
+    console.error("Error rejecting reward:", error);
+    throw new functions.https.HttpsError("internal", "Could not reject reward");
   }
-  if (claimDoc.data()?.status === "APPROVED") {
-    throw new functions.https.HttpsError("already-exists", "Claim already approved");
-  }
-  await db.collection("rewardClaims").doc(claimId).update({
-    status: "REJECTED",
-    notes: reason || "",
-  });
-  await touchFamily(familyId);
-  return { success: true };
 });
 
 // MARK: - Task Approval & Points
@@ -804,125 +825,69 @@ export const rejectRewardClaim = functions.https.onCall(async (data, context) =>
  */
 export const approveTaskCompletion = functions.https.onCall(
   async (data, context) => {
-    // Check authentication
     if (!context.auth) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Must be logged in"
-      );
+      throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
     }
-
     const { completionId, taskId, childId, familyId } = data;
-
-    // Validate inputs
     if (!completionId || !taskId || !childId || !familyId) {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "Missing required fields"
-      );
+      throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
     }
 
+    const uid = context.auth.uid;
+    const parentDoc = await db.collection("parents").doc(uid).get();
+    if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
+      throw new functions.https.HttpsError("permission-denied", "Not authorized to approve tasks in this family");
+    }
+
+    const completionRef = db.collection("taskCompletions").doc(String(completionId));
+    const taskRef = db.collection("tasks").doc(String(taskId));
+    const childRef = db.collection("children").doc(String(childId));
+    let transactionId: string | null = null;
+    let awardedPoints = 0;
     try {
-      const uid = context.auth.uid;
-      // Verify parent owns this family
-      const parentDoc = await db.collection("parents").doc(uid).get();
-      if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Not authorized to approve tasks in this family"
-        );
-      }
-
-      // Verify child belongs to family
-      const childDoc = await db.collection("children").doc(childId).get();
-      if (!childDoc.exists || childDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Child not in family"
-        );
-      }
-
-      // Verify completion exists and is not already processed
-      const completionDoc = await db
-        .collection("taskCompletions")
-        .doc(completionId)
-        .get();
-      if (!completionDoc.exists) {
-        throw new functions.https.HttpsError("not-found", "Completion not found");
-      }
-
-      const completion = completionDoc.data();
-      if (completion?.status === "APPROVED") {
-        throw new functions.https.HttpsError(
-          "already-exists",
-          "Task already approved"
-        );
-      }
-
-      // Security: the completion must belong to the caller's family.
-      if (
-        typeof completion?.familyId === "string" &&
-        completion.familyId !== familyId
-      ) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Completion not in family"
-        );
-      }
-
-      // Security: prefer the task's server-stored point value over the
-      // client-supplied one so points can't be arbitrarily awarded.
-      let awardedPoints = Number(data.pointValue) || 0;
-      const taskDoc = await db.collection("tasks").doc(String(taskId)).get();
-      if (taskDoc.exists) {
-        const task = taskDoc.data();
-        if (typeof task?.familyId === "string" && task.familyId !== familyId) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "Task not in family"
-          );
-        }
-        if (typeof task?.pointValue === "number") {
-          awardedPoints = task.pointValue;
-        }
-      }
-      if (!Number.isFinite(awardedPoints) || awardedPoints < 0) {
-        throw new functions.https.HttpsError(
-          "invalid-argument",
-          "Invalid point value"
-        );
-      }
-
-      // Transaction: re-check status so concurrent approvals cannot double-award.
-      const transactionId = awardedPoints > 0
-        ? db.collection("pointTransactions").doc().id
-        : null;
       await db.runTransaction(async (tx) => {
-        const snap = await tx.get(db.collection("taskCompletions").doc(completionId));
-        if (!snap.exists) {
+        const completionSnap = await tx.get(completionRef);
+        const taskSnap = await tx.get(taskRef);
+        const childSnap = await tx.get(childRef);
+        if (!completionSnap.exists) {
           throw new functions.https.HttpsError("not-found", "Completion not found");
         }
-        const current = snap.data() || {};
-        if (current.status === "APPROVED") {
-          throw new functions.https.HttpsError("already-exists", "Task already approved");
-        }
-        if (typeof current.familyId === "string" && current.familyId !== familyId) {
+        const completion = completionSnap.data() || {};
+        if (completion.familyId !== familyId) {
           throw new functions.https.HttpsError("permission-denied", "Completion not in family");
         }
+        if (completion.taskId !== String(taskId) || completion.childId !== String(childId)) {
+          throw new functions.https.HttpsError("invalid-argument", "Completion task or child does not match");
+        }
+        if (completion.status !== "AWAITING_APPROVAL" && completion.status !== "COMPLETED") {
+          throw new functions.https.HttpsError("failed-precondition", "Completion is no longer pending");
+        }
+        if (!taskSnap.exists || taskSnap.data()?.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Task not in family");
+        }
+        if (!childSnap.exists || childSnap.data()?.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Child not in family");
+        }
+
+        awardedPoints = Number(taskSnap.data()?.pointValue);
+        if (!Number.isFinite(awardedPoints) || awardedPoints < 0) {
+          throw new functions.https.HttpsError("failed-precondition", "Task has an invalid point value");
+        }
+        transactionId = awardedPoints > 0 ? db.collection("pointTransactions").doc().id : null;
         if (transactionId) {
           tx.set(db.collection("pointTransactions").doc(transactionId), {
             familyId,
-            childId,
+            childId: String(childId),
             amount: awardedPoints,
             type: "TASK_COMPLETION",
-            relatedId: completionId,
-            description: `Task completed: ${data.taskName || ""}`,
+            relatedId: String(completionId),
+            description: `Task completed: ${data.taskName || taskSnap.data()?.name || ""}`,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             createdBy: uid,
             isReversed: false,
           });
         }
-        tx.update(db.collection("taskCompletions").doc(completionId), {
+        tx.update(completionRef, {
           status: "APPROVED",
           approvedAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: uid,
@@ -931,230 +896,151 @@ export const approveTaskCompletion = functions.https.onCall(
           notes: data.message || "",
         });
         if (awardedPoints > 0) {
-          tx.update(db.collection("children").doc(childId), {
+          tx.update(childRef, {
             activePoints: admin.firestore.FieldValue.increment(awardedPoints),
             totalPointsEarned: admin.firestore.FieldValue.increment(awardedPoints),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         }
       });
-
       await touchFamily(familyId);
-      return {
-        success: true,
-        transactionId,
-        message: "Task approved and points awarded",
-      };
+      return { success: true, transactionId, message: "Task approved and points awarded" };
     } catch (error: any) {
       if (error instanceof functions.https.HttpsError) throw error;
       console.error("Error approving task:", error);
-      throw new functions.https.HttpsError(
-        "internal",
-        "Could not approve task"
-      );
+      throw new functions.https.HttpsError("internal", "Could not approve task");
     }
   }
 );
 
-/**
- * Reject a task completion
- */
+/** Reject a task completion. */
 export const rejectTaskCompletion = functions.https.onCall(
   async (data, context) => {
     if (!context.auth) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Must be logged in"
-      );
+      throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+    }
+    const { completionId, familyId, reason } = data;
+    if (!completionId || !familyId) {
+      throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
+    }
+    const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
+    if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
+      throw new functions.https.HttpsError("permission-denied", "Not authorized");
     }
 
-    const { completionId, familyId, reason } = data;
-
+    const completionRef = db.collection("taskCompletions").doc(String(completionId));
     try {
-      // Verify parent owns this family
-      const parentDoc = await db.collection("parents").doc(context.auth.uid).get();
-      if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Not authorized"
-        );
-      }
-
-      // Security: the completion must belong to the caller's family and must
-      // not already be approved.
-      const completionDoc = await db
-        .collection("taskCompletions")
-        .doc(String(completionId || ""))
-        .get();
-      if (!completionDoc.exists || completionDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError("permission-denied", "Completion not in family");
-      }
-      if (completionDoc.data()?.status === "APPROVED") {
-        throw new functions.https.HttpsError(
-          "already-exists",
-          "Completion already approved"
-        );
-      }
-
-      // Update completion status
-      await db.collection("taskCompletions").doc(completionId).update({
-        status: "REJECTED",
-        notes: reason || "",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      await db.runTransaction(async (tx) => {
+        const completionSnap = await tx.get(completionRef);
+        if (!completionSnap.exists || completionSnap.data()?.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Completion not in family");
+        }
+        const status = completionSnap.data()?.status;
+        if (status !== "AWAITING_APPROVAL" && status !== "COMPLETED") {
+          throw new functions.https.HttpsError("failed-precondition", "Completion is no longer pending");
+        }
+        tx.update(completionRef, {
+          status: "REJECTED",
+          notes: reason || "",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       });
-
       await touchFamily(familyId);
-      return {
-        success: true,
-        message: "Task rejected",
-      };
+      return { success: true, message: "Task rejected" };
     } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
       console.error("Error rejecting task:", error);
-      throw new functions.https.HttpsError("internal", error.message);
+      throw new functions.https.HttpsError("internal", "Could not reject task");
     }
   }
 );
 
 // MARK: - Reward Approval & Point Deduction
 
-/**
- * Approve a reward claim and deduct points
- */
+/** Approve a reward claim and deduct its stored point cost. */
 export const approveRewardClaim = functions.https.onCall(
   async (data, context) => {
     if (!context.auth) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "Must be logged in"
-      );
+      throw new functions.https.HttpsError("unauthenticated", "Must be logged in");
+    }
+    const { claimId, rewardId, childId, familyId } = data;
+    if (!claimId || !rewardId || !childId || !familyId) {
+      throw new functions.https.HttpsError("invalid-argument", "Missing required fields");
+    }
+    const uid = context.auth.uid;
+    const parentDoc = await db.collection("parents").doc(uid).get();
+    if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
+      throw new functions.https.HttpsError("permission-denied", "Not authorized");
     }
 
-    const { claimId, rewardId, childId, familyId, pointCost } = data;
-
+    const claimRef = db.collection("rewardClaims").doc(String(claimId));
+    let transactionId: string | null = null;
     try {
-      const uid = context.auth.uid;
-      // Verify parent owns this family
-      const parentDoc = await db.collection("parents").doc(uid).get();
-      if (!parentDoc.exists || parentDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Not authorized"
-        );
-      }
-
-      // Get child to verify points
-      const childDoc = await db.collection("children").doc(childId).get();
-      if (!childDoc.exists || childDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError("permission-denied", "Invalid child");
-      }
-
-      // Security: the claim must belong to the caller's family and must not
-      // already be approved (prevents double point deductions).
-      const claimDoc = await db
-        .collection("rewardClaims")
-        .doc(String(claimId || ""))
-        .get();
-      if (!claimDoc.exists || claimDoc.data()?.familyId !== familyId) {
-        throw new functions.https.HttpsError("permission-denied", "Claim not in family");
-      }
-      if (claimDoc.data()?.status === "APPROVED") {
-        throw new functions.https.HttpsError(
-          "already-exists",
-          "Reward claim already approved"
-        );
-      }
-
-      // Security: prefer the reward's server-stored cost over the
-      // client-supplied one so arbitrary amounts can't be deducted.
-      let deductionCost = Number(pointCost) || 0;
-      const rewardDoc = await db
-        .collection("rewards")
-        .doc(String(rewardId || ""))
-        .get();
-      if (rewardDoc.exists) {
-        const reward = rewardDoc.data();
-        if (typeof reward?.familyId === "string" && reward.familyId !== familyId) {
-          throw new functions.https.HttpsError(
-            "permission-denied",
-            "Reward not in family"
-          );
-        }
-        if (typeof reward?.pointCost === "number") {
-          deductionCost = reward.pointCost;
-        }
-      }
-      if (!Number.isFinite(deductionCost) || deductionCost < 0) {
-        throw new functions.https.HttpsError(
-          "invalid-argument",
-          "Invalid point cost"
-        );
-      }
-
-      const childData = childDoc.data();
-      if ((childData?.activePoints ?? 0) < deductionCost) {
-        throw new functions.https.HttpsError(
-          "failed-precondition",
-          "Insufficient points"
-        );
-      }
-
-      const deductionTransactionId = deductionCost > 0
-        ? db.collection("pointTransactions").doc().id
-        : null;
       await db.runTransaction(async (tx) => {
-        const claimSnap = await tx.get(db.collection("rewardClaims").doc(String(claimId)));
+        const claimSnap = await tx.get(claimRef);
         if (!claimSnap.exists) {
           throw new functions.https.HttpsError("not-found", "Claim not found");
         }
         const claim = claimSnap.data() || {};
-        if (claim.status === "APPROVED") {
-          throw new functions.https.HttpsError(
-            "already-exists",
-            "Reward claim already approved"
-          );
-        }
-        if (typeof claim.familyId === "string" && claim.familyId !== familyId) {
+        if (claim.familyId !== familyId) {
           throw new functions.https.HttpsError("permission-denied", "Claim not in family");
         }
-        const childSnap = await tx.get(db.collection("children").doc(String(childId)));
+        if (claim.rewardId !== String(rewardId) || claim.childId !== String(childId)) {
+          throw new functions.https.HttpsError("invalid-argument", "Claim reward or child does not match");
+        }
+        if (claim.status !== "CLAIMED") {
+          throw new functions.https.HttpsError("failed-precondition", "Claim is no longer pending");
+        }
+
+        const rewardRef = db.collection("rewards").doc(String(rewardId));
+        const childRef = db.collection("children").doc(String(childId));
+        const rewardSnap = await tx.get(rewardRef);
+        const childSnap = await tx.get(childRef);
+        if (!rewardSnap.exists || rewardSnap.data()?.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Reward not in family");
+        }
+        if (!childSnap.exists || childSnap.data()?.familyId !== familyId) {
+          throw new functions.https.HttpsError("permission-denied", "Child not in family");
+        }
+        const deductionCost = Number(rewardSnap.data()?.pointCost);
+        if (!Number.isFinite(deductionCost) || deductionCost < 0) {
+          throw new functions.https.HttpsError("failed-precondition", "Reward has an invalid point cost");
+        }
         const balance = Number(childSnap.data()?.activePoints ?? 0);
         if (balance < deductionCost) {
           throw new functions.https.HttpsError("failed-precondition", "Insufficient points");
         }
-        if (deductionTransactionId) {
-          tx.set(db.collection("pointTransactions").doc(deductionTransactionId), {
+
+        transactionId = deductionCost > 0 ? db.collection("pointTransactions").doc().id : null;
+        if (transactionId) {
+          tx.set(db.collection("pointTransactions").doc(transactionId), {
             familyId,
-            childId,
+            childId: String(childId),
             amount: -deductionCost,
             type: "REWARD_REDEMPTION",
-            relatedId: claimId,
-            description: `Reward claimed: ${data.rewardName || ""}`,
+            relatedId: String(claimId),
+            description: `Reward claimed: ${data.rewardName || rewardSnap.data()?.name || ""}`,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             createdBy: uid,
             isReversed: false,
           });
         }
-        tx.update(db.collection("rewardClaims").doc(String(claimId)), {
+        tx.update(claimRef, {
           status: "APPROVED",
           approvedAt: admin.firestore.FieldValue.serverTimestamp(),
           approvedBy: uid,
-          pointDeductionTransactionId: deductionTransactionId,
+          pointDeductionTransactionId: transactionId,
           notes: data.message || "",
         });
         if (deductionCost > 0) {
-          tx.update(db.collection("children").doc(String(childId)), {
+          tx.update(childRef, {
             activePoints: admin.firestore.FieldValue.increment(-deductionCost),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         }
       });
-
       await touchFamily(familyId);
-      return {
-        success: true,
-        transactionId: deductionTransactionId,
-        message: "Reward approved",
-      };
+      return { success: true, transactionId, message: "Reward approved" };
     } catch (error: any) {
       if (error instanceof functions.https.HttpsError) throw error;
       console.error("Error approving reward:", error);

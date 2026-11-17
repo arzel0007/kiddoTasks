@@ -307,6 +307,11 @@ struct KidsStationView: View {
                 .padding(.horizontal, 18)
                 .padding(.bottom, 10)
             }
+
+            CloudSyncStatusBanner(status: appState.cloudSyncStatus) {
+                Task { await appState.retryCloudSync() }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .ignoresSafeArea(.container, edges: .bottom)
         .tint(child?.playerAccentColor ?? KiddoTasksDesignTokens.Colors.primary)
@@ -364,10 +369,11 @@ struct MissionsView: View {
                                 // the server's verdict on whether a new submit is allowed.
                                 let completion = appState.store.latestOccurrenceCompletion(taskId: task.id, childId: child.id)
                                 let blocked = appState.store.blockingCompletion(taskId: task.id, childId: child.id)
+                                let approvedCount = appState.store.occurrenceCompletionHistory(taskId: task.id, childId: child.id).filter { $0.status == .approved }.count
                                 Button {
                                     selectedTask = task
                                 } label: {
-                                    MissionCard(task: task, completion: completion)
+                                    MissionCard(task: task, completion: completion, approvedCount: approvedCount, isAvailableAgain: approvedCount > 0 && blocked == nil)
                                         .padding(.vertical, 1)
                                 }
                                 .buttonStyle(CardPressStyle())
@@ -531,6 +537,7 @@ struct TaskDetailView: View {
 
     @State private var when: MissionWhen = .today
     @State private var otherDate = Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date()
+    @State private var isSubmitting = false
 
     /// Status for the current occurrence (a rejection is included so the kid
     /// still sees why the mission is open again).
@@ -572,7 +579,7 @@ struct TaskDetailView: View {
                 }
 
                 if let existing {
-                    Text("Latest: \(existing.status.displayName)")
+                    Text(latestStatus(for: existing))
                         .font(KiddoTasksDesignTokens.Typography.bodyMedium)
                     if let message = existing.notes, !message.isEmpty {
                         Text("Parent said: \(message)")
@@ -583,6 +590,35 @@ struct TaskDetailView: View {
                             .background(KiddoTasksDesignTokens.Colors.surface)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
+                }
+
+                let submissions = appState.store.occurrenceCompletionHistory(taskId: task.id, childId: child.id).sorted { $0.completedAt > $1.completedAt }
+                if !submissions.isEmpty {
+                    DisclosureGroup("This repeat · \(submissions.count) submission\(submissions.count == 1 ? "" : "s")") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(submissions) { submission in
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(submission.completedAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                                    Text(submission.status == .awaitingApproval || submission.status == .completed ? "Waiting for a parent" : submission.status == .approved ? "Approved" : "Try again" )
+                                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                                    if let note = submission.notes, !note.isEmpty { Text("Parent said: \(note)").font(KiddoTasksDesignTokens.Typography.captionSmall) }
+                                }
+                            }
+                        }.padding(.top, 8)
+                    }
+                    .font(KiddoTasksDesignTokens.Typography.captionLarge)
+                }
+
+                if let blocker {
+                    Text(blockerMessage(for: blocker))
+                        .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(KiddoTasksDesignTokens.Colors.successLight)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
                 // When did you do it? — only when the server would accept it.
@@ -602,6 +638,7 @@ struct TaskDetailView: View {
                                     )
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 10)
+                                    .frame(minHeight: 44)
                                     .background(
                                         Capsule().fill(
                                             when == option
@@ -611,6 +648,7 @@ struct TaskDetailView: View {
                                     )
                             }
                             .buttonStyle(KiddoPressStyle())
+                            .accessibilityValue(when == option ? "Selected" : "")
                         }
                     }
 
@@ -626,12 +664,14 @@ struct TaskDetailView: View {
                     }
 
                     PrimaryButton(
-                        title: existing?.status == .rejected ? "Try again" : "I did it! 🎉",
-                        color: KiddoTasksDesignTokens.Colors.success
+                        title: submitButtonTitle,
+                        color: KiddoTasksDesignTokens.Colors.success,
+                        systemImage: isSubmitting ? "hourglass" : "checkmark.circle.fill"
                     ) {
                         submitCompletion()
                     }
                     .buttonStyle(ExtraBouncyPressStyle())
+                    .disabled(isSubmitting)
                 }
             }
             .padding(20)
@@ -648,6 +688,8 @@ struct TaskDetailView: View {
     }
 
     private func submitCompletion() {
+        guard !isSubmitting else { return }
+        isSubmitting = true
         let completedAt = when.date(other: otherDate)
         Task { @MainActor in
             do {
@@ -664,11 +706,40 @@ struct TaskDetailView: View {
                 appState.toastSuccess("Mission sent to a parent")
                 onFinish(true)
             } catch {
+                isSubmitting = false
                 Arz.handle(.error)
                 appState.toastError(error.localizedDescription)
-                appState.presentError(error)
             }
         }
+    }
+
+    private func latestStatus(for completion: TaskCompletion) -> String {
+        switch completion.status {
+        case .awaitingApproval:
+            return "Waiting for a parent to review"
+        case .rejected:
+            return "Your parent asked you to try again"
+        case .approved where blocker == nil:
+            return "Parent approved · ready to do again"
+        case .approved, .completed:
+            return "Complete for this mission"
+        }
+    }
+
+    private var submitButtonTitle: String {
+        if isSubmitting { return "Sending…" }
+        return existing?.status == .rejected ? "Try again" : "I did it! 🎉"
+    }
+
+    private func blockerMessage(for completion: TaskCompletion) -> String {
+        if completion.status == .awaitingApproval {
+            return task.recurrence.type == .oneTime
+                ? "A parent will review this mission."
+                : "Sent to a parent. You can do this repeat mission again after they decide."
+        }
+        return task.recurrence.type == .oneTime
+            ? "Mission complete. Nice work!"
+            : "Mission complete for this repeat. Nice work!"
     }
 }
 

@@ -63,7 +63,7 @@ final class ThemeStore {
         let raw = UserDefaults.standard.string(forKey: Self.storageKey) ?? ""
         appearance = KiddoAppearance(rawValue: raw) ?? .system
         let styleRaw = UserDefaults.standard.string(forKey: Self.tabBarStyleKey) ?? ""
-        tabBarStyle = KiddoTabLabelStyle(rawValue: styleRaw) ?? .iconsOnly
+        tabBarStyle = KiddoTabLabelStyle(rawValue: styleRaw) ?? .iconsAndText
     }
 }
 

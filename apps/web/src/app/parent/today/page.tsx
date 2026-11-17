@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useFamilyStore } from "@/lib/family-store";
 import { ChildAvatar } from "@/lib/ui";
 import { PageSkeleton } from "@/components/skeleton";
-import { IconCheck, IconGift, IconList, IconUsers } from "@/components/icons";
+import { IconCheck, IconGift, IconList, IconUsers, IconX } from "@/components/icons";
 import { birthdayMessage, upcomingBirthdays } from "@/lib/birthdays";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
+import { FamilyLoadError } from "@/components/family-load-error";
+import { Modal } from "@/components/ui/modal";
 
 /** "Today at 3:20 PM" / "Yesterday at 5:05 PM" / "Sep 12, 2025 at 2:10 PM". */
 function formatFriendlyWhen(value?: string | null): string {
@@ -42,13 +44,15 @@ export default function TodayPage() {
     rejectRewardClaim,
   } = useFamilyStore();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [rejectingCompletion, setRejectingCompletion] = useState<{ id: string; taskId: string; childId: string } | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
 
   const pendingApprovals = useMemo(
-    () => completions.filter((c) => c.status === "AWAITING_APPROVAL"),
+    () => completions.filter((c) => c.status === "AWAITING_APPROVAL").sort((a, b) => Date.parse(a.completedAt ?? "") - Date.parse(b.completedAt ?? "")),
     [completions]
   );
   const pendingClaims = useMemo(
-    () => claims.filter((c) => c.status === "CLAIMED"),
+    () => claims.filter((c) => c.status === "CLAIMED").sort((a, b) => Date.parse(a.claimedAt ?? "") - Date.parse(b.claimedAt ?? "")),
     [claims]
   );
   const activeTasks = tasks.filter((t) => t.isActive);
@@ -76,11 +80,13 @@ export default function TodayPage() {
     }
   }
 
-  async function onRejectCompletion(c: { id: string }) {
+  async function onRejectCompletion(c: { id: string }, reason: string) {
     setBusyId(c.id);
     try {
-      await rejectTaskCompletion({ completionId: c.id });
+      await rejectTaskCompletion({ completionId: c.id, reason: reason.trim() });
       toast.success("Mission declined");
+      setRejectingCompletion(null);
+      setDeclineReason("");
     } catch (e) {
       toast.error(errorMessage(e, "Couldn’t decline mission"));
     } finally {
@@ -128,11 +134,7 @@ export default function TodayPage() {
   }
 
   if (error) {
-    return (
-      <div className="card border-error/40">
-        <p className="font-semibold text-error">{error}</p>
-      </div>
-    );
+    return <FamilyLoadError message={error} />;
   }
 
   if (!family) {
@@ -171,6 +173,157 @@ export default function TodayPage() {
         </div>
       )}
 
+      <Modal
+        open={Boolean(rejectingCompletion)}
+        title="Decline this mission?"
+        description={`${children.find((child) => child.id === rejectingCompletion?.childId)?.name ?? "Your child"}${tasks.find((task) => task.id === rejectingCompletion?.taskId)?.name ? ` · ${tasks.find((task) => task.id === rejectingCompletion?.taskId)?.name}` : ""} can try this mission again. Add a note if you’d like to explain what to change.`}
+        onClose={() => setRejectingCompletion(null)}
+      >
+        <label htmlFor="decline-reason" className="mb-1 block font-semibold text-ink">
+          Note for your child (optional)
+        </label>
+        <textarea
+          id="decline-reason"
+          className="field-input min-h-24 w-full"
+          value={declineReason}
+          onChange={(event) => setDeclineReason(event.target.value)}
+          placeholder="What should they try next time?"
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={() => setRejectingCompletion(null)}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!rejectingCompletion || busyId === rejectingCompletion?.id}
+            onClick={() => rejectingCompletion && void onRejectCompletion(rejectingCompletion, declineReason)}
+          >
+            {busyId === rejectingCompletion?.id ? "Declining…" : "Decline mission"}
+          </button>
+        </div>
+      </Modal>
+      <section className="card">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <IconCheck size={18} className="text-primary" />
+            <h2 className="font-bold">Waiting for approval</h2>
+          </div>
+          <span className="rounded-pill bg-primary-light px-2.5 py-1 text-xs font-bold text-primary" aria-label={`${pendingApprovals.length} missions waiting for approval`}>
+            {pendingApprovals.length}
+          </span>
+        </div>
+        {pendingApprovals.length === 0 ? (
+          <p className="text-sm text-ink-secondary">No missions waiting. Nice! 🎉</p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingApprovals.map((c) => {
+              const child = children.find((k) => k.id === c.childId);
+              const task = tasks.find((t) => t.id === c.taskId);
+              return (
+                <li
+                  key={c.id}
+                  className="approval-row flex items-center gap-3 rounded-xl bg-surface p-3"
+                >
+                  {child && (
+                    <ChildAvatar
+                      emoji={child.avatar.emoji}
+                      colorHex={child.avatar.colorHex}
+                      photoURL={child.photoURL}
+                      photoData={child.photoData}
+                      size={36}
+                      name={child.name}
+                    />
+                  )}
+                  <div className="approval-row__details min-w-0 flex-1">
+                    <p className="text-sm font-semibold">
+                      {child?.name ?? "Child"}
+                      {task ? ` · ${task.name}` : ""}
+                    </p>
+                    <p className="text-xs text-ink-secondary">
+                      {formatFriendlyWhen(c.completedAt)} · Needs your approval
+                    </p>
+                  </div>
+                  <div className="approval-row__actions flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => { setRejectingCompletion(c); setDeclineReason(""); }}
+                    >
+                      <IconX size={14} />
+                      {busyId === c.id ? "…" : "Decline"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onApproveCompletion(c)}
+                    >
+                      <IconCheck size={14} />
+                      {busyId === c.id ? "…" : "Approve"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="mb-3 flex items-center gap-2">
+          <IconGift size={18} className="text-primary" />
+          <h2 className="font-bold">Reward requests</h2>
+        </div>
+        {pendingClaims.length === 0 ? (
+          <p className="text-sm text-ink-secondary">No reward requests right now.</p>
+        ) : (
+          <ul className="space-y-2">
+            {pendingClaims.map((c) => {
+              const child = children.find((k) => k.id === c.childId);
+              const reward = rewards.find((r) => r.id === c.rewardId);
+              return (
+                <li
+                  key={c.id}
+                  className="approval-row flex items-center gap-3 rounded-xl bg-surface p-3"
+                >
+                  <div className="approval-row__details min-w-0 flex-1">
+                    <p className="text-sm font-semibold">
+                      {child?.name ?? "Child"}
+                      {reward ? ` wants “${reward.name}”` : " wants a reward"}
+                    </p>
+                    <p className="text-xs text-ink-secondary">
+                      {reward ? `★ ${reward.pointCost}` : "Needs your approval"}
+                    </p>
+                  </div>
+                  <div className="approval-row__actions flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onRejectClaim(c)}
+                    >
+                      <IconX size={14} />
+                      {busyId === c.id ? "…" : "Decline"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary btn-compact"
+                      disabled={busyId === c.id}
+                      onClick={() => void onApproveClaim(c)}
+                    >
+                      <IconCheck size={14} />
+                      {busyId === c.id ? "…" : "Approve"}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {/* Metric cards — white / semantic tint only (Calm Adventure) */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricCard
@@ -204,20 +357,16 @@ export default function TodayPage() {
         </div>
         {children.length === 0 ? (
           <div className="rounded-xl bg-surface p-4 text-center">
-            <p className="text-sm text-ink-secondary">
-              Add a child in the Family tab to get started.
-            </p>
+            <p className="text-sm text-ink-secondary">Add a child to see today’s mission progress.</p>
             <Link href="/parent/family" className="btn-secondary mt-3 inline-flex w-auto px-4">
-              Go to Family
+              Add a child
             </Link>
           </div>
         ) : (
           <ul className="space-y-3">
             {children.map((c) => {
               const due = activeTasks.filter(
-                (t) =>
-                  t.assignedChildIds.length === 0 ||
-                  t.assignedChildIds.includes(c.id)
+                (t) => t.assignedChildIds.length === 0 || t.assignedChildIds.includes(c.id)
               ).length;
               return (
                 <li key={c.id} className="flex items-center gap-3">
@@ -229,128 +378,17 @@ export default function TodayPage() {
                     size={44}
                     name={c.name}
                   />
-                  <div className="flex-1">
-                    <p className="font-semibold">{c.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{c.name}</p>
                     <p className="text-sm text-ink-secondary">{due} missions due</p>
                   </div>
                   <span
                     className="rounded-pill px-2.5 py-1 text-xs font-bold text-[#8a6420]"
                     style={{ background: "var(--color-reward-light)" }}
+                    aria-label={`${c.activePoints} stars`}
                   >
                     ★ {c.activePoints}
                   </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="card">
-        <div className="mb-3 flex items-center gap-2">
-          <IconCheck size={18} className="text-primary" />
-          <h2 className="font-bold">Waiting for approval</h2>
-        </div>
-        {pendingApprovals.length === 0 ? (
-          <p className="text-sm text-ink-secondary">No missions waiting. Nice! 🎉</p>
-        ) : (
-          <ul className="space-y-2">
-            {pendingApprovals.map((c) => {
-              const child = children.find((k) => k.id === c.childId);
-              const task = tasks.find((t) => t.id === c.taskId);
-              return (
-                <li
-                  key={c.id}
-                  className="flex items-center gap-3 rounded-xl bg-surface p-3"
-                >
-                  {child && (
-                    <ChildAvatar
-                      emoji={child.avatar.emoji}
-                      colorHex={child.avatar.colorHex}
-                      photoURL={child.photoURL}
-                      photoData={child.photoData}
-                      size={36}
-                      name={child.name}
-                    />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">
-                      {child?.name ?? "Child"}
-                      {task ? ` · ${task.name}` : ""}
-                    </p>
-                    <p className="text-xs text-ink-secondary">
-                      {formatFriendlyWhen(c.completedAt)} · Needs your approval
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <button
-                      type="button"
-                      className="btn-secondary btn-compact"
-                      disabled={busyId === c.id}
-                      onClick={() => void onRejectCompletion(c)}
-                    >
-                      {busyId === c.id ? "…" : "Decline"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-primary btn-compact"
-                      disabled={busyId === c.id}
-                      onClick={() => void onApproveCompletion(c)}
-                    >
-                      {busyId === c.id ? "…" : "Approve"}
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="card">
-        <div className="mb-3 flex items-center gap-2">
-          <IconGift size={18} className="text-primary" />
-          <h2 className="font-bold">Reward requests</h2>
-        </div>
-        {pendingClaims.length === 0 ? (
-          <p className="text-sm text-ink-secondary">No reward requests right now.</p>
-        ) : (
-          <ul className="space-y-2">
-            {pendingClaims.map((c) => {
-              const child = children.find((k) => k.id === c.childId);
-              const reward = rewards.find((r) => r.id === c.rewardId);
-              return (
-                <li
-                  key={c.id}
-                  className="flex items-center gap-3 rounded-xl bg-surface p-3"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold">
-                      {child?.name ?? "Child"}
-                      {reward ? ` wants “${reward.name}”` : " wants a reward"}
-                    </p>
-                    <p className="text-xs text-ink-secondary">
-                      {reward ? `★ ${reward.pointCost}` : "Needs your approval"}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <button
-                      type="button"
-                      className="btn-secondary btn-compact"
-                      disabled={busyId === c.id}
-                      onClick={() => void onRejectClaim(c)}
-                    >
-                      {busyId === c.id ? "…" : "Decline"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-primary btn-compact"
-                      disabled={busyId === c.id}
-                      onClick={() => void onApproveClaim(c)}
-                    >
-                      {busyId === c.id ? "…" : "Approve"}
-                    </button>
-                  </div>
                 </li>
               );
             })}

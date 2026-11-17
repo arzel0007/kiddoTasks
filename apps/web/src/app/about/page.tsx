@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   return (
-    <main className="page-wash min-h-screen">
+    <main id="main-content" tabIndex={-1} className="page-wash min-h-screen">
       <header className="landing-header">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-5 py-3 sm:px-8">
           <Link href="/" className="flex min-w-0 items-center gap-2.5">

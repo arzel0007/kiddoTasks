@@ -1,4 +1,5 @@
 import UIKit
+import AVFAudio
 
 #if canImport(FirebaseMessaging)
 import FirebaseMessaging
@@ -16,6 +17,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // The app's looping/splash videos are muted and game effects are short
+        // UI sounds. Mix with other apps so opening KiddoTasks never pauses
+        // music, podcasts, or other background media.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(
+                .ambient,
+                mode: .default,
+                options: [.mixWithOthers]
+            )
+        } catch {
+            print("Couldn’t configure a mixable audio session: \(error.localizedDescription)")
+        }
+
         #if canImport(FirebaseMessaging)
         // Defaults to YES when the app is built with FCM; keep it explicit.
         Messaging.messaging().isAutoInitEnabled = true

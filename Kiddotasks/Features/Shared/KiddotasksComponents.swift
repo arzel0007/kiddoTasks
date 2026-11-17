@@ -236,23 +236,37 @@ struct PrimaryButton: View {
     let title: String
     var color: Color = KiddoTasksDesignTokens.Colors.primary
     var isDisabled: Bool = false
+    var systemImage: String? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(KiddoTasksDesignTokens.Typography.buttonLabel)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: KiddoTasksDesignTokens.TouchTargets.recommended)
-                .background {
-                    let shape = RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous)
-                    if isDisabled {
-                        shape.fill(color.opacity(0.35))
-                    } else {
-                        shape.fill(color)
-                    }
+            HStack(spacing: 9) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
+                Text(title)
+                    .font(KiddoTasksDesignTokens.Typography.buttonLabel)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: KiddoTasksDesignTokens.TouchTargets.recommended)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous)
+                if isDisabled {
+                    shape.fill(color.opacity(0.35))
+                } else {
+                    shape.fill(color)
+                        .shadow(color: color.opacity(0.2), radius: 7, x: 0, y: 3)
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous)
+                    .strokeBorder(.white.opacity(isDisabled ? 0.08 : 0.16), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous))
         }
         .disabled(isDisabled)
         .buttonStyle(KiddoPressStyle())
@@ -274,10 +288,10 @@ struct SecondaryButton: View {
                 .foregroundStyle(color)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: KiddoTasksDesignTokens.TouchTargets.recommended)
-                .background(color.opacity(0.10))
+                .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.medium, style: .continuous)
-                        .strokeBorder(color.opacity(0.45), lineWidth: 1.5)
+                        .strokeBorder(color.opacity(0.25), lineWidth: 1)
                 }
         }
         .buttonStyle(KiddoPressStyle())
@@ -513,13 +527,13 @@ struct StatTile: View {
                 Spacer(minLength: 0)
             }
             Text("\(value)")
-                .font(.system(size: 26, weight: .bold, design: .default))
+                .font(.title2.weight(.bold))
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                 .lineLimit(2, reservesSpace: true)
         }
@@ -541,6 +555,8 @@ struct StatTile: View {
 struct MissionCard: View {
     let task: KiddoTask
     let completion: TaskCompletion?
+    var approvedCount: Int = 0
+    var isAvailableAgain: Bool = false
 
     private var palette: KiddoThemePalette { task.category.palette }
 
@@ -559,7 +575,14 @@ struct MissionCard: View {
                 Text(task.name)
                     .font(KiddoTasksDesignTokens.Typography.titleSmall)
                     .foregroundStyle(KiddoTasksDesignTokens.Colors.text)
-                StatusChip(status: completion?.status, fallback: task.category.displayName)
+                if isAvailableAgain {
+                    Text("Approved \(approvedCount) time\(approvedCount == 1 ? "" : "s") · ready again")
+                        .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(KiddoTasksDesignTokens.Colors.success)
+                } else {
+                    StatusChip(status: completion?.status, fallback: task.category.displayName)
+                }
             }
             Spacer()
             HStack(spacing: 3) {
@@ -579,7 +602,7 @@ struct MissionCard: View {
         .background(KiddoTasksDesignTokens.Colors.surfaceCard)
         .clipShape(RoundedRectangle(cornerRadius: KiddoTasksDesignTokens.CornerRadius.large, style: .continuous))
         .kiddotasksShadow(.small)
-        .opacity(completion?.status == .approved ? 0.6 : 1)
+        .opacity(completion?.status == .approved && !isAvailableAgain ? 0.6 : 1)
     }
 }
 
@@ -589,13 +612,19 @@ struct StatusChip: View {
     var fallback: String
 
     var body: some View {
-        Text(text)
-            .font(KiddoTasksDesignTokens.Typography.captionSmall)
-            .fontWeight(.semibold)
-            .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(color.opacity(0.12)))
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .accessibilityHidden(true)
+            Text(text)
+                .font(KiddoTasksDesignTokens.Typography.captionSmall)
+                .fontWeight(.semibold)
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(color.opacity(0.11)))
+        .accessibilityElement(children: .combine)
     }
 
     private var text: String {
@@ -608,6 +637,15 @@ struct StatusChip: View {
         case .awaitingApproval, .completed: return KiddoTasksDesignTokens.Colors.warning
         case .rejected: return KiddoTasksDesignTokens.Colors.error
         case .none: return KiddoTasksDesignTokens.Colors.textSecondary
+        }
+    }
+
+    private var symbol: String {
+        switch status {
+        case .approved: return "checkmark.circle.fill"
+        case .awaitingApproval, .completed: return "clock.fill"
+        case .rejected: return "arrow.counterclockwise.circle.fill"
+        case .none: return "tag.fill"
         }
     }
 }

@@ -182,12 +182,13 @@ struct KiddoPointsStepper: View {
             Image(systemName: system)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.primary)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .background(
                     Circle().fill(KiddoTasksDesignTokens.Colors.primarySoft)
                 )
         }
         .buttonStyle(KiddoPressStyle())
+        .accessibilityLabel(system == "plus" ? "Increase \(unit)" : "Decrease \(unit)")
     }
 }
 
@@ -246,6 +247,7 @@ struct KiddoChipPicker<ID: Hashable>: View {
                             )
                     }
                     .buttonStyle(KiddoPressStyle())
+                    .accessibilityValue(selection == option.id ? "Selected" : "")
                 }
             }
         }

@@ -104,6 +104,71 @@ function formatYmd(date: Date, timeZone: string): string {
 }
 
 /**
+ * Convert a local calendar date and time in an IANA zone to a UTC instant.
+ * The iteration handles daylight-saving offset changes without relying on
+ * the host machine's time zone.
+ */
+function zonedDateTimeToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  timeZone: string
+): Date {
+  const target = Date.UTC(year, month - 1, day, hour);
+  let guess = target;
+  for (let i = 0; i < 4; i += 1) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(guess));
+    const pick = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    const represented = Date.UTC(
+      pick("year"), pick("month") - 1, pick("day"), pick("hour")
+    );
+    const adjustment = target - represented;
+    guess += adjustment;
+    if (adjustment === 0) break;
+  }
+  return new Date(guess);
+}
+
+function addCalendarDays(year: number, month: number, day: number, count: number) {
+  const date = new Date(Date.UTC(year, month - 1, day + count));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+/**
+ * Half-open UTC interval for the occurrence containing `at`. Used to fetch
+ * both current keyed rows and legacy rows that only have `completedAt`.
+ */
+export function occurrenceDateRange(
+  recurrenceType: string,
+  at: Date,
+  timeZone: string
+): { start: Date; end: Date } {
+  const ymd = formatYmd(at, timeZone);
+  const [year, month, day] = ymd.split("-").map((part) => Number(part));
+  const startParts = recurrenceType === "weekly"
+    ? addCalendarDays(year, month, day, -((new Date(Date.UTC(year, month - 1, day)).getUTCDay() + 6) % 7))
+    : { year, month, day };
+  const endParts = addCalendarDays(
+    startParts.year,
+    startParts.month,
+    startParts.day,
+    recurrenceType === "weekly" ? 7 : 1
+  );
+  return {
+    start: zonedDateTimeToUtc(startParts.year, startParts.month, startParts.day, 0, timeZone),
+    end: zonedDateTimeToUtc(endParts.year, endParts.month, endParts.day, 0, timeZone),
+  };
+}
+
+/**
  * ISO-8601 week of a proleptic-Gregorian calendar date → `YYYY-Www`.
  * A weekly mission occurs once per ISO week, not once per calendar day.
  */
@@ -188,12 +253,12 @@ export function findBlockingCompletion(options: BlockingOptions): CompletionLike
   if (!currentKey) return null;
 
   // Rule 2 — only completions belonging to this occurrence count.
-  // NOTE: No `key === null` fallback. Legacy rows with missing `occurrenceKey`
-  // MUST NOT block a fresh submission — otherwise any historical row (even for
-  // a different day) would permanently lock the task.
+  // Legacy rows with completedAt values derive their occurrence above. A row
+  // that has neither a usable key nor timestamp is unresolved and must fail
+  // closed; otherwise malformed pending/approved rows could permit point farming.
   const sameOccurrence = notRejected.filter((completion) => {
     const key = completionOccurrenceKey(completion, recurrenceType, timeZone);
-    return key === currentKey;
+    return key === currentKey || key === null;
   });
   if (sameOccurrence.length === 0) return null;
 

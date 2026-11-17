@@ -22,10 +22,12 @@ import type {
   WishlistItem,
 } from "@/lib/types";
 import { ChildAvatar, IconTile, sfSymbolToGlyph } from "@/lib/ui";
+import { IconCheck, IconGift } from "@/components/icons";
 import {
   deviceTimeZone,
   findBlockingCompletion,
   latestOccurrenceCompletion,
+  occurrenceHistory,
 } from "@/lib/occurrence";
 import { SkeletonPlayerGrid } from "@/components/skeleton";
 import { ArzAvatar, arzHandle } from "@/components/arz-companion";
@@ -369,7 +371,7 @@ export default function KidsPage() {
 
   if ((store.loading || restoringParent) && !family && !store.kidsMode) {
     return (
-      <main className="min-h-screen bg-page px-4 py-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-page px-4 py-8">
         <div className="mx-auto max-w-3xl">
           <p className="mb-4 text-center text-sm text-ink-secondary">Loading…</p>
           <SkeletonPlayerGrid />
@@ -380,7 +382,7 @@ export default function KidsPage() {
 
   if (!canOpen) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-10 text-center">
+      <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center px-6 py-10 text-center">
         <div className="card w-full">
           <p className="text-5xl">🔒</p>
           <h1 className="mt-3 text-2xl font-bold">Kids Station</h1>
@@ -499,7 +501,7 @@ export default function KidsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-page pb-28">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-page pb-28">
       <div className="mx-auto max-w-3xl px-4 py-6">
         {/* Top bar — Arz inline with title (flat). mb-5 keeps gap before content. */}
         <div className="mb-5 flex min-h-[96px] items-center gap-3">
@@ -603,7 +605,7 @@ export default function KidsPage() {
               </div>
             ) : (
               <ul className="space-y-2">
-                {missions.map((t) => {
+                {missions.map((t, index) => {
                   // One shared verdict for display and for the action gate —
                   // both must match what the server's duplicate guard allows.
                   const query = {
@@ -616,21 +618,36 @@ export default function KidsPage() {
                   };
                   // Status to show for THIS occurrence (never history).
                   const shown = latestOccurrenceCompletion(query);
+                  const history = occurrenceHistory(query).slice().sort((a, b) => Date.parse(String(b.completedAt ?? "")) - Date.parse(String(a.completedAt ?? "")));
+                  const approvedCount = history.filter((completion) => completion.status === "APPROVED").length;
                   // Whether the server would refuse a new submission right now.
                   const blocked = findBlockingCompletion(query);
+                  const completeLabel = t.recurrence.type === "oneTime"
+                    ? "Mission complete"
+                    : "Complete for this repeat";
                   return (
                     <li
                       key={t.id}
-                      className={`card !p-3 flex items-center gap-2.5 ${
-                        shown && blocked ? "opacity-60" : ""
-                      }`}
+                      className="card mission-row flex items-center gap-2.5 !p-3"
+                      style={{ animationDelay: `${Math.min(index, 6) * 24}ms` }}
                     >
                       <IconTile icon={t.icon} category={t.category} size={40} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold">{t.name}</p>
-                        <p className="text-xs text-ink-secondary">
-                          {shown ? shown.status.replace("_", " ").toLowerCase() : "Ready"}
+                        <p className="text-xs text-ink-secondary" role="status">
+                          {!shown
+                            ? "Ready to do"
+                            : shown.status === "AWAITING_APPROVAL"
+                              ? "Waiting for a parent"
+                              : shown.status === "COMPLETED"
+                                ? completeLabel
+                                : shown.status === "REJECTED"
+                                  ? "Your parent asked you to try again"
+                                    : blocked
+                                    ? completeLabel
+                                    : `Approved ${approvedCount} time${approvedCount === 1 ? "" : "s"} · ready to do again`}
                         </p>
+                        {history.length > 0 && <details className="mt-1 text-xs text-ink-secondary"><summary className="cursor-pointer font-semibold">This repeat · {history.length} submission{history.length === 1 ? "" : "s"}</summary><ul className="mt-2 space-y-1.5">{history.map((submission) => <li key={submission.id}>{new Date(String(submission.completedAt ?? "")).toLocaleString()} · {submission.status === "AWAITING_APPROVAL" || submission.status === "COMPLETED" ? "Waiting for a parent" : submission.status === "APPROVED" ? "Approved" : "Try again"}{submission.notes ? ` — ${submission.notes}` : ""}</li>)}</ul></details>}
                       </div>
                       <span className="shrink-0 rounded-pill bg-surface px-2 py-0.5 text-xs font-bold text-primary">
                         ★ {t.pointValue}
@@ -645,7 +662,7 @@ export default function KidsPage() {
                             setPendingSubmitTaskId(t.id);
                           }}
                         >
-                          {submittingTaskId === t.id ? "Sending…" : "I did it!"}
+                          {submittingTaskId === t.id ? <><span className="btn-spinner" aria-hidden="true" /> Sending…</> : <><IconCheck size={15} /> I did it!</>}
                         </button>
                       ) : null}
                     </li>
@@ -707,7 +724,7 @@ export default function KidsPage() {
                             {claimingRewardId === r.id
                               ? "Sending…"
                               : canAfford
-                                ? "Ask parent"
+                              ? <><IconGift size={14} /> Ask parent</>
                                 : "Need more ★"}
                           </button>
                         </li>
@@ -912,6 +929,7 @@ export default function KidsPage() {
               <button
                 key={opt.id}
                 type="button"
+                aria-pressed={missionWhen === opt.id}
                 className={`rounded-full px-4 py-2 text-sm font-semibold ${
                   missionWhen === opt.id
                     ? "bg-primary text-white"

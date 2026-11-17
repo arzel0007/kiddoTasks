@@ -43,7 +43,7 @@ const tiers = [
 
 export default function PricingPage() {
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16">
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 py-16">
       <div className="mb-12 text-center">
         <Link href="/" className="text-sm text-primary">
           ← Back

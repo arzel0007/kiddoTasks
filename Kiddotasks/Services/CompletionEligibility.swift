@@ -88,6 +88,8 @@ enum CompletionEligibility {
         calendar: Calendar = .current
     ) -> [TaskCompletion] {
         let mine = completions.filter { $0.taskId == task.id && $0.childId == childId }
+            .sorted { $0.completedAt < $1.completedAt }
+            .sorted { $0.completedAt < $1.completedAt }
         let notRejected = mine.filter { $0.status != .rejected }
         guard task.recurrence.type != .oneTime else { return notRejected }
         guard let currentKey = occurrenceKey(for: task.recurrence, at: now, calendar: calendar) else {
@@ -115,6 +117,7 @@ enum CompletionEligibility {
         calendar: Calendar = .current
     ) -> TaskCompletion? {
         let mine = completions.filter { $0.taskId == task.id && $0.childId == childId }
+            .sorted { $0.completedAt < $1.completedAt }
         guard task.recurrence.type != .oneTime else { return mine.last }
         guard let currentKey = occurrenceKey(for: task.recurrence, at: now, calendar: calendar) else {
             return nil
@@ -126,6 +129,20 @@ enum CompletionEligibility {
             // current status.
             return key == currentKey
         }
+    }
+
+    /// All submission records for this task's current occurrence, including declined attempts.
+    static func occurrenceHistory(
+        of task: KiddoTask,
+        childId: String,
+        in completions: [TaskCompletion],
+        at now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [TaskCompletion] {
+        let mine = completions.filter { $0.taskId == task.id && $0.childId == childId }
+        guard task.recurrence.type != .oneTime else { return mine }
+        guard let currentKey = occurrenceKey(for: task.recurrence, at: now, calendar: calendar) else { return [] }
+        return mine.filter { occurrenceKey(of: $0, for: task.recurrence, calendar: calendar) == currentKey }
     }
 
     /// The completion that stops the child submitting again, or `nil` when the

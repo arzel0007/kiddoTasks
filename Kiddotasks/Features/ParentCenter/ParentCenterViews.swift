@@ -24,7 +24,9 @@ struct ParentControlCenter: View {
             Group {
                 switch selectedTab {
                 case 0:
-                    TodayDashboardView()
+                    TodayDashboardView {
+                        selectedTab = 3
+                    }
                 case 1:
                     TaskListView()
                 case 2:
@@ -44,6 +46,11 @@ struct ParentControlCenter: View {
             )
             .padding(.horizontal, 18)
             .padding(.bottom, 10)
+
+            CloudSyncStatusBanner(status: appState.cloudSyncStatus) {
+                Task { await appState.retryCloudSync() }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .ignoresSafeArea(.container, edges: .bottom)
         .tint(KiddoTasksDesignTokens.Colors.primary)
@@ -1398,6 +1405,7 @@ struct ActivityView: View {
     }
 
     @State private var filter: Filter = .all
+    @State private var visibleTransactionCount = 30
 
     private func childName(_ id: String) -> String {
         appState.child(id: id)?.name ?? "Child"
@@ -1459,7 +1467,7 @@ struct ActivityView: View {
                                 .font(KiddoTasksDesignTokens.Typography.captionLarge)
                                 .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         }
-                        ForEach(transactions) { tx in
+                        ForEach(transactions.prefix(visibleTransactionCount)) { tx in
                             HStack(spacing: 12) {
                                 Image(systemName: tx.type.icon)
                                     .font(.system(size: 15, weight: .bold))
@@ -1494,6 +1502,19 @@ struct ActivityView: View {
                                     )
                             }
                             .padding(.vertical, 2)
+                        }
+                        if transactions.count > visibleTransactionCount {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    visibleTransactionCount += 30
+                                }
+                            } label: {
+                                Label("Show older activity", systemImage: "chevron.down")
+                                    .font(KiddoTasksDesignTokens.Typography.bodyMedium.weight(.semibold))
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(KiddoPressStyle())
+                            .listRowBackground(Color.clear)
                         }
                     }
                 }

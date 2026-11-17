@@ -4,6 +4,7 @@ import {
   findBlockingCompletion,
   isoWeekKey,
   normalizeTimeZone,
+  occurrenceDateRange,
   resolveRequiresApproval,
 } from "./occurrence";
 
@@ -55,6 +56,24 @@ describe("occurrence keys", () => {
     const manilaMidnight = new Date("2026-10-08T16:30:00.000Z");
     expect(computeOccurrenceKey("daily", manilaMidnight, "Asia/Manila")).toBe("D:2026-10-09");
     expect(computeOccurrenceKey("daily", manilaMidnight, "UTC")).toBe("D:2026-10-08");
+  });
+
+  it("returns a family-local daily range that includes legacy timestamps", () => {
+    const range = occurrenceDateRange("daily", new Date("2026-10-08T16:30:00.000Z"), TZ);
+    expect(range.start.toISOString()).toBe("2026-10-08T16:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-10-09T16:00:00.000Z");
+  });
+
+  it("returns ISO-week boundaries across the year in the family time zone", () => {
+    const range = occurrenceDateRange("weekly", new Date("2021-01-01T12:00:00.000Z"), "UTC");
+    expect(range.start.toISOString()).toBe("2020-12-28T00:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2021-01-04T00:00:00.000Z");
+  });
+
+  it("accounts for daylight-saving changes between local midnights", () => {
+    const range = occurrenceDateRange("daily", new Date("2026-03-08T16:00:00.000Z"), "America/Los_Angeles");
+    expect(range.start.toISOString()).toBe("2026-03-08T08:00:00.000Z");
+    expect(range.end.toISOString()).toBe("2026-03-09T07:00:00.000Z");
   });
 
   it("rejects a bogus time zone instead of bypassing the guard", () => {

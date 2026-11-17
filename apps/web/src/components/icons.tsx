@@ -88,6 +88,14 @@ export function IconCheck({ className, size = 16 }: IconProps) {
   );
 }
 
+export function IconX({ className, size = 16 }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>
+      <path d="M6 6l12 12M18 6L6 18" {...base} />
+    </svg>
+  );
+}
+
 export function IconGift({ className, size = 16 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>

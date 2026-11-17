@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function BlogSummerChores() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl px-6 py-16">
       <Link href="/" className="text-sm text-primary">
         ← Home
       </Link>

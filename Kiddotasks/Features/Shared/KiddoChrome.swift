@@ -1,6 +1,38 @@
 import SwiftUI
 import UIKit
 
+struct CloudSyncStatusBanner: View {
+    let status: CloudSyncStatus
+    let onRetry: () -> Void
+
+    @ViewBuilder var body: some View {
+        switch status {
+        case .syncing:
+            label("Syncing family data…", action: nil)
+        case .pending:
+            label("Changes waiting to sync", action: onRetry)
+        case .error:
+            label("Couldn’t sync. Saved on this device.", action: onRetry)
+        case .unavailable:
+            label("Saved on this device only", action: nil)
+        case .signedIn, .signedOut:
+            EmptyView()
+        }
+    }
+
+    private func label(_ text: String, action: (() -> Void)?) -> some View {
+        HStack(spacing: 10) {
+            Text(text).font(KiddoTasksDesignTokens.Typography.captionLarge)
+            if let action { Button("Retry", action: action).fontWeight(.semibold).accessibilityHint("Try syncing family data again") }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .background(KiddoTasksDesignTokens.Colors.surfaceCard, in: Capsule())
+        .overlay(Capsule().stroke(KiddoTasksDesignTokens.Colors.border, lineWidth: 1))
+        .padding(.top, 6).padding(.horizontal, 16)
+        .accessibilityElement(children: .contain)
+    }
+}
+
 // MARK: - Edge swipe back (custom nav bars hide the system gesture)
 
 /// Restores swipe-from-left-to-go-back on screens that hide the system nav bar.
@@ -63,9 +95,6 @@ struct KiddoFloatingTabBar: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var barHeight: CGFloat {
-        labelStyle == .iconsOnly ? 56 : 72
-    }
     private let selectionFill = Color(hex: "#E8EDF2")
 
     var body: some View {
@@ -102,7 +131,7 @@ struct KiddoFloatingTabBar: View {
 
                         if labelStyle == .iconsAndText {
                             Text(item.title)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(
                                     selection == index
                                         ? tint
@@ -121,7 +150,7 @@ struct KiddoFloatingTabBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, labelStyle == .iconsOnly ? 8 : 10)
-        .frame(height: barHeight)
+        .frame(minHeight: labelStyle == .iconsOnly ? 56 : 64)
         .background(
             Capsule(style: .continuous)
                 .fill(Color.white)

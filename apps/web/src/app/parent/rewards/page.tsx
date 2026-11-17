@@ -5,6 +5,8 @@ import { useFamilyStore } from "@/lib/family-store";
 import { IconTile, ChildAvatar } from "@/lib/ui";
 import { SkeletonListRow } from "@/components/skeleton";
 import { Modal } from "@/components/ui/modal";
+import { FormField } from "@/components/ui/form-field";
+import { FamilyLoadError } from "@/components/family-load-error";
 import { toast } from "@/components/toast";
 import { errorMessage } from "@/lib/errors";
 import { REWARD_ICONS } from "@/lib/catalog";
@@ -27,15 +29,6 @@ const emptyForm: RewardForm = {
   eligibleChildIds: [],
   requiresApproval: true,
 };
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="field-label">{label}</label>
-      {children}
-    </div>
-  );
-}
 
 export default function RewardsPage() {
   const {
@@ -164,9 +157,7 @@ export default function RewardsPage() {
   return (
     <div className="space-y-4">
       {error ? (
-        <div className="card border-error/40">
-          <p className="font-semibold text-error">{error}</p>
-        </div>
+        <FamilyLoadError message={error} />
       ) : null}
       <div className="card">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -289,28 +280,29 @@ export default function RewardsPage() {
         }}
       >
         <form onSubmit={saveForm} className="space-y-3 text-left">
-          <Field label="Name">
+          <FormField label="Name">
             <input
               className="field-input"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               required
             />
-          </Field>
-          <Field label="Description">
+          </FormField>
+          <FormField label="Description">
             <input
               className="field-input"
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
-          </Field>
-          <Field label="Icon">
+          </FormField>
+          <FormField label="Icon">
             <div className="flex flex-wrap gap-2">
               {REWARD_ICONS.map((icon) => (
                 <button
                   key={icon}
                   type="button"
                   aria-label={icon}
+                  aria-pressed={form.icon === icon}
                   className={`flex h-10 w-10 items-center justify-center rounded-xl border text-lg ${
                     form.icon === icon ? "border-primary bg-primary-light" : "border-border bg-surface"
                   }`}
@@ -320,8 +312,8 @@ export default function RewardsPage() {
                 </button>
               ))}
             </div>
-          </Field>
-          <Field label="Star cost">
+          </FormField>
+          <FormField label="Star cost">
             <input
               className="field-input"
               type="number"
@@ -331,14 +323,15 @@ export default function RewardsPage() {
                 setForm((f) => ({ ...f, pointCost: Number(e.target.value) || 0 }))
               }
             />
-          </Field>
-          <Field label="Eligible kids">
+          </FormField>
+          <FormField label="Eligible kids">
             {children.length === 0 ? (
               <p className="text-xs text-ink-tertiary">No kids yet — reward stays open to all.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
+                  aria-pressed={form.eligibleChildIds.length === 0}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                     form.eligibleChildIds.length === 0
                       ? "bg-primary text-white"
@@ -354,6 +347,7 @@ export default function RewardsPage() {
                     <button
                       key={c.id}
                       type="button"
+                      aria-pressed={on}
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                         on ? "bg-primary text-white" : "bg-surface text-ink-secondary"
                       }`}
@@ -373,7 +367,7 @@ export default function RewardsPage() {
                 })}
               </div>
             )}
-          </Field>
+          </FormField>
           <label className="flex items-center gap-2 text-sm font-medium text-ink">
             <input
               type="checkbox"

@@ -4,6 +4,7 @@ import Charts
 /// The Today tab: branded header, metric tiles, a weekly stars chart, per-child
 /// progress, and the pending approval queues.
 struct TodayDashboardView: View {
+    var onOpenFamily: () -> Void = {}
     @Environment(AppState.self) private var appState
     @State private var rejectReason = ""
     @State private var rejectingCompletion: TaskCompletion?
@@ -37,11 +38,11 @@ struct TodayDashboardView: View {
                 ScrollView {
                     VStack(spacing: KiddoTasksDesignTokens.Spacing.medium) {
                         birthdayBanner
-                        statTiles
-                        WeeklyStarsCard(series: weeklySeries)
-                        childProgress
                         pendingApprovalsCard
                         rewardRequestsCard
+                        statTiles
+                        childProgress
+                        WeeklyStarsCard(series: weeklySeries)
                     }
                     .padding(.horizontal, KiddoTasksDesignTokens.Spacing.medium)
                     .padding(.bottom, KiddoTasksDesignTokens.Spacing.xLarge)
@@ -53,11 +54,17 @@ struct TodayDashboardView: View {
             .overlay {
                 if appState.isLoading {
                     VStack(spacing: 16) {
+                        Text("Loading family data…")
+                            .font(KiddoTasksDesignTokens.Typography.bodyMedium)
+                            .foregroundStyle(KiddoTasksDesignTokens.Colors.textSecondary)
                         ForEach(0..<4, id: \.self) { _ in
                             SkeletonListRow()
                         }
                     }
                     .padding()
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Loading family data")
+                    .accessibilityAddTraits(.updatesFrequently)
                 }
             }
             .onAppear {
@@ -238,26 +245,6 @@ struct TodayDashboardView: View {
             .buttonStyle(KiddoPressStyle())
             .accessibilityLabel("Open Kids Station")
             
-            #if DEBUG
-            Button {
-                Task {
-                    await appState.forceSyncFromCloud()
-                    appState.toastSuccess("Synced from cloud")
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.caption)
-            }
-            .foregroundStyle(.secondary)
-            .padding(.trailing, 8)
-            
-            Button("Export") {
-                ExportHelper().copyToClipboard(store: appState.store)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.trailing, 8)
-            #endif
         }
     }
 
@@ -303,9 +290,9 @@ struct TodayDashboardView: View {
                     emoji: "👋",
                     title: "Add your kids",
                     message: "Create child profiles in the Family tab so missions can be assigned.",
-                    actionTitle: "Got it"
+                    actionTitle: "Add kids"
                 ) {
-                    appState.toastInfo("Open the Family tab to add kids")
+                    onOpenFamily()
                 }
                 .frame(minHeight: 180)
             } else {
@@ -428,6 +415,8 @@ struct WeeklyStarsCard: View {
             }
             .chartForegroundStyleScale(domain: names, range: names.map(color(for:)))
             .chartLegend(.hidden)
+            .accessibilityLabel("Stars earned per day this week")
+            .accessibilityHint("Bars show points earned by each child on each day")
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { _ in
                     AxisGridLine()
@@ -537,12 +526,11 @@ struct PendingCompletionRow: View {
 
     private var approveButton: some View {
         Button(action: onApprove) {
-            Text("Approve")
-                .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                .fontWeight(.bold)
+            Label("Approve", systemImage: "checkmark")
+                .font(KiddoTasksDesignTokens.Typography.captionLarge.weight(.bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 12)
+                .frame(minWidth: 76, minHeight: 44)
                 .background(Capsule().fill(KiddoTasksDesignTokens.Colors.success))
         }
         .buttonStyle(KiddoPressStyle())
@@ -550,14 +538,13 @@ struct PendingCompletionRow: View {
 
     private var declineButton: some View {
         Button(action: onDecline) {
-            Text("Decline")
-                .font(KiddoTasksDesignTokens.Typography.captionLarge)
-                .fontWeight(.bold)
+            Label("Decline", systemImage: "xmark")
+                .font(KiddoTasksDesignTokens.Typography.captionLarge.weight(.semibold))
                 .foregroundStyle(KiddoTasksDesignTokens.Colors.error)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 12)
+                .frame(minWidth: 76, minHeight: 44)
                 .background(
-                    Capsule().strokeBorder(KiddoTasksDesignTokens.Colors.error.opacity(0.5), lineWidth: 1.5)
+                    Capsule().fill(KiddoTasksDesignTokens.Colors.error.opacity(0.08))
                 )
         }
         .buttonStyle(KiddoPressStyle())
