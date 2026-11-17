@@ -48,6 +48,7 @@ struct TodayDashboardView: View {
                     .padding(.bottom, KiddoTasksDesignTokens.Spacing.xLarge)
                 }
                 .scrollContentBackground(.hidden)
+                .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
             }
             .kiddoPageBackground(KiddoTasksDesignTokens.PageBackgrounds.parentPage)
             .toolbar(.hidden, for: .navigationBar)

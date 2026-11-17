@@ -357,11 +357,15 @@ struct MissionsView: View {
                 if let child {
                     let missions = appState.store.tasksForChild(child.id)
                     if missions.isEmpty {
-                        EmptyStateView(
-                            emoji: "🎯",
-                            title: "All clear",
-                            message: "No missions for today. Great job!"
-                        )
+                        ScrollView {
+                            EmptyStateView(
+                                emoji: "🎯",
+                                title: "All clear",
+                                message: "No missions for today. Great job!"
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 360)
+                        }
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                     } else {
                         List {
                             ForEach(Array(missions.enumerated()), id: \.element.id) { index, task in
@@ -394,6 +398,7 @@ struct MissionsView: View {
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                     }
                 }
             }
@@ -809,11 +814,15 @@ struct RewardShopView: View {
                 if let child {
                     let shop = appState.store.rewards.filter { $0.isActive && $0.isEligibleFor(child.id) }
                     if shop.isEmpty {
-                        EmptyStateView(
-                            emoji: "🎁",
-                            title: "Shop is empty",
-                            message: "Parents can add rewards in the Parent Center."
-                        )
+                        ScrollView {
+                            EmptyStateView(
+                                emoji: "🎁",
+                                title: "Shop is empty",
+                                message: "Parents can add rewards in the Parent Center."
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 360)
+                        }
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                     } else {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
@@ -841,6 +850,7 @@ struct RewardShopView: View {
                             }
                             .padding()
                         }
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                     }
                 }
             }
@@ -889,11 +899,15 @@ struct AchievementsView: View {
             let earned = appState.store.achievements.filter { $0.childId == appState.currentChildProfile?.id }
             Group {
                 if earned.isEmpty {
-                    EmptyStateView(
-                        emoji: "🏅",
-                        title: "No badges yet",
-                        message: "Finish missions to earn badges."
-                    )
+                    ScrollView {
+                        EmptyStateView(
+                            emoji: "🏅",
+                            title: "No badges yet",
+                            message: "Finish missions to earn badges."
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 360)
+                    }
+                    .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                 } else {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
@@ -928,6 +942,7 @@ struct AchievementsView: View {
                                 .popIn(delay: Double(index) * 0.08)
                             }
                         }
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                         .padding()
                     }
                 }

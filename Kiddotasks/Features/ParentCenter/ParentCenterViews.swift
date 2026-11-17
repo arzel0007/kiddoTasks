@@ -194,6 +194,7 @@ struct TaskListView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                 // Keep last rows clear of the floating add button.
                 .safeAreaPadding(.bottom, 72)
             }
@@ -596,6 +597,7 @@ struct RewardListView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                 .safeAreaPadding(.bottom, 72)
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
@@ -987,6 +989,7 @@ struct FamilyView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
@@ -1486,6 +1489,7 @@ struct ActivityView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)

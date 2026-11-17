@@ -289,6 +289,7 @@ struct ParentWishlistView: View {
                     }
                     .listStyle(.insetGrouped)
                     .scrollContentBackground(.hidden)
+                    .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                 }
             }
             .background(KiddoTasksDesignTokens.PageBackgrounds.parentPage.ignoresSafeArea())
@@ -504,27 +505,39 @@ struct KidsWishlistView: View {
         NavigationStack {
             Group {
                 if child == nil {
-                    EmptyStateView(
-                        emoji: "🧒",
-                        title: "Pick your face",
-                        message: "Choose who is playing to see their wishlist."
-                    )
+                    ScrollView {
+                        EmptyStateView(
+                            emoji: "🧒",
+                            title: "Pick your face",
+                            message: "Choose who is playing to see their wishlist."
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 360)
+                    }
+                    .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                 } else if !wishlistEnabled {
-                    EmptyStateView(
-                        emoji: "🔒",
-                        title: "Wishes are off",
-                        message: "Ask a parent to turn on Wishlist in Family settings. Wishes never use stars."
-                    )
+                    ScrollView {
+                        EmptyStateView(
+                            emoji: "🔒",
+                            title: "Wishes are off",
+                            message: "Ask a parent to turn on Wishlist in Family settings. Wishes never use stars."
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 360)
+                    }
+                    .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                 } else if let child {
                     let list = items(for: child)
                     if list.isEmpty {
-                        EmptyStateView(
-                            emoji: "🎁",
-                            title: "No wishes yet",
-                            message: "Add something you’d love — a book, toy, or experience.",
-                            actionTitle: "Add a wish",
-                            action: { showAddSheet = true }
-                        )
+                        ScrollView {
+                            EmptyStateView(
+                                emoji: "🎁",
+                                title: "No wishes yet",
+                                message: "Add something you’d love — a book, toy, or experience.",
+                                actionTitle: "Add a wish",
+                                action: { showAddSheet = true }
+                            )
+                            .frame(maxWidth: .infinity, minHeight: 360)
+                        }
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 12) {
@@ -535,6 +548,7 @@ struct KidsWishlistView: View {
                             }
                             .padding()
                         }
+                        .refreshable { await appState.refreshFamilyFromCloud(showStatus: true) }
                     }
                 }
             }

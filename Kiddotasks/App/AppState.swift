@@ -35,9 +35,13 @@ final class AppState {
     var isCloudEnabled: Bool { cloudSync.isAvailable }
 
     /// Pull the latest family snapshot (safe no-op when cloud is off).
-    func refreshFamilyFromCloud() async {
+    func refreshFamilyFromCloud(showStatus: Bool = false) async {
         guard cloudSync.isAvailable else { return }
-        await cloudSync.refreshFromCloud()
+        if let token = cloudSync.kidsAccessToken, !token.isEmpty {
+            await cloudSync.refreshKidsSessionFromCloud(showStatus: showStatus)
+        } else {
+            await cloudSync.refreshFromCloud(showStatus: showStatus)
+        }
     }
 
     /// Force a hard sync: invalidate fingerprint and re-fetch fresh data from cloud.
@@ -52,6 +56,10 @@ final class AppState {
     var cloudSyncStatus: CloudSyncStatus { cloudSync.status }
 
     func retryCloudSync() async {
+        if let token = cloudSync.kidsAccessToken, !token.isEmpty {
+            await cloudSync.refreshKidsSessionFromCloud(showStatus: true)
+            return
+        }
         do {
             if cloudSync.hasUnsyncedLocalChanges {
                 try await cloudSync.pushSnapshot()

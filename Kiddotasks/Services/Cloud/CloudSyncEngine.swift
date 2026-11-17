@@ -46,6 +46,7 @@ final class CloudSyncEngine {
     private var pendingPush: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var isRefreshing = false
+    private var isRefreshingKids = false
     private var isPushing = false
     /// Set when a push is requested while one is already in flight. Without this,
     /// concurrent local edits (e.g. approving several missions in a row) were
@@ -618,19 +619,27 @@ final class CloudSyncEngine {
         #endif
     }
 
-    func refreshKidsSessionFromCloud() async {
+    func refreshKidsSessionFromCloud(showStatus: Bool = false) async {
         #if canImport(FirebaseFunctions) && canImport(FirebaseFirestore)
         guard isAvailable,
               let token = kidsAccessToken,
-              !token.isEmpty else { return }
+              !token.isEmpty,
+              !isRefreshingKids else { return }
+        isRefreshingKids = true
+        defer { isRefreshingKids = false }
+        if showStatus { status = .syncing }
         do {
             let result = try await Functions.functions()
                 .httpsCallable("refreshKidsSession")
                 .call(["kidsAccessToken": token])
             guard let data = result.data as? [String: Any],
-                  let familyId = data["familyId"] as? String else { return }
+                  let familyId = data["familyId"] as? String else {
+                throw FirebaseError.invalidFamily
+            }
             try applyKidsSessionPayload(data, familyId: familyId)
+            status = .signedIn
         } catch {
+            status = .error(error.localizedDescription)
             #if DEBUG
             print("[KidsPIN] refresh failed: \(error.localizedDescription)")
             #endif
@@ -916,7 +925,7 @@ final class CloudSyncEngine {
     // MARK: - Sync
 
     /// Pulls the latest family state when it is safe to apply.
-    func refreshFromCloud() async {
+    func refreshFromCloud(showStatus: Bool = false) async {
         #if canImport(FirebaseAuth) && canImport(FirebaseFirestore) && canImport(FirebaseFunctions)
         guard isAvailable,
               let user = Auth.auth().currentUser,
@@ -924,15 +933,18 @@ final class CloudSyncEngine {
         // Never pull over unpushed local work.
         guard !hasUnsyncedLocalChanges else {
             scheduleRetryPush()
+            status = .pending
             return
         }
         isRefreshing = true
         defer { isRefreshing = false }
+        if showStatus { status = .syncing }
         do {
             let email = user.email ?? store.parent?.email ?? ""
             let snapshot = try await fetchSnapshot(uid: user.uid, email: email)
             let incomingFingerprint = fingerprint(of: snapshot)
             if let last = lastFetchedFingerprint, incomingFingerprint == last {
+                status = .signedIn
                 return
             }
             // Fingerprint differs → something actually changed (e.g. a web
@@ -942,12 +954,15 @@ final class CloudSyncEngine {
             // never saw web-only items.
             guard !hasUnsyncedLocalChanges else {
                 scheduleRetryPush()
+                status = .pending
                 return
             }
             applyFromCloud(snapshot)
             lastFetchedFingerprint = incomingFingerprint
+            status = .signedIn
         } catch {
             // Transient network or rules failure; keep current local state.
+            status = .error(error.localizedDescription)
         }
         #endif
     }
