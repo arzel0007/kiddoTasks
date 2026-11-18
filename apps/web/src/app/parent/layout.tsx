@@ -88,13 +88,24 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   function positionNavPill(target: HTMLElement | null) {
     const nav = primaryNavRef.current;
     if (!nav) return;
-    let item = target;
-    if (!item || item.getClientRects().length === 0) {
-      const activeLink = nav.querySelector<HTMLElement>('.parent-nav-full[aria-current="page"]');
-      item = activeLink?.getClientRects().length
+    const isVisible = (element: HTMLElement | null): element is HTMLElement =>
+      Boolean(element && element.getClientRects().length > 0);
+    const activeLink = nav.querySelector<HTMLElement>('.parent-nav-full[aria-current="page"]');
+    const activeMoreButton = nav.querySelector<HTMLElement>(
+      ".parent-nav-more > [data-nav-highlight].is-active"
+    );
+    const openMenuActiveLink = nav.querySelector<HTMLElement>(
+      '.parent-nav-menu [data-nav-highlight][aria-current="page"]'
+    );
+    const item = isVisible(target)
+      ? target
+      : isVisible(activeLink)
         ? activeLink
-        : nav.querySelector<HTMLElement>(".parent-nav-more [data-nav-highlight]");
-    }
+        : isVisible(activeMoreButton)
+          ? activeMoreButton
+          : isVisible(openMenuActiveLink)
+            ? openMenuActiveLink
+            : nav.querySelector<HTMLElement>(".parent-nav-more > [data-nav-highlight]");
     if (!item) return;
     const navRect = nav.getBoundingClientRect();
     const itemRect = item.getBoundingClientRect();
@@ -107,9 +118,11 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   }
 
   function resolveNavPill() {
+    const isVisible = (element: HTMLElement | null) =>
+      Boolean(element && element.getClientRects().length > 0);
     positionNavPill(
-      focusedNavItemRef.current ??
-        hoveredNavItemRef.current ??
+      (isVisible(focusedNavItemRef.current) ? focusedNavItemRef.current : null) ??
+        (isVisible(hoveredNavItemRef.current) ? hoveredNavItemRef.current : null) ??
         primaryNavRef.current?.querySelector<HTMLElement>('.parent-nav-full[aria-current="page"]') ??
         null
     );
@@ -312,9 +325,16 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   // another device (e.g. iOS) show up without a full reload.
   useEffect(() => {
     if (!isFirebaseConfigured) return;
+    let lastFocusRefreshAt = 0;
     const refresh = () => {
       const user = firebaseAuth().currentUser;
-      if (user) void loadFamilyForParent(user.uid);
+      const now = Date.now();
+      // Firestore's family marker listener handles live changes. Use focus as
+      // a recovery path, but avoid refetching every collection on each app switch.
+      if (user && now - lastFocusRefreshAt >= 30_000) {
+        lastFocusRefreshAt = now;
+        void loadFamilyForParent(user.uid);
+      }
     };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
@@ -324,7 +344,12 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   // page in sync without depending on a focus event or manual reload.
   useEffect(() => {
     if (!isFirebaseConfigured || !authUser || !family?.id || kidsMode) return;
+    let isInitialSnapshot = true;
     return onSnapshot(doc(firestore(), "families", family.id), () => {
+      if (isInitialSnapshot) {
+        isInitialSnapshot = false;
+        return;
+      }
       setSyncState("updating");
       void loadFamilyForParent(authUser.uid);
     }, () => setSyncState("error"));

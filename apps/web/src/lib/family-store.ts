@@ -1061,7 +1061,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       set({ error: "Firebase is not configured (check .env.local).", syncState: "error" });
       return;
     }
-    set({ loading: true, error: null, parentUid: uid, kidsMode: false, syncState: "updating" });
+    const hasCachedFamily = Boolean(get().family && get().parentUid === uid);
+    // Keep the last good family snapshot visible while refreshing it. `loading`
+    // means the first load only; toggling it on background refreshes replaced
+    // every page with skeletons whenever focus or a sync marker fired.
+    set({ loading: !hasCachedFamily, error: null, parentUid: uid, kidsMode: false, syncState: "updating" });
     try {
       const db = firestore();
       const parentSnap = await getDoc(doc(db, "parents", uid));
