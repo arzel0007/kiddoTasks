@@ -157,6 +157,22 @@ export default function TasksPage() {
     }));
   }
 
+  function handleTaskSegmentKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const selectedIndex = showArchived ? 1 : 0;
+    let nextIndex: number | undefined;
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      nextIndex = (selectedIndex + 1) % 2;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = 1;
+    }
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    setShowArchived(nextIndex === 1);
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+  }
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -190,20 +206,55 @@ export default function TasksPage() {
 
       <div className="card">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h2 className="font-bold">{showArchived ? "Archived chores" : "Active chores"}</h2>
+          <div
+            className="task-segment"
+            role="tablist"
+            aria-label="Chore lists"
+            onKeyDown={handleTaskSegmentKeyDown}
+          >
+            <span
+              className="task-segment__thumb"
+              aria-hidden="true"
+              style={{ transform: `translateX(${showArchived ? "calc(100% + 0.2rem)" : "0"})` }}
+            />
             <button
+              id="active-chores-tab"
               type="button"
-              className="text-xs font-semibold text-primary underline"
-              onClick={() => setShowArchived((v) => !v)}
+              role="tab"
+              aria-selected={!showArchived}
+              aria-controls="task-list-panel"
+              tabIndex={showArchived ? -1 : 0}
+              className="task-segment__button"
+              onClick={() => setShowArchived(false)}
             >
-              {showArchived ? "Show active" : "Show archived"}
+              Active
+            </button>
+            <button
+              id="archived-chores-tab"
+              type="button"
+              role="tab"
+              aria-selected={showArchived}
+              aria-controls="task-list-panel"
+              tabIndex={showArchived ? 0 : -1}
+              className="task-segment__button"
+              onClick={() => setShowArchived(true)}
+            >
+              Archived
             </button>
           </div>
           <button type="button" className="chip-btn chip-btn--primary" onClick={openCreate}>
             + Add chore
           </button>
         </div>
+        <section
+          key={showArchived ? "archived" : "active"}
+          id="task-list-panel"
+          role="tabpanel"
+          aria-labelledby={showArchived ? "archived-chores-tab" : "active-chores-tab"}
+          tabIndex={0}
+          className={`task-list-panel ${showArchived ? "task-list-panel--forward" : "task-list-panel--back"}`}
+        >
+        <h2 className="sr-only">{showArchived ? "Archived chores" : "Active chores"}</h2>
         {loading ? (
           <div className="space-y-3">
             <SkeletonListRow />
@@ -230,7 +281,7 @@ export default function TasksPage() {
             )}
           </div>
         ) : (
-          <ul key={showArchived ? "archived" : "active"} className="motion-stagger divide-y divide-border">
+          <ul className="motion-stagger divide-y divide-border">
             {filtered.map((t) => (
               <li key={t.id} className="flex items-center gap-3 py-3">
                 <IconTile icon={t.icon} category={t.category} />
@@ -265,6 +316,7 @@ export default function TasksPage() {
             ))}
           </ul>
         )}
+        </section>
       </div>
 
       <p className="text-xs text-ink-tertiary">

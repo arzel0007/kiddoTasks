@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
@@ -34,6 +34,13 @@ const tabs = [
   { href: "/parent/billing", label: "Plan", Icon: IconPlan },
 ];
 
+type RouteDirection = "forward" | "back";
+type NavPillPosition = { x: number; y: number; width: number; height: number };
+type RouteViewTransition = { finished: Promise<void>; skipTransition: () => void };
+type TransitionDocument = Document & {
+  startViewTransition?: (callback: () => void | Promise<void>) => RouteViewTransition;
+};
+
 /** Shown when the device is in Kids Mode — parent UI must not render. */
 function ParentLocked() {
   return (
@@ -63,9 +70,188 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   const [moreOpen, setMoreOpen] = useState(false);
   const [syncRetryKey, setSyncRetryKey] = useState(0);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const primaryNavRef = useRef<HTMLElement>(null);
+  const hoveredNavItemRef = useRef<HTMLElement | null>(null);
+  const focusedNavItemRef = useRef<HTMLElement | null>(null);
+  const routePathRef = useRef(pathname ?? "/parent/today");
+  const routeHistoryRef = useRef<string[]>([pathname ?? "/parent/today"]);
+  const routeHistoryIndexRef = useRef(0);
+  const historyTraversalTargetRef = useRef<string | null>(null);
+  const pendingDirectionRef = useRef<RouteDirection | null>(null);
+  const routeWaiterRef = useRef<{ path: string; resolve: () => void } | null>(null);
+  const activeTransitionRef = useRef<RouteViewTransition | null>(null);
+  const [navPill, setNavPill] = useState<NavPillPosition | null>(null);
   // True once Firebase has reported auth state at least once (or Firebase is off).
   const [authReady, setAuthReady] = useState(!isFirebaseConfigured);
   const pageTitle = arzTitleFromPath(pathname);
+
+  function positionNavPill(target: HTMLElement | null) {
+    const nav = primaryNavRef.current;
+    if (!nav) return;
+    let item = target;
+    if (!item || item.getClientRects().length === 0) {
+      const activeLink = nav.querySelector<HTMLElement>('.parent-nav-full[aria-current="page"]');
+      item = activeLink?.getClientRects().length
+        ? activeLink
+        : nav.querySelector<HTMLElement>(".parent-nav-more [data-nav-highlight]");
+    }
+    if (!item) return;
+    const navRect = nav.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    setNavPill({
+      x: itemRect.left - navRect.left + nav.scrollLeft,
+      y: itemRect.top - navRect.top + nav.scrollTop,
+      width: itemRect.width,
+      height: itemRect.height,
+    });
+  }
+
+  function resolveNavPill() {
+    positionNavPill(
+      focusedNavItemRef.current ??
+        hoveredNavItemRef.current ??
+        primaryNavRef.current?.querySelector<HTMLElement>('.parent-nav-full[aria-current="page"]') ??
+        null
+    );
+  }
+
+  function waitForRoute(path: string) {
+    if (routePathRef.current === path) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const timeout = window.setTimeout(() => {
+        routeWaiterRef.current = null;
+        resolve();
+      }, 3000);
+      routeWaiterRef.current = {
+        path,
+        resolve: () => {
+          window.clearTimeout(timeout);
+          routeWaiterRef.current = null;
+          resolve();
+        },
+      };
+    });
+  }
+
+  function transitionRoute(path: string, direction: RouteDirection, update: () => void) {
+    pendingDirectionRef.current = direction;
+    const root = document.documentElement;
+    root.dataset.routeDirection = direction;
+    const transitionDocument = document as TransitionDocument;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!transitionDocument.startViewTransition || reducedMotion) {
+      delete root.dataset.routeDirection;
+      update();
+      return;
+    }
+
+    try {
+      activeTransitionRef.current?.skipTransition();
+    } catch {
+      activeTransitionRef.current = null;
+    }
+    try {
+      const transition = transitionDocument.startViewTransition(async () => {
+        update();
+        await waitForRoute(path);
+      });
+      activeTransitionRef.current = transition;
+      const clearTransition = () => {
+        if (activeTransitionRef.current !== transition) return;
+        activeTransitionRef.current = null;
+        delete root.dataset.routeDirection;
+      };
+      void transition.finished.then(clearTransition, clearTransition);
+    } catch {
+      delete root.dataset.routeDirection;
+      update();
+    }
+  }
+
+  function handlePageLinkClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      !(event.target instanceof Element)
+    ) return;
+    const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+    if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+    const destination = new URL(anchor.href);
+    if (
+      destination.origin !== window.location.origin ||
+      destination.pathname === routePathRef.current ||
+      !destination.pathname.startsWith("/parent/")
+    ) return;
+    event.preventDefault();
+    const href = `${destination.pathname}${destination.search}${destination.hash}`;
+    transitionRoute(destination.pathname, "forward", () => router.push(href));
+  }
+
+  useLayoutEffect(() => {
+    const nextPath = pathname ?? "/";
+    if (nextPath !== routePathRef.current) {
+      routePathRef.current = nextPath;
+      const direction = pendingDirectionRef.current ?? "forward";
+      const isHistoryTraversal = historyTraversalTargetRef.current === nextPath;
+      if (direction === "forward" && !isHistoryTraversal) {
+        const history = routeHistoryRef.current.slice(0, routeHistoryIndexRef.current + 1);
+        history.push(nextPath);
+        routeHistoryRef.current = history;
+        routeHistoryIndexRef.current = history.length - 1;
+      } else if (!isHistoryTraversal && routeHistoryRef.current[routeHistoryIndexRef.current] !== nextPath) {
+        routeHistoryRef.current = [nextPath];
+        routeHistoryIndexRef.current = 0;
+      }
+      historyTraversalTargetRef.current = null;
+      pendingDirectionRef.current = null;
+      if (routeWaiterRef.current?.path === nextPath) routeWaiterRef.current.resolve();
+    }
+    resolveNavPill();
+  }, [pathname, moreOpen]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const destination = window.location.pathname;
+      if (
+        destination === routePathRef.current ||
+        !destination.startsWith("/parent/") ||
+        !routePathRef.current.startsWith("/parent/")
+      ) return;
+      const history = routeHistoryRef.current;
+      const currentIndex = routeHistoryIndexRef.current;
+      const backIndex = history.lastIndexOf(destination, currentIndex - 1);
+      const forwardIndex = history.indexOf(destination, currentIndex + 1);
+      const direction: RouteDirection = backIndex >= 0 ? "back" : forwardIndex >= 0 ? "forward" : "back";
+      historyTraversalTargetRef.current = destination;
+      if (backIndex >= 0) routeHistoryIndexRef.current = backIndex;
+      else if (forwardIndex >= 0) routeHistoryIndexRef.current = forwardIndex;
+      else {
+        routeHistoryRef.current = [destination];
+        routeHistoryIndexRef.current = 0;
+      }
+      transitionRoute(destination, direction, () => undefined);
+    };
+    const onViewportChange = () => resolveNavPill();
+    const nav = primaryNavRef.current;
+    window.addEventListener("popstate", onPopState);
+    window.addEventListener("resize", onViewportChange);
+    nav?.addEventListener("scroll", onViewportChange);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("resize", onViewportChange);
+      nav?.removeEventListener("scroll", onViewportChange);
+    };
+  }, []);
+
+  function targetNavItem(target: EventTarget | null) {
+    if (!(target instanceof Element)) return null;
+    const item = target.closest<HTMLElement>("[data-nav-highlight]");
+    return primaryNavRef.current?.contains(item) ? item : null;
+  }
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
@@ -174,7 +360,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="min-h-screen bg-page">
+    <div className="min-h-screen bg-page" onClickCapture={handlePageLinkClick}>
       <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pb-10 pt-3">
         {/* Flat page header matching Today: [Arz] Title · actions. mb-5 keeps gap before nav/content. */}
         <header className="parent-header mb-5 flex min-h-[96px] items-center gap-3">
@@ -213,7 +399,37 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
           </div>
         </header>
 
-        <nav className="parent-primary-nav mb-5 flex gap-1.5" aria-label="Primary">
+        <nav
+          ref={primaryNavRef}
+          className="parent-primary-nav mb-5 flex gap-1.5"
+          aria-label="Primary"
+          onPointerOver={(event) => {
+            hoveredNavItemRef.current = targetNavItem(event.target);
+            resolveNavPill();
+          }}
+          onPointerLeave={() => {
+            hoveredNavItemRef.current = null;
+            resolveNavPill();
+          }}
+          onFocusCapture={(event) => {
+            focusedNavItemRef.current = targetNavItem(event.target);
+            resolveNavPill();
+          }}
+          onBlurCapture={(event) => {
+            focusedNavItemRef.current = targetNavItem(event.relatedTarget);
+            resolveNavPill();
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="parent-nav-pill"
+            style={{
+              opacity: navPill ? 1 : 0,
+              width: navPill?.width,
+              height: navPill?.height,
+              transform: `translate3d(${navPill?.x ?? 0}px, ${navPill?.y ?? 0}px, 0)`,
+            }}
+          />
           {tabs.map(({ href, label, Icon }) => {
             const active = pathname?.startsWith(href);
             return (
@@ -221,6 +437,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
                 key={href}
                 href={href}
                 aria-current={active ? "page" : undefined}
+                data-nav-highlight
                 className={`nav-item parent-nav-full ${active ? "is-active" : ""}`}
               >
                 <Icon size={16} />
@@ -229,14 +446,33 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
             );
           })}
           <div className="parent-nav-more" ref={moreMenuRef}>
-            <button type="button" className={`nav-item ${tabs.slice(3).some(({ href }) => pathname?.startsWith(href)) ? "is-active" : ""}`} aria-label="More parent sections" aria-controls="parent-more-menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}>More <span aria-hidden="true">⌄</span></button>
-            {moreOpen && <div className="parent-nav-menu" id="parent-more-menu">{tabs.slice(3).map(({ href, label, Icon }) => { const active = pathname?.startsWith(href); return <Link key={href} href={href} aria-current={active ? "page" : undefined} className={`nav-item ${active ? "is-active" : ""}`} onClick={() => setMoreOpen(false)}><Icon size={16}/>{label}</Link>; })}</div>}
+            <button type="button" data-nav-highlight className={`nav-item ${tabs.slice(3).some(({ href }) => pathname?.startsWith(href)) ? "is-active" : ""}`} aria-label="More parent sections" aria-controls="parent-more-menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}>More <span aria-hidden="true">⌄</span></button>
+            {moreOpen && (
+              <div className="parent-nav-menu" id="parent-more-menu">
+                {tabs.slice(3).map(({ href, label, Icon }) => {
+                  const active = pathname?.startsWith(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      data-nav-highlight
+                      aria-current={active ? "page" : undefined}
+                      className={`nav-item ${active ? "is-active" : ""}`}
+                      onClick={() => setMoreOpen(false)}
+                    >
+                      <Icon size={16} />
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </nav>
 
         {syncState !== "connected" && <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm" role="status" aria-live="polite"><span>{syncState === "connecting" ? "Connecting to family data…" : syncState === "updating" ? "Updating family data…" : syncState === "offline" ? "Offline · showing saved family data" : "Couldn’t update family data"}</span>{(syncState === "offline" || syncState === "error") && <button className="font-semibold text-primary" type="button" onClick={retrySync}>Retry</button>}</div>}
 
-        <main key={pathname} id="main-content" tabIndex={-1} className="motion-page-enter flex-1">
+        <main key={pathname} id="main-content" tabIndex={-1} className="parent-route-content flex-1">
           {loading && !family ? <PageSkeleton /> : children}
         </main>
       </div>
