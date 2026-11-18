@@ -128,7 +128,7 @@ export default function FamilyPage() {
             Add kids from the iOS Family tab — they show up here with photos.
           </p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="motion-stagger space-y-3">
             {children.map((c) => (
               <li key={c.id} className="flex items-center gap-3">
                 <ChildAvatar

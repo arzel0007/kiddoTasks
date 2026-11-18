@@ -236,7 +236,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
 
         {syncState !== "connected" && <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm" role="status" aria-live="polite"><span>{syncState === "connecting" ? "Connecting to family data…" : syncState === "updating" ? "Updating family data…" : syncState === "offline" ? "Offline · showing saved family data" : "Couldn’t update family data"}</span>{(syncState === "offline" || syncState === "error") && <button className="font-semibold text-primary" type="button" onClick={retrySync}>Retry</button>}</div>}
 
-        <main id="main-content" tabIndex={-1} className="flex-1">
+        <main key={pathname} id="main-content" tabIndex={-1} className="motion-page-enter flex-1">
           {loading && !family ? <PageSkeleton /> : children}
         </main>
       </div>

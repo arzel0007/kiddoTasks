@@ -80,7 +80,7 @@ export default function HistoryPage() {
           No activity yet. Completions and rewards will appear here.
         </p>
       ) : (
-        <ul className="divide-y divide-border">
+        <ul key={currentPage} className="motion-stagger divide-y divide-border">
           {pageRows.map((tx) => (
             <li key={tx.id} className="flex items-center gap-3 py-3">
               <div

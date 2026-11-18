@@ -93,6 +93,8 @@ export default function KidsPage() {
   const [pendingWishDelete, setPendingWishDelete] = useState<string | null>(null);
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [recentMissionSuccessId, setRecentMissionSuccessId] = useState<string | null>(null);
+  const [recentRewardRequestId, setRecentRewardRequestId] = useState<string | null>(null);
   /** Pending "I did it" — opens a compact when-did-you-do-it sheet. */
   const [pendingSubmitTaskId, setPendingSubmitTaskId] = useState<string | null>(null);
   const [missionWhen, setMissionWhen] = useState<"today" | "yesterday" | "other">("today");
@@ -127,6 +129,8 @@ export default function KidsPage() {
         childId: selected.id,
         completedAt: missionCompletedAt(),
       });
+      setRecentMissionSuccessId(taskId);
+      window.setTimeout(() => setRecentMissionSuccessId((current) => current === taskId ? null : current), 1200);
       toast.success("Mission sent to a parent!");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn’t submit mission");
@@ -501,7 +505,7 @@ export default function KidsPage() {
   }
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-page pb-28">
+    <main id="main-content" tabIndex={-1} className="motion-page-enter min-h-screen bg-page pb-28">
       <div className="mx-auto max-w-3xl px-4 py-6">
         {/* Top bar — Arz inline with title (flat). mb-5 keeps gap before content. */}
         <div className="mb-5 flex min-h-[96px] items-center gap-3">
@@ -536,13 +540,13 @@ export default function KidsPage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="motion-stagger grid grid-cols-2 gap-4 sm:grid-cols-3">
                 {children.map((c) => (
                   <button
                     key={c.id}
                     type="button"
                     onClick={() => setSelectedChildId(c.id)}
-                    className="card flex flex-col items-center gap-3 py-7 transition hover:-translate-y-0.5"
+                    className="kid-child-card card flex flex-col items-center gap-3 py-7"
                     style={{ borderColor: `${c.avatar.colorHex}55`, borderWidth: 2 }}
                   >
                     <ChildAvatar
@@ -563,7 +567,7 @@ export default function KidsPage() {
             )}
           </>
         ) : (
-          <div>
+          <div key={selected.id} className="motion-page-enter">
             <div
               className="mb-5 rounded-card p-5 text-white shadow-card"
               style={{ background: selected.avatar.colorHex }}
@@ -604,7 +608,7 @@ export default function KidsPage() {
                 <p className="text-sm text-ink-secondary">No missions for today.</p>
               </div>
             ) : (
-              <ul className="space-y-2">
+              <ul className="motion-stagger space-y-2">
                 {missions.map((t, index) => {
                   // One shared verdict for display and for the action gate —
                   // both must match what the server's duplicate guard allows.
@@ -628,14 +632,16 @@ export default function KidsPage() {
                   return (
                     <li
                       key={t.id}
-                      className="card mission-row flex items-center gap-2.5 !p-3"
+                      className={`card mission-row flex items-center gap-2.5 !p-3 ${recentMissionSuccessId === t.id ? "mission-row--success" : ""}`}
                       style={{ animationDelay: `${Math.min(index, 6) * 24}ms` }}
                     >
                       <IconTile icon={t.icon} category={t.category} size={40} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold">{t.name}</p>
                         <p className="text-xs text-ink-secondary" role="status">
-                          {!shown
+                          {recentMissionSuccessId === t.id
+                            ? "Sent to your parent ✓"
+                            : !shown
                             ? "Ready to do"
                             : shown.status === "AWAITING_APPROVAL"
                               ? "Waiting for a parent"
@@ -689,13 +695,13 @@ export default function KidsPage() {
                   );
                 }
                 return (
-                  <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <ul className="motion-stagger grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {shop.map((r) => {
                       const canAfford = selected.activePoints >= r.pointCost;
                       return (
                         <li
                           key={r.id}
-                          className="rounded-card border border-border p-3 text-center"
+                          className={`reward-request rounded-card border border-border p-3 text-center ${recentRewardRequestId === r.id ? "reward-request--success" : ""}`}
                         >
                           <p className="text-2xl" aria-hidden>
                             🎁
@@ -707,12 +713,16 @@ export default function KidsPage() {
                           <button
                             type="button"
                             className="chip-btn chip-btn--primary mt-2 w-full"
-                            disabled={!canAfford || claimingRewardId === r.id}
+                            disabled={!canAfford || claimingRewardId === r.id || recentRewardRequestId === r.id}
                             onClick={() => {
                               setClaimingRewardId(r.id);
                               void store
                                 .claimReward({ rewardId: r.id, childId: selected.id })
-                                .then(() => toast.success("Asked a parent for this reward!"))
+                                .then(() => {
+                                  setRecentRewardRequestId(r.id);
+                                  window.setTimeout(() => setRecentRewardRequestId((current) => current === r.id ? null : current), 1200);
+                                  toast.success("Asked a parent for this reward!");
+                                })
                                 .catch((e) =>
                                   toast.error(
                                     e instanceof Error ? e.message : "Couldn’t request reward"
@@ -723,6 +733,8 @@ export default function KidsPage() {
                           >
                             {claimingRewardId === r.id
                               ? "Sending…"
+                              : recentRewardRequestId === r.id
+                              ? "Asked ✓"
                               : canAfford
                               ? <><IconGift size={14} /> Ask parent</>
                                 : "Need more ★"}
@@ -839,7 +851,7 @@ export default function KidsPage() {
                   </p>
                 </div>
               ) : (
-                <ul className="space-y-3">
+                <ul className="motion-stagger space-y-3">
                   {myWishlist.map((item) => {
                     const canEdit = item.status === "PENDING";
                     const canDelete =

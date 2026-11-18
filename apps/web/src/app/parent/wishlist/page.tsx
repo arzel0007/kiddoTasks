@@ -199,7 +199,7 @@ export default function ParentWishlistPage() {
             {emptyAction ? <div className="mt-2">{emptyAction}</div> : null}
           </div>
         ) : (
-          <ul className="space-y-2.5">{items.map((item) => renderCard(item, { showStatus }))}</ul>
+          <ul className="motion-stagger space-y-2.5">{items.map((item) => renderCard(item, { showStatus }))}</ul>
         )}
       </div>
     );

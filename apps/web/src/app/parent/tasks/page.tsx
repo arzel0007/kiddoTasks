@@ -230,7 +230,7 @@ export default function TasksPage() {
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul key={showArchived ? "archived" : "active"} className="motion-stagger divide-y divide-border">
             {filtered.map((t) => (
               <li key={t.id} className="flex items-center gap-3 py-3">
                 <IconTile icon={t.icon} category={t.category} />

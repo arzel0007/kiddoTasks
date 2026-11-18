@@ -179,7 +179,7 @@ export default function RewardsPage() {
             </button>
           </div>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="motion-stagger grid gap-3 sm:grid-cols-2">
             {active.map((r) => (
               <li
                 key={r.id}
@@ -232,7 +232,7 @@ export default function RewardsPage() {
       {archived.length > 0 && (
         <div className="card">
           <h2 className="mb-3 font-bold">Archived</h2>
-          <ul className="divide-y divide-border">
+          <ul className="motion-stagger divide-y divide-border">
             {archived.map((r) => (
               <li key={r.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">

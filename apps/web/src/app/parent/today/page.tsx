@@ -44,6 +44,14 @@ export default function TodayPage() {
     rejectRewardClaim,
   } = useFamilyStore();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resolvedCompletions, setResolvedCompletions] = useState<Array<{
+    item: (typeof completions)[number];
+    result: string;
+  }>>([]);
+  const [resolvedClaims, setResolvedClaims] = useState<Array<{
+    item: (typeof claims)[number];
+    result: string;
+  }>>([]);
   const [rejectingCompletion, setRejectingCompletion] = useState<{ id: string; taskId: string; childId: string } | null>(null);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -58,11 +66,40 @@ export default function TodayPage() {
   const activeTasks = tasks.filter((t) => t.isActive);
   const birthdays = useMemo(() => upcomingBirthdays(children), [children]);
 
-  async function onApproveCompletion(c: {
-    id: string;
-    taskId: string;
-    childId: string;
-  }) {
+  function showResolvedCompletion(item: (typeof completions)[number], result: string) {
+    setResolvedCompletions((current) => [
+      ...current.filter((entry) => entry.item.id !== item.id),
+      { item, result },
+    ]);
+    window.setTimeout(() => {
+      setResolvedCompletions((current) => current.filter((entry) => entry.item.id !== item.id));
+    }, 1000);
+  }
+
+  function showResolvedClaim(item: (typeof claims)[number], result: string) {
+    setResolvedClaims((current) => [
+      ...current.filter((entry) => entry.item.id !== item.id),
+      { item, result },
+    ]);
+    window.setTimeout(() => {
+      setResolvedClaims((current) => current.filter((entry) => entry.item.id !== item.id));
+    }, 1000);
+  }
+
+  const approvalRows = [
+    ...pendingApprovals,
+    ...resolvedCompletions
+      .filter(({ item }) => !pendingApprovals.some((pending) => pending.id === item.id))
+      .map(({ item }) => item),
+  ];
+  const claimRows = [
+    ...pendingClaims,
+    ...resolvedClaims
+      .filter(({ item }) => !pendingClaims.some((pending) => pending.id === item.id))
+      .map(({ item }) => item),
+  ];
+
+  async function onApproveCompletion(c: (typeof completions)[number]) {
     setBusyId(c.id);
     try {
       const task = tasks.find((t) => t.id === c.taskId);
@@ -72,6 +109,7 @@ export default function TodayPage() {
         childId: c.childId,
         taskName: task?.name,
       });
+      showResolvedCompletion(c, "Approved ✓");
       toast.success("Mission approved ★");
     } catch (e) {
       toast.error(errorMessage(e, "Couldn’t approve mission"));
@@ -84,6 +122,8 @@ export default function TodayPage() {
     setBusyId(c.id);
     try {
       await rejectTaskCompletion({ completionId: c.id, reason: reason.trim() });
+      const completion = completions.find((item) => item.id === c.id);
+      if (completion) showResolvedCompletion(completion, "Declined ✓");
       toast.success("Mission declined");
       setRejectingCompletion(null);
       setDeclineReason("");
@@ -94,11 +134,7 @@ export default function TodayPage() {
     }
   }
 
-  async function onApproveClaim(c: {
-    id: string;
-    rewardId: string;
-    childId: string;
-  }) {
+  async function onApproveClaim(c: (typeof claims)[number]) {
     setBusyId(c.id);
     try {
       const reward = rewards.find((r) => r.id === c.rewardId);
@@ -109,6 +145,8 @@ export default function TodayPage() {
         pointCost: reward?.pointCost ?? 0,
         rewardName: reward?.name,
       });
+      const claim = claims.find((item) => item.id === c.id);
+      if (claim) showResolvedClaim(claim, "Approved ✓");
       toast.success("Reward approved 🎁");
     } catch (e) {
       toast.error(errorMessage(e, "Couldn’t approve reward"));
@@ -121,6 +159,8 @@ export default function TodayPage() {
     setBusyId(c.id);
     try {
       await rejectRewardClaim({ claimId: c.id });
+      const claim = claims.find((item) => item.id === c.id);
+      if (claim) showResolvedClaim(claim, "Declined ✓");
       toast.success("Reward declined");
     } catch (e) {
       toast.error(errorMessage(e, "Couldn’t decline reward"));
@@ -213,17 +253,18 @@ export default function TodayPage() {
             {pendingApprovals.length}
           </span>
         </div>
-        {pendingApprovals.length === 0 ? (
+        {approvalRows.length === 0 ? (
           <p className="text-sm text-ink-secondary">No missions waiting. Nice! 🎉</p>
         ) : (
-          <ul className="space-y-2">
-            {pendingApprovals.map((c) => {
+          <ul className="motion-stagger space-y-2">
+            {approvalRows.map((c) => {
+              const result = resolvedCompletions.find((entry) => entry.item.id === c.id)?.result;
               const child = children.find((k) => k.id === c.childId);
               const task = tasks.find((t) => t.id === c.taskId);
               return (
                 <li
                   key={c.id}
-                  className="approval-row flex items-center gap-3 rounded-xl bg-surface p-3"
+                  className={`approval-row flex items-center gap-3 rounded-xl bg-surface p-3 ${result ? "approval-row--success" : ""}`}
                 >
                   {child && (
                     <ChildAvatar
@@ -241,10 +282,10 @@ export default function TodayPage() {
                       {task ? ` · ${task.name}` : ""}
                     </p>
                     <p className="text-xs text-ink-secondary">
-                      {formatFriendlyWhen(c.completedAt)} · Needs your approval
+                      {result ?? `${formatFriendlyWhen(c.completedAt)} · Needs your approval`}
                     </p>
                   </div>
-                  <div className="approval-row__actions flex shrink-0 gap-1.5">
+                  {result ? <span className="motion-success" role="status">{result}</span> : <div className="approval-row__actions flex shrink-0 gap-1.5">
                     <button
                       type="button"
                       className="btn-secondary btn-compact"
@@ -263,7 +304,7 @@ export default function TodayPage() {
                       <IconCheck size={14} />
                       {busyId === c.id ? "…" : "Approve"}
                     </button>
-                  </div>
+                  </div>}
                 </li>
               );
             })}
@@ -276,17 +317,18 @@ export default function TodayPage() {
           <IconGift size={18} className="text-primary" />
           <h2 className="font-bold">Reward requests</h2>
         </div>
-        {pendingClaims.length === 0 ? (
+        {claimRows.length === 0 ? (
           <p className="text-sm text-ink-secondary">No reward requests right now.</p>
         ) : (
-          <ul className="space-y-2">
-            {pendingClaims.map((c) => {
+          <ul className="motion-stagger space-y-2">
+            {claimRows.map((c) => {
+              const result = resolvedClaims.find((entry) => entry.item.id === c.id)?.result;
               const child = children.find((k) => k.id === c.childId);
               const reward = rewards.find((r) => r.id === c.rewardId);
               return (
                 <li
                   key={c.id}
-                  className="approval-row flex items-center gap-3 rounded-xl bg-surface p-3"
+                  className={`approval-row flex items-center gap-3 rounded-xl bg-surface p-3 ${result ? "approval-row--success" : ""}`}
                 >
                   <div className="approval-row__details min-w-0 flex-1">
                     <p className="text-sm font-semibold">
@@ -297,7 +339,7 @@ export default function TodayPage() {
                       {reward ? `★ ${reward.pointCost}` : "Needs your approval"}
                     </p>
                   </div>
-                  <div className="approval-row__actions flex shrink-0 gap-1.5">
+                  {result ? <span className="motion-success" role="status">{result}</span> : <div className="approval-row__actions flex shrink-0 gap-1.5">
                     <button
                       type="button"
                       className="btn-secondary btn-compact"
@@ -316,7 +358,7 @@ export default function TodayPage() {
                       <IconCheck size={14} />
                       {busyId === c.id ? "…" : "Approve"}
                     </button>
-                  </div>
+                  </div>}
                 </li>
               );
             })}

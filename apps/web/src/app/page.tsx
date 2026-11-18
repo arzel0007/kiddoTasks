@@ -509,7 +509,7 @@ function WelcomePageInner() {
             <BrandLogo size={64} />
           </div>
           <h1
-            className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl"
+            className="motion-headline text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl"
             style={{ fontFamily: "ui-rounded, system-ui, sans-serif" }}
           >
             Family chores, made clear
@@ -541,7 +541,7 @@ function WelcomePageInner() {
               Details
             </button>
           </div>
-          <ol className="grid gap-3 sm:grid-cols-3">
+          <ol className="motion-stagger grid gap-3 sm:grid-cols-3">
             {STEPS.map((step) => (
               <li key={step.n} className="step-card text-left">
                 <div className="mb-2 flex items-center gap-2">
@@ -566,7 +566,7 @@ function WelcomePageInner() {
           <h2 id="benefits-heading" className="text-lg font-bold tracking-tight">
             Built for real families
           </h2>
-          <ul className="mt-2">
+          <ul className="motion-stagger mt-2">
             {BENEFITS.map((b) => (
               <li key={b.title} className="feature-row">
                 <span className="feature-check" aria-hidden="true">
