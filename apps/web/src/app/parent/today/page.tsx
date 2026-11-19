@@ -169,11 +169,11 @@ export default function TodayPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !family) {
     return <PageSkeleton rows={3} />;
   }
 
-  if (error) {
+  if (error && !family) {
     return <FamilyLoadError message={error} />;
   }
 

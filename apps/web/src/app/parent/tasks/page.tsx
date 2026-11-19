@@ -43,6 +43,7 @@ const emptyForm: TaskForm = {
 
 export default function TasksPage() {
   const {
+    family,
     tasks,
     children,
     loading,
@@ -255,7 +256,7 @@ export default function TasksPage() {
           className={`task-list-panel ${showArchived ? "task-list-panel--forward" : "task-list-panel--back"}`}
         >
         <h2 className="sr-only">{showArchived ? "Archived chores" : "Active chores"}</h2>
-        {loading ? (
+        {loading && !family ? (
           <div className="space-y-3">
             <SkeletonListRow />
             <SkeletonListRow />

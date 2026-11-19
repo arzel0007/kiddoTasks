@@ -285,7 +285,7 @@ export default function ParentWishlistPage() {
         </div>
       </div>
 
-      {loading ? (
+      {loading && !family ? (
         <div className="card">
           <p className="text-sm text-ink-secondary">Loading wishlist…</p>
         </div>

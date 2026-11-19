@@ -40,7 +40,7 @@ function formatDate(value: unknown): string {
 }
 
 export default function HistoryPage() {
-  const { transactions, children, loading } = useFamilyStore();
+  const { family, transactions, children, loading } = useFamilyStore();
   const ent = useEntitlements();
   const [page, setPage] = useState(1);
 
@@ -69,7 +69,7 @@ export default function HistoryPage() {
           </span>
         )}
       </div>
-      {loading ? (
+      {loading && !family ? (
         <div className="space-y-3">
           <SkeletonListRow />
           <SkeletonListRow />

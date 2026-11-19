@@ -32,6 +32,7 @@ const emptyForm: RewardForm = {
 
 export default function RewardsPage() {
   const {
+    family,
     rewards,
     children,
     loading,
@@ -166,7 +167,7 @@ export default function RewardsPage() {
             + Add reward
           </button>
         </div>
-        {loading ? (
+        {loading && !family ? (
           <div className="space-y-3">
             <SkeletonListRow />
             <SkeletonListRow />
