@@ -8,6 +8,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { firebaseAuth, firestore, isFirebaseConfigured } from "@/lib/firebase";
 import { useFamilyStore } from "@/lib/family-store";
 import { PageSkeleton } from "@/components/skeleton";
+import { ParentRouteTransition } from "@/components/parent-route-transition";
 import { toast } from "@/components/toast";
 import {
   ArzAvatar,
@@ -34,12 +35,8 @@ const tabs = [
   { href: "/parent/billing", label: "Plan", Icon: IconPlan },
 ];
 
-type RouteDirection = "forward" | "back";
 type NavPillPosition = { x: number; y: number; width: number; height: number };
-type RouteViewTransition = { finished: Promise<void>; skipTransition: () => void };
-type TransitionDocument = Document & {
-  startViewTransition?: (callback: () => void | Promise<void>) => RouteViewTransition;
-};
+type RouteDirection = "forward" | "back";
 
 /** Shown when the device is in Kids Mode — parent UI must not render. */
 function ParentLocked() {
@@ -73,13 +70,10 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   const primaryNavRef = useRef<HTMLElement>(null);
   const hoveredNavItemRef = useRef<HTMLElement | null>(null);
   const focusedNavItemRef = useRef<HTMLElement | null>(null);
-  const routePathRef = useRef(pathname ?? "/parent/today");
   const routeHistoryRef = useRef<string[]>([pathname ?? "/parent/today"]);
   const routeHistoryIndexRef = useRef(0);
-  const historyTraversalTargetRef = useRef<string | null>(null);
+  const routePathRef = useRef(pathname ?? "/parent/today");
   const pendingDirectionRef = useRef<RouteDirection | null>(null);
-  const routeWaiterRef = useRef<{ path: string; resolve: () => void } | null>(null);
-  const activeTransitionRef = useRef<RouteViewTransition | null>(null);
   const [navPill, setNavPill] = useState<NavPillPosition | null>(null);
   // True once Firebase has reported auth state at least once (or Firebase is off).
   const [authReady, setAuthReady] = useState(!isFirebaseConfigured);
@@ -128,60 +122,48 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     );
   }
 
-  function waitForRoute(path: string) {
-    if (routePathRef.current === path) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      const timeout = window.setTimeout(() => {
-        routeWaiterRef.current = null;
-        resolve();
-      }, 3000);
-      routeWaiterRef.current = {
-        path,
-        resolve: () => {
-          window.clearTimeout(timeout);
-          routeWaiterRef.current = null;
-          resolve();
-        },
-      };
+  function startRouteTransition(direction: RouteDirection) {
+    document.documentElement.dataset.routeDirection = direction;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const main = document.getElementById("main-content");
+    if (!main) return;
+    const rect = main.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const outgoing = main.cloneNode(true) as HTMLElement;
+    outgoing.removeAttribute("id");
+    outgoing.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+    outgoing.setAttribute("aria-hidden", "true");
+    outgoing.inert = true;
+    outgoing.querySelectorAll(".parent-route-enter").forEach((element) => {
+      element.classList.remove("parent-route-enter", "parent-route-enter--forward", "parent-route-enter--back");
     });
+    outgoing.classList.add("parent-route-exit", `parent-route-exit--${direction}`);
+    Object.assign(outgoing.style, {
+      position: "fixed",
+      top: `${rect.top}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      margin: "0",
+      overflow: "hidden",
+      pointerEvents: "none",
+      zIndex: "20",
+    });
+    const removeOutgoing = () => outgoing.remove();
+    outgoing.addEventListener("animationend", removeOutgoing, { once: true });
+    window.setTimeout(removeOutgoing, 500);
+    document.body.appendChild(outgoing);
   }
 
-  function transitionRoute(path: string, direction: RouteDirection, update: () => void) {
-    pendingDirectionRef.current = direction;
-    const root = document.documentElement;
-    root.dataset.routeDirection = direction;
-    const transitionDocument = document as TransitionDocument;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!transitionDocument.startViewTransition || reducedMotion) {
-      delete root.dataset.routeDirection;
-      update();
-      return;
-    }
-
-    try {
-      activeTransitionRef.current?.skipTransition();
-    } catch {
-      activeTransitionRef.current = null;
-    }
-    try {
-      const transition = transitionDocument.startViewTransition(async () => {
-        update();
-        await waitForRoute(path);
-      });
-      activeTransitionRef.current = transition;
-      const clearTransition = () => {
-        if (activeTransitionRef.current !== transition) return;
-        activeTransitionRef.current = null;
-        delete root.dataset.routeDirection;
-      };
-      void transition.finished.then(clearTransition, clearTransition);
-    } catch {
-      delete root.dataset.routeDirection;
-      update();
-    }
+  function transitionDirectionFor(href: string): RouteDirection {
+    const history = routeHistoryRef.current;
+    const currentIndex = routeHistoryIndexRef.current;
+    return history.lastIndexOf(href, currentIndex - 1) >= 0 ? "back" : "forward";
   }
 
-  function handlePageLinkClick(event: React.MouseEvent<HTMLDivElement>) {
+  function handleParentLinkClick(event: React.MouseEvent<HTMLDivElement>) {
     if (
       event.defaultPrevented ||
       event.button !== 0 ||
@@ -199,34 +181,33 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
       destination.pathname === routePathRef.current ||
       !destination.pathname.startsWith("/parent/")
     ) return;
-    event.preventDefault();
-    const href = `${destination.pathname}${destination.search}${destination.hash}`;
-    transitionRoute(destination.pathname, "forward", () => router.push(href));
+    const direction = transitionDirectionFor(destination.pathname);
+    pendingDirectionRef.current = direction;
+    startRouteTransition(direction);
   }
 
   useLayoutEffect(() => {
-    const nextPath = pathname ?? "/";
-    if (nextPath !== routePathRef.current) {
-      routePathRef.current = nextPath;
+    const nextPath = pathname ?? "/parent/today";
+    const history = routeHistoryRef.current;
+    if (routePathRef.current !== nextPath) {
       const direction = pendingDirectionRef.current ?? "forward";
-      const isHistoryTraversal = historyTraversalTargetRef.current === nextPath;
-      if (direction === "forward" && !isHistoryTraversal) {
-        const history = routeHistoryRef.current.slice(0, routeHistoryIndexRef.current + 1);
-        history.push(nextPath);
-        routeHistoryRef.current = history;
-        routeHistoryIndexRef.current = history.length - 1;
-      } else if (!isHistoryTraversal && routeHistoryRef.current[routeHistoryIndexRef.current] !== nextPath) {
-        routeHistoryRef.current = [nextPath];
-        routeHistoryIndexRef.current = 0;
+      const existingIndex = history.lastIndexOf(nextPath);
+      if (direction === "back" && existingIndex >= 0) {
+        routeHistoryIndexRef.current = existingIndex;
+      } else if (direction === "forward") {
+        const nextHistory = history.slice(0, routeHistoryIndexRef.current + 1);
+        nextHistory.push(nextPath);
+        routeHistoryRef.current = nextHistory;
+        routeHistoryIndexRef.current = nextHistory.length - 1;
       }
-      historyTraversalTargetRef.current = null;
+      routePathRef.current = nextPath;
       pendingDirectionRef.current = null;
-      if (routeWaiterRef.current?.path === nextPath) routeWaiterRef.current.resolve();
     }
     resolveNavPill();
   }, [pathname, moreOpen]);
 
   useEffect(() => {
+    const onViewportChange = () => resolveNavPill();
     const onPopState = () => {
       const destination = window.location.pathname;
       if (
@@ -235,27 +216,23 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
         !routePathRef.current.startsWith("/parent/")
       ) return;
       const history = routeHistoryRef.current;
-      const currentIndex = routeHistoryIndexRef.current;
-      const backIndex = history.lastIndexOf(destination, currentIndex - 1);
-      const forwardIndex = history.indexOf(destination, currentIndex + 1);
-      const direction: RouteDirection = backIndex >= 0 ? "back" : forwardIndex >= 0 ? "forward" : "back";
-      historyTraversalTargetRef.current = destination;
-      if (backIndex >= 0) routeHistoryIndexRef.current = backIndex;
-      else if (forwardIndex >= 0) routeHistoryIndexRef.current = forwardIndex;
-      else {
-        routeHistoryRef.current = [destination];
-        routeHistoryIndexRef.current = 0;
-      }
-      transitionRoute(destination, direction, () => undefined);
+      const targetIndex = history.lastIndexOf(destination);
+      const direction: RouteDirection = targetIndex >= 0 && targetIndex < routeHistoryIndexRef.current
+        ? "back"
+        : targetIndex > routeHistoryIndexRef.current
+          ? "forward"
+          : "back";
+      if (targetIndex >= 0) routeHistoryIndexRef.current = targetIndex;
+      pendingDirectionRef.current = direction;
+      startRouteTransition(direction);
     };
-    const onViewportChange = () => resolveNavPill();
     const nav = primaryNavRef.current;
-    window.addEventListener("popstate", onPopState);
     window.addEventListener("resize", onViewportChange);
+    window.addEventListener("popstate", onPopState);
     nav?.addEventListener("scroll", onViewportChange);
     return () => {
-      window.removeEventListener("popstate", onPopState);
       window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("popstate", onPopState);
       nav?.removeEventListener("scroll", onViewportChange);
     };
   }, []);
@@ -321,25 +298,6 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     };
   }, [moreOpen]);
 
-  // Re-pull family data when the tab regains focus so approvals made on
-  // another device (e.g. iOS) show up without a full reload.
-  useEffect(() => {
-    if (!isFirebaseConfigured) return;
-    let lastFocusRefreshAt = 0;
-    const refresh = () => {
-      const user = firebaseAuth().currentUser;
-      const now = Date.now();
-      // Firestore's family marker listener handles live changes. Use focus as
-      // a recovery path, but avoid refetching every collection on each app switch.
-      if (user && now - lastFocusRefreshAt >= 30_000) {
-        lastFocusRefreshAt = now;
-        void loadFamilyForParent(user.uid);
-      }
-    };
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
-  }, [loadFamilyForParent]);
-
   // All server-authoritative actions bump this document. This keeps every web
   // page in sync without depending on a focus event or manual reload.
   useEffect(() => {
@@ -385,7 +343,7 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   }
 
   return (
-    <div className="min-h-screen bg-page" onClickCapture={handlePageLinkClick}>
+    <div className="min-h-screen bg-page" onClickCapture={handleParentLinkClick}>
       <div className="mx-auto flex w-full max-w-4xl flex-col px-4 pb-10 pt-3">
         {/* Flat page header matching Today: [Arz] Title · actions. mb-5 keeps gap before nav/content. */}
         <header className="parent-header mb-5 flex min-h-[96px] items-center gap-3">
@@ -497,8 +455,8 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
 
         {syncState !== "connected" && <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2 text-sm" role="status" aria-live="polite"><span>{syncState === "connecting" ? "Connecting to family data…" : syncState === "updating" ? "Updating family data…" : syncState === "offline" ? "Offline · showing saved family data" : "Couldn’t update family data"}</span>{(syncState === "offline" || syncState === "error") && <button className="font-semibold text-primary" type="button" onClick={retrySync}>Retry</button>}</div>}
 
-        <main key={pathname} id="main-content" tabIndex={-1} className="parent-route-content flex-1">
-          {loading && !family ? <PageSkeleton /> : children}
+        <main id="main-content" tabIndex={-1} className="parent-route-content flex-1">
+          {loading && !family ? <PageSkeleton /> : <ParentRouteTransition>{children}</ParentRouteTransition>}
         </main>
       </div>
     </div>

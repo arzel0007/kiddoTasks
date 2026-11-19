@@ -230,6 +230,7 @@ body {
 
 .parent-primary-nav {
   position: relative;
+  z-index: 1;
   isolation: isolate;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
@@ -349,18 +350,10 @@ body {
 
 .nav-item:active { transform: scale(0.975); }
 
-/* Directional route push. The app shell remains still while page content moves. */
-.parent-route-content {
-  view-transition-name: parent-route-content;
-}
-
-::view-transition-old(root),
-::view-transition-new(root) {
+/* Parent routes already share a single push transition; replaying every row's
+   entrance animation on each tab remount reads like another loading state. */
+.parent-route-content .motion-stagger > * {
   animation: none;
-}
-
-::view-transition-group(parent-route-content) {
-  animation-duration: 450ms;
 }
 
 @keyframes route-push-left {
@@ -383,24 +376,38 @@ body {
   to { transform: translateX(0); }
 }
 
-html[data-route-direction="forward"]::view-transition-old(parent-route-content) {
-  animation: route-push-left 450ms var(--motion-ease) both;
-}
-
-html[data-route-direction="forward"]::view-transition-new(parent-route-content) {
+.parent-route-enter--forward {
   animation: route-push-in-right 450ms var(--motion-ease) both;
 }
 
-html[data-route-direction="back"]::view-transition-old(parent-route-content) {
-  animation: route-push-right 450ms var(--motion-ease) both;
-}
-
-html[data-route-direction="back"]::view-transition-new(parent-route-content) {
+.parent-route-enter--back {
   animation: route-push-in-left 450ms var(--motion-ease) both;
 }
 
-::view-transition {
+.parent-route-exit {
   pointer-events: none;
+  will-change: transform;
+}
+
+.parent-route-exit * {
+  pointer-events: none !important;
+}
+
+.parent-route-exit--forward {
+  animation: route-push-left 450ms var(--motion-ease) both;
+}
+
+.parent-route-exit--back {
+  animation: route-push-right 450ms var(--motion-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parent-route-enter--forward,
+  .parent-route-enter--back,
+  .parent-route-exit--forward,
+  .parent-route-exit--back {
+    animation: none;
+  }
 }
 
 /* Route changes stay quiet and keep the new page immediately readable. */
